@@ -1,0 +1,467 @@
+{
+    "0x21": {
+        "member": [
+            ["isUaaLUseCase", "()Z"]
+        ]
+    },
+    "0x251": {
+        "member": [
+            ["loadLibrary", "(Ljava/lang/String;)Z"]
+        ]
+    },
+    "0x3b92": {
+        "member": [
+            ["playCoreApiMissing", "()Z"]
+        ]
+    },
+    "0x85": {
+        "member": [
+            ["getClassLoader", "()Ljava/lang/ClassLoader;"]
+        ],
+        "static": [
+            ["forName", "(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;"]
+        ]
+    },
+    "android/app/Activity": {
+        "member": [
+            ["findViewById", "(I)Landroid/view/View;"],
+            ["getIntent", "()Landroid/content/Intent;"],
+            ["getRequestedOrientation", "()I"],
+            ["getWindow", "()Landroid/view/Window;"],
+            ["runOnUiThread", "(Ljava/lang/Runnable;)V"],
+            ["setRequestedOrientation", "(I)V"]
+        ]
+    },
+    "android/content/Context": {
+        "member": [
+            ["checkCallingOrSelfPermission", "(Ljava/lang/String;)I"],
+            ["getApplicationInfo", "()Landroid/content/pm/ApplicationInfo;"],
+            ["getAssets", "()Landroid/content/res/AssetManager;"],
+            ["getCacheDir", "()Ljava/io/File;"],
+            ["getExternalCacheDir", "()Ljava/io/File;"],
+            ["getExternalFilesDir", "(Ljava/lang/String;)Ljava/io/File;"],
+            ["getFilesDir", "()Ljava/io/File;"],
+            ["getObbDirs", "()[Ljava/io/File;"],
+            ["getPackageCodePath", "()Ljava/lang/String;"],
+            ["getPackageManager", "()Landroid/content/pm/PackageManager;"],
+            ["getPackageName", "()Ljava/lang/String;"],
+            ["getSharedPreferences", "(Ljava/lang/String;I)Landroid/content/SharedPreferences;"],
+            ["getSystemService", "(Ljava/lang/String;)Ljava/lang/Object;"]
+        ],
+        "fields_static": [
+            ["AUDIO_SERVICE", "Ljava/lang/String;"],
+            ["DISPLAY_SERVICE", "Ljava/lang/String;"],
+            ["LOCATION_SERVICE", "Ljava/lang/String;"],
+            ["MEDIA_ROUTER_SERVICE", "Ljava/lang/String;"],
+            ["MODE_PRIVATE", "I"],
+            ["POWER_SERVICE", "Ljava/lang/String;"]
+        ]
+    },
+    "android/content/Intent": {
+        "member": [
+            ["getExtras", "()Landroid/os/Bundle;"]
+        ]
+    },
+    "android/content/SharedPreferences": {
+        "member": [
+            ["contains", "(Ljava/lang/String;)Z"],
+            ["edit", "()Landroid/content/SharedPreferences$Editor;"],
+            ["getInt", "(Ljava/lang/String;I)I"],
+            ["getString", "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;"]
+        ]
+    },
+    "android/content/SharedPreferences$Editor": {
+        "member": [
+            ["apply", "()V"],
+            ["putInt", "(Ljava/lang/String;I)Landroid/content/SharedPreferences$Editor;"],
+            ["putString", "(Ljava/lang/String;Ljava/lang/String;)Landroid/content/SharedPreferences$Editor;"]
+        ]
+    },
+    "android/content/pm/ActivityInfo": {
+        "fields_static": [
+            ["SCREEN_ORIENTATION_FULL_USER", "I"],
+            ["SCREEN_ORIENTATION_LANDSCAPE", "I"],
+            ["SCREEN_ORIENTATION_PORTRAIT", "I"],
+            ["SCREEN_ORIENTATION_REVERSE_LANDSCAPE", "I"],
+            ["SCREEN_ORIENTATION_REVERSE_PORTRAIT", "I"],
+            ["SCREEN_ORIENTATION_SENSOR", "I"],
+            ["SCREEN_ORIENTATION_UNSPECIFIED", "I"],
+            ["SCREEN_ORIENTATION_USER_LANDSCAPE", "I"],
+            ["SCREEN_ORIENTATION_USER_PORTRAIT", "I"]
+        ]
+    },
+    "android/content/pm/ApplicationInfo": {
+        "fields": [
+            ["splitPublicSourceDirs", "[Ljava/lang/String;"]
+        ]
+    },
+    "android/content/pm/PackageInfo": {
+        "fields": [
+            ["versionCode", "I"],
+            ["versionName", "Ljava/lang/String;"]
+        ]
+    },
+    "android/content/pm/PackageManager": {
+        "member": [
+            ["getPackageInfo", "(Ljava/lang/String;I)Landroid/content/pm/PackageInfo;"],
+            ["hasSystemFeature", "(Ljava/lang/String;)Z"]
+        ],
+        "fields_static": [
+            ["FEATURE_AUDIO_LOW_LATENCY", "Ljava/lang/String;"],
+            ["PERMISSION_GRANTED", "I"]
+        ]
+    },
+    "android/content/res/AssetManager": {
+        "member": [
+            ["open", "(Ljava/lang/String;)Ljava/io/InputStream;"]
+        ]
+    },
+    "android/content/res/Resources": {
+        "member": [
+            ["getIdentifier", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)I"]
+        ]
+    },
+    "android/hardware/display/DisplayManager": {
+        "member": [
+            ["getDisplay", "(I)Landroid/view/Display;"],
+            ["registerDisplayListener", "(Landroid/hardware/display/DisplayManager$DisplayListener;Landroid/os/Handler;)V"]
+        ]
+    },
+    "android/hardware/display/DisplayManager$DisplayListener": {},
+    "android/hardware/input/InputManager": {
+        "member": [
+            ["registerInputDeviceListener", "(Landroid/hardware/input/InputManager$InputDeviceListener;Landroid/os/Handler;)V"]
+        ]
+    },
+    "android/hardware/input/InputManager$InputDeviceListener": {},
+    "android/location/LocationListener": {},
+    "android/media/AudioDeviceInfo": {
+        "member": [
+            ["getType", "()I"]
+        ],
+        "fields_static": [
+            ["TYPE_BLUETOOTH_A2DP", "I"]
+        ]
+    },
+    "android/media/AudioManager": {
+        "member": [
+            ["getDevices", "(I)[Landroid/media/AudioDeviceInfo;"],
+            ["getProperty", "(Ljava/lang/String;)Ljava/lang/String;"],
+            ["getStreamVolume", "(I)I"]
+        ],
+        "fields_static": [
+            ["GET_DEVICES_OUTPUTS", "I"],
+            ["PROPERTY_OUTPUT_FRAMES_PER_BUFFER", "Ljava/lang/String;"],
+            ["PROPERTY_OUTPUT_SAMPLE_RATE", "Ljava/lang/String;"],
+            ["STREAM_MUSIC", "I"]
+        ]
+    },
+    "android/media/AudioManager$OnAudioFocusChangeListener": {
+        "member": [
+            ["hideSoftInput", "()V"]
+        ]
+    },
+    "android/media/MediaRouter": {
+        "member": [
+            ["getSelectedRoute", "(I)Landroid/media/MediaRouter$RouteInfo;"]
+        ],
+        "fields_static": [
+            ["ROUTE_TYPE_LIVE_VIDEO", "I"]
+        ]
+    },
+    "android/media/MediaRouter$RouteInfo": {
+        "member": [
+            ["getPresentationDisplay", "()Landroid/view/Display;"]
+        ]
+    },
+    "android/net/Uri": {
+        "static": [
+            ["decode", "(Ljava/lang/String;)Ljava/lang/String;"],
+            ["encode", "(Ljava/lang/String;)Ljava/lang/String;"]
+        ]
+    },
+    "android/os/Build": {
+        "fields_static": [
+            ["ID", "Ljava/lang/String;"],
+            ["MANUFACTURER", "Ljava/lang/String;"]
+        ]
+    },
+    "android/os/Build$VERSION": {
+        "fields_static": [
+            ["INCREMENTAL", "Ljava/lang/String;"],
+            ["RELEASE", "Ljava/lang/String;"],
+            ["SDK_INT", "I"]
+        ]
+    },
+    "android/os/Bundle": {
+        "member": [
+            ["containsKey", "(Ljava/lang/String;)Z"],
+            ["getString", "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;"]
+        ]
+    },
+    "android/os/Environment": {
+        "static": [
+            ["getExternalStorageState", "()Ljava/lang/String;"]
+        ],
+        "fields_static": [
+            ["MEDIA_MOUNTED", "Ljava/lang/String;"]
+        ]
+    },
+    "android/os/Handler": {
+        "member": [
+            ["<init>", "(Landroid/os/Looper;)V"],
+            ["<init>", "(Landroid/os/Looper;Landroid/os/Handler$Callback;)V"],
+            ["<init>", "()V"],
+            ["obtainMessage", "(I)Landroid/os/Message;"],
+            ["post", "(Ljava/lang/Runnable;)Z"],
+            ["postDelayed", "(Ljava/lang/Runnable;J)Z"]
+        ]
+    },
+    "android/os/Handler$Callback": {
+        "member": [
+            ["handleMessage", "(Landroid/os/Message;)Z"]
+        ]
+    },
+    "android/os/HandlerThread": {
+        "member": [
+            ["<init>", "(Ljava/lang/String;)V"],
+            ["getLooper", "()Landroid/os/Looper;"]
+        ]
+    },
+    "android/os/Looper": {
+        "static": [
+            ["getMainLooper", "()Landroid/os/Looper;"]
+        ]
+    },
+    "android/os/Message": {
+        "member": [
+            ["sendToTarget", "()V"]
+        ],
+        "fields": [
+            ["what", "I"]
+        ]
+    },
+    "android/os/PowerManager": {
+        "member": [
+            ["isSustainedPerformanceModeSupported", "()Z"]
+        ]
+    },
+    "android/os/Process": {
+        "static": [
+            ["setThreadPriority", "(II)V"]
+        ]
+    },
+    "android/util/DisplayMetrics": {
+        "member": [
+            ["<init>", "()V"]
+        ],
+        "fields": [
+            ["densityDpi", "I"],
+            ["heightPixels", "I"],
+            ["widthPixels", "I"]
+        ]
+    },
+    "android/view/Choreographer": {
+        "member": [
+            ["postFrameCallback", "(Landroid/view/Choreographer$FrameCallback;)V"]
+        ],
+        "static": [
+            ["getInstance", "()Landroid/view/Choreographer;"]
+        ]
+    },
+    "android/view/Choreographer$FrameCallback": {
+        "member": [
+            ["doFrame", "(J)V"]
+        ]
+    },
+    "android/view/ContextThemeWrapper": {
+        "member": [
+            ["getResources", "()Landroid/content/res/Resources;"]
+        ]
+    },
+    "android/view/Display": {
+        "member": [
+            ["getAppVsyncOffsetNanos", "()J"],
+            ["getDisplayId", "()I"],
+            ["getHeight", "()I"],
+            ["getPresentationDeadlineNanos", "()J"],
+            ["getRealMetrics", "(Landroid/util/DisplayMetrics;)V"],
+            ["getRefreshRate", "()F"],
+            ["getRotation", "()I"],
+            ["getSupportedModes", "()[Landroid/view/Display$Mode;"],
+            ["getWidth", "()I"],
+            ["isWideColorGamut", "()Z"]
+        ]
+    },
+    "android/view/Display$Mode": {
+        "member": [
+            ["getPhysicalHeight", "()I"],
+            ["getPhysicalWidth", "()I"],
+            ["getRefreshRate", "()F"]
+        ]
+    },
+    "android/view/InputDevice": {
+        "member": [
+            ["getLaunchURL", "()Ljava/lang/String;"],
+            ["getSources", "()I"]
+        ],
+        "static": [
+            ["getDevice", "(I)Landroid/view/InputDevice;"],
+            ["getDeviceIds", "()[I"]
+        ]
+    },
+    "android/view/SurfaceView": {},
+    "android/view/View": {
+        "member": [
+            ["addOnLayoutChangeListener", "(Landroid/view/View$OnLayoutChangeListener;)V"],
+            ["getDisplay", "()Landroid/view/Display;"],
+            ["getSystemUiVisibility", "()I"],
+            ["setOnSystemUiVisibilityChangeListener", "(Landroid/view/View$OnSystemUiVisibilityChangeListener;)V"],
+            ["setSystemUiVisibility", "(I)V"]
+        ],
+        "fields_static": [
+            ["SYSTEM_UI_FLAG_FULLSCREEN", "I"],
+            ["SYSTEM_UI_FLAG_HIDE_NAVIGATION", "I"],
+            ["SYSTEM_UI_FLAG_IMMERSIVE_STICKY", "I"],
+            ["SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN", "I"],
+            ["SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION", "I"],
+            ["SYSTEM_UI_FLAG_LAYOUT_STABLE", "I"]
+        ]
+    },
+    "android/view/View$OnLayoutChangeListener": {},
+    "android/view/View$OnSystemUiVisibilityChangeListener": {
+        "member": [
+            ["onSystemUiVisibilityChange", "(I)V"]
+        ]
+    },
+    "android/view/Window": {
+        "member": [
+            ["getDecorView", "()Landroid/view/View;"],
+            ["setFlags", "(II)V"]
+        ]
+    },
+    "android/view/WindowManager$LayoutParams": {
+        "fields_static": [
+            ["FLAG_KEEP_SCREEN_ON", "I"]
+        ]
+    },
+    "bitter/jnibridge/JNIBridge": {
+        "member": [
+            ["initializeGoogleAr", "()Z"]
+        ],
+        "static": [
+            ["newInterfaceProxy", "(J[Ljava/lang/Class;)Ljava/lang/Object;"]
+        ]
+    },
+    "com/google/androidgamesdk/ChoreographerCallback": {},
+    "com/google/androidgamesdk/SwappyDisplayManager": {},
+    "com/unity3d/player/AudioVolumeHandler": {},
+    "com/unity3d/player/Camera2Wrapper": {},
+    "com/unity3d/player/GoogleARCoreApi": {},
+    "com/unity3d/player/HFPStatus": {},
+    "com/unity3d/player/NativeLoader": {},
+    "com/unity3d/player/OrientationLockListener": {},
+    "com/unity3d/player/PlayAssetDeliveryUnityWrapper": {
+        "static": [
+            ["init", "(Landroid/content/Context;)Lcom/unity3d/player/PlayAssetDeliveryUnityWrapper;"]
+        ]
+    },
+    "com/unity3d/player/ReflectionHelper": {},
+    "com/unity3d/player/UnityCoreAssetPacksStatusCallbacks": {},
+    "com/unity3d/player/UnityPlayer": {},
+    "java/io/File": {
+        "member": [
+            ["getAbsolutePath", "()Ljava/lang/String;"],
+            ["getParent", "()Ljava/lang/String;"],
+            ["getPath", "()Ljava/lang/String;"]
+        ]
+    },
+    "java/io/IOException": {},
+    "java/lang/Boolean": {
+        "member": [
+            ["<init>", "(Z)V"]
+        ]
+    },
+    "java/lang/Class": {
+        "member": [
+            ["getClassLoader", "()Ljava/lang/ClassLoader;"]
+        ]
+    },
+    "java/lang/ClassCastException": {},
+    "java/lang/ClassLoader": {
+        "member": [
+            ["findLibrary", "(Ljava/lang/String;)Ljava/lang/String;"]
+        ]
+    },
+    "java/lang/Integer": {
+        "member": [
+            ["intValue", "()I"]
+        ],
+        "static": [
+            ["parseInt", "(Ljava/lang/String;)I"]
+        ]
+    },
+    "java/lang/Long": {
+        "member": [
+            ["longValue", "()J"]
+        ]
+    },
+    "java/lang/Object": {
+        "member": [
+            ["getClass", "()Ljava/lang/Class;"],
+            ["toString", "()Ljava/lang/String;"]
+        ]
+    },
+    "java/lang/Runnable": {
+        "member": [
+            ["run", "()V"]
+        ]
+    },
+    "java/lang/String": {
+        "member": [
+            ["<init>", "([BLjava/lang/String;)V"],
+            ["equals", "(Ljava/lang/Object;)Z"],
+            ["getBytes", "(Ljava/lang/String;)[B"],
+            ["length", "()I"]
+        ]
+    },
+    "java/lang/StringBuilder": {
+        "member": [
+            ["<init>", "()V"],
+            ["append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;"],
+            ["toString", "()Ljava/lang/String;"]
+        ]
+    },
+    "java/lang/System": {
+        "static": [
+            ["load", "(Ljava/lang/String;)V"],
+            ["nanoTime", "()J"]
+        ]
+    },
+    "java/lang/Thread": {
+        "member": [
+            ["start", "()V"]
+        ]
+    },
+    "java/util/Locale": {
+        "member": [
+            ["toLanguageTag", "()Ljava/lang/String;"]
+        ],
+        "static": [
+            ["getDefault", "()Ljava/util/Locale;"]
+        ]
+    },
+    "java/util/NoSuchElementException": {},
+    "java/util/Scanner": {
+        "member": [
+            ["<init>", "(Ljava/io/InputStream;Ljava/lang/String;)V"],
+            ["next", "()Ljava/lang/String;"],
+            ["useDelimiter", "(Ljava/lang/String;)Ljava/util/Scanner;"]
+        ]
+    },
+    "java/util/zip/ZipFile": {
+        "member": [
+            ["<init>", "(Ljava/lang/String;)V"]
+        ]
+    }
+}
