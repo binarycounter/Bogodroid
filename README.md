@@ -22,11 +22,13 @@ This project does not aim to be able to run your App out of the box. It is meant
 1. Create a armhf chroot environment for building and testing. I recommend [this VM](https://forum.odroid.com/viewtopic.php?p=306185#p306185) image as a starting point.
 2. Clone the repository into your chroot
 3. Create the folder "./libjnivm/build" inside the repository and enter it
-4. `cmake .. --build -DJNIVM_ENABLE_TRACE=ON -DJNIVM_ENABLE_GC=ON -DJNIVM_ENABLE_DEBUG=ON -DJNIVM_USE_FAKE_JNI_CODEGEN=ON `
-5. Create the folder "./build" inside the repository and enter it
-6. `cmake .. --build` 
+4. `cmake .. -DJNIVM_ENABLE_TRACE=ON -DJNIVM_ENABLE_GC=ON -DJNIVM_ENABLE_DEBUG=ON -DJNIVM_USE_FAKE_JNI_CODEGEN=ON `
+5. `make -j8`
+6. Create the folder "./build" inside the repository and enter it
+7. `cmake ..` 
+8. `make -j8`
 
-By default this will build the `unityloader` project. If you want to build a different project, you can specify the project in step 6 with `cmake .. --build -DPROJ=<project name>`
+By default this will build the `unityloader` project. If you want to build a different project, you can specify the project in step 7 with `cmake .. --build -DPROJ=<project name>`
 
 # Running
 

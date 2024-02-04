@@ -6,7 +6,7 @@ endif(COMMAND cmake_policy)
 if (NOT DEFINED PROJ)
     project(unityloader)
 else()
-    project(PROJ)
+    project(${PROJ})
 endif()
 
 
