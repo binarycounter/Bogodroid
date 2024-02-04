@@ -146,6 +146,7 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::res::AssetManager){FakeJni::Con
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::Context){FakeJni::Constructor<Context>{}},
     {FakeJni::Field<&Context::LOCATION_SERVICE>{}, "LOCATION_SERVICE", FakeJni::JFieldID::STATIC},
+    {FakeJni::Field<&Context::MODE_PRIVATE>{}, "MODE_PRIVATE", FakeJni::JFieldID::STATIC},
     {FakeJni::Function<&Context::getSystemService>{}, "getSystemService", FakeJni::JMethodID::PUBLIC},
     {FakeJni::Function<&Context::getAssets>{}, "getAssets", FakeJni::JMethodID::PUBLIC},
     {FakeJni::Function<&Context::getApplicationInfo>{}, "getApplicationInfo", FakeJni::JMethodID::PUBLIC},

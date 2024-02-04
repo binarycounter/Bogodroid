@@ -74,6 +74,9 @@ namespace jnivm
             public:
                 DEFINE_CLASS_NAME("android/content/Context")
                 inline static FakeJni::JString LOCATION_SERVICE = (FakeJni::JString) "LOCATION_SERVICE";
+
+                inline static int MODE_PRIVATE = 0;
+
                 std::shared_ptr<FakeJni::JObject> getSystemService(std::shared_ptr<FakeJni::JString> service);
                 std::shared_ptr<jnivm::android::content::res::AssetManager> getAssets();
                 std::shared_ptr<jnivm::android::content::pm::ApplicationInfo> getApplicationInfo();
