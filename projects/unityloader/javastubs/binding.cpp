@@ -2,6 +2,7 @@
 #include "android.h"
 #include "javac.h"
 #include "unity.h"
+#include "jnibridge.h"
 
 void InitJNIBinding(FakeJni::Jvm *vm)
 {
@@ -24,7 +25,6 @@ void InitJNIBinding(FakeJni::Jvm *vm)
     // vm->registerClass<jnivm::com::unity3d::player::OrientationLockListener>();
     // vm->registerClass<jnivm::com::google::androidgamesdk::ChoreographerCallback>();
     // vm->registerClass<jnivm::com::google::androidgamesdk::SwappyDisplayManager>();
-    // vm->registerClass<jnivm::bitter::jnibridge::JNIBridge>();
     vm->registerClass<jnivm::android::os::Environment>();
     vm->registerClass<jnivm::android::os::Process>();
     vm->registerClass<jnivm::android::os::Bundle>();
@@ -39,6 +39,8 @@ void InitJNIBinding(FakeJni::Jvm *vm)
     vm->registerClass<jnivm::android::content::pm::ApplicationInfo>();
 
     vm->registerClass<jnivm::com::unity3d::player::PlayAssetDeliveryUnityWrapper>();
+    vm->registerClass<jnivm::bitter::jnibridge::JNIBridge>();
+    
 
 
     HookStringExtensions(vm);

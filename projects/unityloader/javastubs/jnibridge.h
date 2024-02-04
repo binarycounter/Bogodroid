@@ -13,7 +13,7 @@ namespace jnivm
             {
             public:
                 DEFINE_CLASS_NAME("bitter/jnibridge/JNIBridge")
-                static std::shared_ptr<jnivm::java::lang::Object> newInterfaceProxy(long j, std::shared_ptr<FakeJni::JArray<FakeJni::JClass>> classes);
+                static std::shared_ptr<jnivm::java::lang::Object> newInterfaceProxy(FakeJni::JLong j, std::shared_ptr<FakeJni::JArray<FakeJni::JClass>> classes);
             };
         }
     }
