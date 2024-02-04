@@ -26,6 +26,8 @@ void InitJNIBinding(FakeJni::Jvm *vm)
     // vm->registerClass<jnivm::com::google::androidgamesdk::ChoreographerCallback>();
     // vm->registerClass<jnivm::com::google::androidgamesdk::SwappyDisplayManager>();
     vm->registerClass<jnivm::android::os::Environment>();
+    vm->registerClass<jnivm::android::os::Looper>();
+    vm->registerClass<jnivm::android::os::Handler>();
     vm->registerClass<jnivm::android::os::Process>();
     vm->registerClass<jnivm::android::os::Bundle>();
     vm->registerClass<jnivm::android::app::Activity>();
@@ -47,27 +49,12 @@ void InitJNIBinding(FakeJni::Jvm *vm)
     HookClassExtensions(vm);
     HookObjectExtensions(vm);
 
-    // FakeJni::LocalFrame frame(*vm);
-    // // java.lang.Class hooks
-    // auto classClass = vm->findClass("java/lang/Class");
-    // classClass->HookInstanceFunction(&frame.getJniEnv(), "getClassLoader", [classClass]()
-    //                                  {
-    //     printf("getClassloader called for class %s\n",classClass->getName().c_str());
-    //     return std::make_shared<jnivm::java::lang::ClassLoader>(); });
-    // classClass->Hook(&frame.getJniEnv(), "forName", [](std::shared_ptr<FakeJni::JString> name, bool init, std::shared_ptr<jnivm::java::lang::ClassLoader> loader)
-    //                  { return std::shared_ptr<FakeJni::JClass>(); });
+    FakeJni::LocalFrame frame(*vm);
+    auto classClass = vm->findClass("java/lang/Class");
 
-
-    // auto stringClass = vm->findClass("java/lang/String");
-    // stringClass->HookInstanceFunction(&frame.getJniEnv(), "equals", [classClass]()
-    //                                  {
-    //     printf("getClassloader called for class %s\n",classClass->getName().c_str());
-    //     return std::make_shared<jnivm::java::lang::ClassLoader>(); });
-
-    // // java.lang.Object hooks
-    // auto objectClass=vm->findClass("java/lang/Object");
-    // objectClass->HookInstanceFunction(&frame.getJniEnv(),"toString",&jnivm::java::lang::EObject::toString);
-    // // java.lang.Throwable hooks
-    // auto throwableClass=vm->findClass("java/lang/Throwable");
-    // throwableClass->HookInstanceFunction(&frame.getJniEnv(),"toString",&jnivm::java::lang::EThrowable::toString);
+    // Some Unity specific thing. Should really be in JNIBridge, is cast to Class for some reason... Just return false.
+    classClass->HookInstanceFunction(&frame.getJniEnv(), "initializeGoogleAr", [](jnivm::ENV*env, jnivm::Object*self)
+    {
+        return false;
+    });
 }

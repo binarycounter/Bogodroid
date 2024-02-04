@@ -24,6 +24,20 @@ namespace jnivm
                 std::shared_ptr<FakeJni::JString> getString(std::shared_ptr<FakeJni::JString> key, std::shared_ptr<FakeJni::JString> def);
             };
 
+            class Looper : public FakeJni::JObject
+            {
+              public:
+                DEFINE_CLASS_NAME("android/os/Looper")  
+                static std::shared_ptr<Looper> getMainLooper();
+            };
+
+            class Handler : public FakeJni::JObject
+            {
+              public:
+                DEFINE_CLASS_NAME("android/os/Handler")  
+                Handler(std::shared_ptr<Looper> looper);
+            };
+
             class Environment : public FakeJni::JObject
             {
             public:
@@ -108,6 +122,7 @@ namespace jnivm
                 std::shared_ptr<jnivm::java::io::File> getFilesDir();
                 std::shared_ptr<jnivm::java::io::File> getExternalFilesDir(std::shared_ptr<FakeJni::JString> path);
                 std::shared_ptr<jnivm::java::io::File> getObbDir();
+                std::shared_ptr<jnivm::Array<jnivm::java::io::File>> getObbDirs();
             };
 
             class Intent : public FakeJni::JObject

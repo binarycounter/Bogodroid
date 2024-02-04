@@ -133,6 +133,12 @@ jnivm::android::content::Context::getObbDir()
     return NULL;
 }
 
+std::shared_ptr<jnivm::Array<jnivm::java::io::File>>
+jnivm::android::content::Context::getObbDirs()
+{
+    return NULL;
+}
+
 ///// Activity
 
 std::shared_ptr<jnivm::android::content::Intent>
@@ -166,6 +172,20 @@ std::shared_ptr<FakeJni::JString> jnivm::android::os::Bundle::getString(std::sha
 
 void jnivm::android::os::Process::setThreadPriority(int i, int j){}
 
+
+///// Looper
+
+std::shared_ptr<jnivm::android::os::Looper> jnivm::android::os::Looper::getMainLooper()
+{
+    return std::make_shared<Looper>();
+}
+
+///// Handler
+
+jnivm::android::os::Handler::Handler(std::shared_ptr<jnivm::android::os::Looper> looper)
+{
+    
+}
 
 ///// Environment
 
@@ -226,6 +246,7 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::res::AssetManager){FakeJni::Con
     {FakeJni::Function<&Context::getExternalFilesDir>{}, "getExternalFilesDir", FakeJni::JMethodID::PUBLIC},
     {FakeJni::Function<&Context::getFilesDir>{}, "getFilesDir", FakeJni::JMethodID::PUBLIC},
     {FakeJni::Function<&Context::getObbDir>{}, "getObbDir", FakeJni::JMethodID::PUBLIC},
+    {FakeJni::Function<&Context::getObbDirs>{}, "getObbDirs", FakeJni::JMethodID::PUBLIC},
     END_NATIVE_DESCRIPTOR
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::Intent){FakeJni::Constructor<Intent>{}},
@@ -239,6 +260,13 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::res::AssetManager){FakeJni::Con
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::os::Process){FakeJni::Constructor<Process>{}},
     {FakeJni::Function<&Process::setThreadPriority>{}, "setThreadPriority", FakeJni::JMethodID::STATIC},
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::os::Looper){FakeJni::Constructor<Looper>{}},
+    {FakeJni::Function<&Looper::getMainLooper>{}, "getMainLooper", FakeJni::JMethodID::STATIC},
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::os::Handler){FakeJni::Constructor<Handler, std::shared_ptr<Looper>>{}},
     END_NATIVE_DESCRIPTOR
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::os::Environment){FakeJni::Constructor<Environment>{}},
