@@ -1,3 +1,5 @@
+#include "toml++/toml.hpp"
+toml::table config;
 #include <dlfcn.h>
 #include <filesystem>
 #include <iostream>
@@ -57,14 +59,17 @@ bool load_so_from_file(so_module *mod, const char *filename, uintptr_t addr)
 
 int main(int argc, char *argv[])
 {
-  if (chdir(argv[1]) != 0)
+
+  config=toml::parse_file(argv[1]);
+  auto game_path=config["paths"]["game_files"].value_or<std::string>("");
+  if (chdir(game_path.c_str()) != 0)
   {
-    std::cerr << "Could not change directory to " << argv[1] << std::endl;
+    std::cerr << "Could not change directory to " << game_path << std::endl;
     return 1;
   }
   else
   {
-     std::cout << "Changed working directory to " << argv[1] << std::endl;
+     std::cout << "Changed working directory to " << game_path << std::endl;
   }
 
   Baron::Jvm vm;

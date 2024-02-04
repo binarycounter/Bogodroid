@@ -1,3 +1,6 @@
+#include "toml++/toml.hpp"
+extern toml::table config;
+
 #include "baron/baron.h"
 #include <fstream>
 #include "android.h"
@@ -94,7 +97,7 @@ jnivm::android::content::Context::getSystemService(std::shared_ptr<FakeJni::JStr
 std::shared_ptr<FakeJni::JString>
 jnivm::android::content::Context::getPackageName()
 {
-    return std::make_shared<FakeJni::JString>("com.binary.testGame");
+    return std::make_shared<FakeJni::JString>(config["package"]["packageName"].value_or<std::string>("package.name.not.defined"));
 }
 
 std::shared_ptr<jnivm::android::content::pm::PackageManager>
@@ -112,24 +115,25 @@ jnivm::android::content::Context::getSharedPreferences(std::shared_ptr<FakeJni::
 std::shared_ptr<FakeJni::JString>
 jnivm::android::content::Context::getPackageCodePath()
 {
-    return std::make_shared<FakeJni::JString>("/fakepath");
+    return std::make_shared<FakeJni::JString>(config["paths"]["android_package_code"].value_or<std::string>("/path_not_defined_code"));
 }
 
 std::shared_ptr<jnivm::java::io::File>
 jnivm::android::content::Context::getExternalFilesDir(std::shared_ptr<FakeJni::JString> path)
 {
-    return std::make_shared<jnivm::java::io::File>(std::make_shared<FakeJni::JString>("/fakepath2"));
+    return std::make_shared<jnivm::java::io::File>(std::make_shared<FakeJni::JString>(config["paths"]["android_external_files"].value_or<std::string>("/path_not_defined_external")));
 }
 
 std::shared_ptr<jnivm::java::io::File>
 jnivm::android::content::Context::getFilesDir()
 {
-    return std::make_shared<jnivm::java::io::File>(std::make_shared<FakeJni::JString>("/fakepath3"));
+    return std::make_shared<jnivm::java::io::File>(std::make_shared<FakeJni::JString>(config["paths"]["android_files"].value_or<std::string>("/path_not_defined_files")));
 }
 
 std::shared_ptr<jnivm::java::io::File>
 jnivm::android::content::Context::getObbDir()
 {
+    //return std::make_shared<jnivm::java::io::File>(config["paths"]["obb_dir"][0].value_or<std::string>("/path_not_defined_obb"));
     return NULL;
 }
 
@@ -184,7 +188,7 @@ std::shared_ptr<jnivm::android::os::Looper> jnivm::android::os::Looper::getMainL
 
 jnivm::android::os::Handler::Handler(std::shared_ptr<jnivm::android::os::Looper> looper)
 {
-    
+
 }
 
 ///// Environment

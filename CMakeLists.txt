@@ -33,6 +33,7 @@ bridges/gles2_bridge.c
 )
 
 target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC 
+${CMAKE_SOURCE_DIR}/tomlplusplus/include
 ${CMAKE_SOURCE_DIR}/libjnivm/include
 ${CMAKE_SOURCE_DIR}/platform/common
 ${CMAKE_SOURCE_DIR}/bridges

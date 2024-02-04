@@ -32,9 +32,13 @@ By default this will build the `unityloader` project. If you want to build a dif
 
 # Running
 
-Currently, the `unityloader` and `hexagonloader` expect a commandline argument to a folder where you extracted the apk of your target. one folder above that should contain the folder `support_files` from the `gamefiles` directory. The easiest way is to extract your apk in the `gamefiles` folder, and run directly from the build directory, like this: 
+`unityloader` uses a TOML config file to configure paths and properties. An example config file is provided in `configs/unity.toml`. If you run the program directly from the build directory and have extracted your APK in `gamefiles/unity/` you can use this config without changes:
 
-`./unityloader ../gamefiles/testgame/`
+`./unityloader ../configs/unity.toml`
+
+**Warning: hexagonloader is broken until I implement TOML configs there aswell**
+
+
 
 # Debugging with QEMU and GDB-multiarch
 
