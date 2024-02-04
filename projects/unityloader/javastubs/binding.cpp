@@ -23,12 +23,16 @@ void InitJNIBinding(FakeJni::Jvm *vm)
     // vm->registerClass<jnivm::com::google::androidgamesdk::ChoreographerCallback>();
     // vm->registerClass<jnivm::com::google::androidgamesdk::SwappyDisplayManager>();
     // vm->registerClass<jnivm::bitter::jnibridge::JNIBridge>();
+    vm->registerClass<jnivm::android::os::Environment>();
     vm->registerClass<jnivm::android::os::Process>();
     vm->registerClass<jnivm::android::os::Bundle>();
     vm->registerClass<jnivm::android::app::Activity>();
     vm->registerClass<jnivm::android::content::Context>();
     vm->registerClass<jnivm::android::content::Intent>();
     vm->registerClass<jnivm::android::content::res::AssetManager>();
+    vm->registerClass<jnivm::android::content::pm::PackageManager>();
+    vm->registerClass<jnivm::android::content::pm::PackageInfo>();
+    vm->registerClass<jnivm::android::content::pm::ApplicationInfo>();
 
     vm->registerClass<jnivm::com::unity3d::player::PlayAssetDeliveryUnityWrapper>();
 
