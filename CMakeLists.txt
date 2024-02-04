@@ -19,6 +19,7 @@ add_executable(${CMAKE_PROJECT_NAME}
 ${PROJ_SOURCES}
 javastubs/android.cpp
 javastubs/javac.cpp
+platform/common/toml_include.cpp
 platform/common/so_util.c
 platform/linux/so_util_linux.c
 platform/linux/physram.c
@@ -43,6 +44,7 @@ ${PROJ_SOURCE_DIR}/javastubs
 
 #file(COPY ${CMAKE_SOURCE_DIR}/support_files DESTINATION ${CMAKE_BINARY_DIR})
 
+target_compile_definitions(${CMAKE_PROJECT_NAME} PUBLIC TOML_HEADER_ONLY=0)
 target_compile_definitions(${CMAKE_PROJECT_NAME} PUBLIC EnableJNIVMGC)
 target_compile_definitions(${CMAKE_PROJECT_NAME} PUBLIC JNIVM_FAKE_JNI_SYNTAX=1)
 target_compile_definitions(${CMAKE_PROJECT_NAME} PUBLIC JNI_DEBUG)
