@@ -24,6 +24,53 @@ jnivm::android::content::res::AssetManager::open(std::shared_ptr<FakeJni::JStrin
 }
 
 
+///// SharedPreferences
+
+bool jnivm::android::content::SharedPreferences::contains(std::shared_ptr<FakeJni::JString> key)
+{
+    return false;
+}
+
+int jnivm::android::content::SharedPreferences::getInt(std::shared_ptr<FakeJni::JString> key, int def)
+{
+    return def;
+}
+
+
+std::shared_ptr<FakeJni::JString> jnivm::android::content::SharedPreferences::getString(std::shared_ptr<FakeJni::JString> key, std::shared_ptr<FakeJni::JString> def)
+{
+    return def;
+}
+
+std::shared_ptr<jnivm::java::util::Map> jnivm::android::content::SharedPreferences::getAll()
+{
+    return nullptr;
+}
+
+std::shared_ptr<jnivm::android::content::SharedPreferencesEditor> jnivm::android::content::SharedPreferences::edit()
+{
+    return std::make_shared<SharedPreferencesEditor>();
+}
+
+
+///// SharedPreferencesEditor
+
+void jnivm::android::content::SharedPreferencesEditor::apply()
+{
+
+}
+
+std::shared_ptr<jnivm::android::content::SharedPreferencesEditor> jnivm::android::content::SharedPreferencesEditor::putInt(std::shared_ptr<FakeJni::JString> key,int val)
+{
+    return std::shared_ptr<SharedPreferencesEditor>(this);
+}
+
+std::shared_ptr<jnivm::android::content::SharedPreferencesEditor> jnivm::android::content::SharedPreferencesEditor::putString(std::shared_ptr<FakeJni::JString> key,std::shared_ptr<FakeJni::JString> val)
+{
+    return std::shared_ptr<SharedPreferencesEditor>(this);
+}
+    
+
 ///// Context
 
 std::shared_ptr<jnivm::android::content::res::AssetManager>
@@ -54,6 +101,12 @@ std::shared_ptr<jnivm::android::content::pm::PackageManager>
 jnivm::android::content::Context::getPackageManager()
 {
     return std::make_shared<jnivm::android::content::pm::PackageManager>();
+}
+
+std::shared_ptr<jnivm::android::content::SharedPreferences>
+jnivm::android::content::Context::getSharedPreferences(std::shared_ptr<FakeJni::JString> str, int num)
+{
+    return std::make_shared<jnivm::android::content::SharedPreferences>();
 }
 
 std::shared_ptr<FakeJni::JString>
@@ -144,6 +197,22 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::res::AssetManager){FakeJni::Con
     {FakeJni::Function<&Activity::getIntent>{}, "getIntent", FakeJni::JMethodID::PUBLIC},
     END_NATIVE_DESCRIPTOR
 
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::SharedPreferencesEditor){FakeJni::Constructor<SharedPreferencesEditor>{}},
+    {FakeJni::Function<&SharedPreferencesEditor::apply>{}, "apply", FakeJni::JMethodID::PUBLIC},
+    {FakeJni::Function<&SharedPreferencesEditor::putInt>{}, "putInt", FakeJni::JMethodID::PUBLIC},
+    {FakeJni::Function<&SharedPreferencesEditor::putString>{}, "putString", FakeJni::JMethodID::PUBLIC},
+    END_NATIVE_DESCRIPTOR
+
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::SharedPreferences){FakeJni::Constructor<SharedPreferences>{}},
+    {FakeJni::Function<&SharedPreferences::contains>{}, "contains", FakeJni::JMethodID::PUBLIC},
+    {FakeJni::Function<&SharedPreferences::getInt>{}, "getInt", FakeJni::JMethodID::PUBLIC},
+    {FakeJni::Function<&SharedPreferences::getString>{}, "getString", FakeJni::JMethodID::PUBLIC},
+    {FakeJni::Function<&SharedPreferences::getAll>{}, "getAll", FakeJni::JMethodID::PUBLIC},
+    {FakeJni::Function<&SharedPreferences::edit>{}, "edit", FakeJni::JMethodID::PUBLIC},
+    END_NATIVE_DESCRIPTOR
+
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::Context){FakeJni::Constructor<Context>{}},
     {FakeJni::Field<&Context::LOCATION_SERVICE>{}, "LOCATION_SERVICE", FakeJni::JFieldID::STATIC},
     {FakeJni::Field<&Context::MODE_PRIVATE>{}, "MODE_PRIVATE", FakeJni::JFieldID::STATIC},
@@ -153,6 +222,7 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::res::AssetManager){FakeJni::Con
     {FakeJni::Function<&Context::getPackageName>{}, "getPackageName", FakeJni::JMethodID::PUBLIC},
     {FakeJni::Function<&Context::getPackageManager>{}, "getPackageManager", FakeJni::JMethodID::PUBLIC},
     {FakeJni::Function<&Context::getPackageCodePath>{}, "getPackageCodePath", FakeJni::JMethodID::PUBLIC},
+    {FakeJni::Function<&Context::getSharedPreferences>{}, "getSharedPreferences", FakeJni::JMethodID::PUBLIC},
     {FakeJni::Function<&Context::getExternalFilesDir>{}, "getExternalFilesDir", FakeJni::JMethodID::PUBLIC},
     {FakeJni::Function<&Context::getFilesDir>{}, "getFilesDir", FakeJni::JMethodID::PUBLIC},
     {FakeJni::Function<&Context::getObbDir>{}, "getObbDir", FakeJni::JMethodID::PUBLIC},

@@ -100,6 +100,14 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::java::io::File)
 {FakeJni::Constructor<File, std::shared_ptr<FakeJni::JString>>{}},
 {FakeJni::Function<&File::getPath>{}, "getPath", FakeJni::JMethodID::PUBLIC },
 END_NATIVE_DESCRIPTOR
+
+BEGIN_NATIVE_DESCRIPTOR(jnivm::java::util::Map){FakeJni::Constructor<Map>{}},
+END_NATIVE_DESCRIPTOR
+BEGIN_NATIVE_DESCRIPTOR(jnivm::java::util::Set){FakeJni::Constructor<Set>{}},
+END_NATIVE_DESCRIPTOR
+BEGIN_NATIVE_DESCRIPTOR(jnivm::java::util::Iterator){FakeJni::Constructor<Iterator>{}},
+END_NATIVE_DESCRIPTOR
+
 BEGIN_NATIVE_DESCRIPTOR(jnivm::java::util::Scanner)
 {FakeJni::Constructor<Scanner, std::shared_ptr<jnivm::java::io::InputStream>, std::shared_ptr<FakeJni::JString>>{}},
 {FakeJni::Function<&Scanner::useDelimiter>{}, "useDelimiter", FakeJni::JMethodID::PUBLIC },

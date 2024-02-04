@@ -48,8 +48,8 @@ namespace jnivm
                 {
                 public:
                     DEFINE_CLASS_NAME("android/content/pm/ApplicationInfo")
-                    
-                    std::shared_ptr<jnivm::Array<FakeJni::JString>> splitPublicSourceDirs=std::make_shared<jnivm::Array<FakeJni::JString>>();
+
+                    std::shared_ptr<jnivm::Array<FakeJni::JString>> splitPublicSourceDirs = std::make_shared<jnivm::Array<FakeJni::JString>>();
                 };
 
                 class PackageManager : public FakeJni::JObject
@@ -69,6 +69,27 @@ namespace jnivm
                     std::shared_ptr<jnivm::java::io::InputStream> open(std::shared_ptr<FakeJni::JString> file);
                 };
             }
+
+            class SharedPreferencesEditor : public FakeJni::JObject
+            {
+            public:
+                DEFINE_CLASS_NAME("android/content/SharedPreferences$Editor")
+                void apply();
+                std::shared_ptr<jnivm::android::content::SharedPreferencesEditor> putInt(std::shared_ptr<FakeJni::JString> key,int val);
+                std::shared_ptr<jnivm::android::content::SharedPreferencesEditor> putString(std::shared_ptr<FakeJni::JString> key,std::shared_ptr<FakeJni::JString> val);
+            };
+
+            class SharedPreferences : public FakeJni::JObject
+            {
+            public:
+                DEFINE_CLASS_NAME("android/content/SharedPreferences")
+                bool contains(std::shared_ptr<FakeJni::JString> key);
+                int getInt(std::shared_ptr<FakeJni::JString> key, int def);
+                std::shared_ptr<FakeJni::JString> getString(std::shared_ptr<FakeJni::JString> key,std::shared_ptr<FakeJni::JString> def);
+                std::shared_ptr<jnivm::java::util::Map> getAll();
+                std::shared_ptr<jnivm::android::content::SharedPreferencesEditor> edit();
+            };
+
             class Context : public FakeJni::JObject
             {
             public:
@@ -83,6 +104,7 @@ namespace jnivm
                 std::shared_ptr<FakeJni::JString> getPackageCodePath();
                 std::shared_ptr<FakeJni::JString> getPackageName();
                 std::shared_ptr<jnivm::android::content::pm::PackageManager> getPackageManager();
+                std::shared_ptr<jnivm::android::content::SharedPreferences> getSharedPreferences(std::shared_ptr<FakeJni::JString> str, int num);
                 std::shared_ptr<jnivm::java::io::File> getFilesDir();
                 std::shared_ptr<jnivm::java::io::File> getExternalFilesDir(std::shared_ptr<FakeJni::JString> path);
                 std::shared_ptr<jnivm::java::io::File> getObbDir();

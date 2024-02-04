@@ -62,6 +62,25 @@ namespace jnivm
 
         namespace util
         {
+
+            class Map : public FakeJni::JObject
+            {
+            public:
+                DEFINE_CLASS_NAME("java/util/Map") 
+            };
+
+            class Set : public FakeJni::JObject
+            {
+            public:
+                DEFINE_CLASS_NAME("java/util/Set") 
+            };
+
+            class Iterator : public FakeJni::JObject
+            {
+            public:
+                DEFINE_CLASS_NAME("java/util/Iterator") 
+            };
+
             class Scanner : public FakeJni::JObject
             {
             private:
