@@ -32,15 +32,27 @@ void InitJNIBinding(FakeJni::Jvm *vm)
 
     vm->registerClass<jnivm::com::unity3d::player::PlayAssetDeliveryUnityWrapper>();
 
-    FakeJni::LocalFrame frame(*vm);
-    // java.lang.Class hooks
-    auto classClass = vm->findClass("java/lang/Class");
-    classClass->HookInstanceFunction(&frame.getJniEnv(), "getClassLoader", [classClass]()
-                                     {
-        printf("getClassloader called for class %s\n",classClass->getName().c_str());
-        return std::make_shared<jnivm::java::lang::ClassLoader>(); });
-    classClass->Hook(&frame.getJniEnv(), "forName", [](std::shared_ptr<FakeJni::JString> name, bool init, std::shared_ptr<jnivm::java::lang::ClassLoader> loader)
-                     { return std::shared_ptr<FakeJni::JClass>(); });
+
+    HookStringExtensions(vm);
+    HookClassExtensions(vm);
+    HookObjectExtensions(vm);
+
+    // FakeJni::LocalFrame frame(*vm);
+    // // java.lang.Class hooks
+    // auto classClass = vm->findClass("java/lang/Class");
+    // classClass->HookInstanceFunction(&frame.getJniEnv(), "getClassLoader", [classClass]()
+    //                                  {
+    //     printf("getClassloader called for class %s\n",classClass->getName().c_str());
+    //     return std::make_shared<jnivm::java::lang::ClassLoader>(); });
+    // classClass->Hook(&frame.getJniEnv(), "forName", [](std::shared_ptr<FakeJni::JString> name, bool init, std::shared_ptr<jnivm::java::lang::ClassLoader> loader)
+    //                  { return std::shared_ptr<FakeJni::JClass>(); });
+
+
+    // auto stringClass = vm->findClass("java/lang/String");
+    // stringClass->HookInstanceFunction(&frame.getJniEnv(), "equals", [classClass]()
+    //                                  {
+    //     printf("getClassloader called for class %s\n",classClass->getName().c_str());
+    //     return std::make_shared<jnivm::java::lang::ClassLoader>(); });
 
     // // java.lang.Object hooks
     // auto objectClass=vm->findClass("java/lang/Object");

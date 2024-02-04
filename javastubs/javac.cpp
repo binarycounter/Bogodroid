@@ -5,12 +5,17 @@
 
 ///// Classloader
 
-jnivm::java::lang::ClassLoader::ClassLoader(){};
+jnivm::java::lang::ClassLoader::ClassLoader(jnivm::Object* obj){
+    verbose("JBRIDGE","New Classloader for class %s",obj->getClass().getName().c_str());
+    this->clazz=obj->clazz;
+};
 
 std::shared_ptr<FakeJni::JString> jnivm::java::lang::ClassLoader::findLibrary(std::shared_ptr<FakeJni::JString> name) {
     verbose("JBRIDGE","findLibrary stub %s",name.get()->c_str());
     return name;
 }
+
+
 
 ///// StringBuilder
 
@@ -77,11 +82,10 @@ std::shared_ptr<FakeJni::JString> jnivm::java::util::Scanner::next(){
     return std::make_shared<FakeJni::JString>(str);
 }
 
-
 // Descriptors
 
 BEGIN_NATIVE_DESCRIPTOR(jnivm::java::lang::ClassLoader)
-{FakeJni::Constructor<ClassLoader>{}},
+{FakeJni::Constructor<ClassLoader,Object*>{}},
 {FakeJni::Function<&ClassLoader::findLibrary>{}, "findLibrary", FakeJni::JMethodID::PUBLIC },
 END_NATIVE_DESCRIPTOR
 BEGIN_NATIVE_DESCRIPTOR(jnivm::java::lang::StringBuilder)
@@ -101,5 +105,59 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::java::util::Scanner)
 {FakeJni::Function<&Scanner::useDelimiter>{}, "useDelimiter", FakeJni::JMethodID::PUBLIC },
 {FakeJni::Function<&Scanner::next>{}, "next", FakeJni::JMethodID::PUBLIC },
 END_NATIVE_DESCRIPTOR
+
+
+
+///// Extensions to built-in Java classes
+
+void HookStringExtensions(FakeJni::Jvm *vm)
+{
+    verbose("JBRIDGE","Hooking String Extensions");
+    FakeJni::LocalFrame frame(*vm);
+    auto stringClass = vm->findClass("java/lang/String");
+
+    // String.equals
+    stringClass->HookInstanceFunction(&frame.getJniEnv(), "equals", [](jnivm::ENV*env, jnivm::Object*self, jnivm::Object*obj)
+    {
+        verbose("JBRIDGE","String %s == %s = %d",(*dynamic_cast<FakeJni::JString*>(self)).c_str(),(*dynamic_cast<FakeJni::JString*>(obj)).c_str(),(*dynamic_cast<FakeJni::JString*>(self))==(*dynamic_cast<FakeJni::JString*>(obj)));
+        return (*dynamic_cast<FakeJni::JString*>(self))==(*dynamic_cast<FakeJni::JString*>(obj));
+    });
+}
+
+void HookClassExtensions(FakeJni::Jvm *vm)
+{
+    verbose("JBRIDGE","Hooking Class Extensions");
+    FakeJni::LocalFrame frame(*vm);
+    auto classClass = vm->findClass("java/lang/Class");
+
+    // Class.getClassLoader
+    classClass->HookInstanceFunction(&frame.getJniEnv(), "getClassLoader", [](jnivm::ENV*env, jnivm::Object*self)
+    {
+        verbose("JBRIDGE","getClassLoader for Class %s",self->getClass().getName().c_str());
+        return std::make_shared<jnivm::java::lang::ClassLoader>(self);
+    });
+
+    // Class.forName (static)
+    classClass->Hook(&frame.getJniEnv(), "forName", [vm](std::shared_ptr<FakeJni::JString> name, bool b, std::shared_ptr<jnivm::java::lang::ClassLoader> loader)
+    {
+        verbose("JBRIDGE","Class forName %s",name.get()->c_str());
+        return vm->findClass(name.get()->c_str());
+    });
+
+}
+
+void HookObjectExtensions(FakeJni::Jvm *vm)
+{
+    verbose("JBRIDGE","Hooking Object Extensions");
+    FakeJni::LocalFrame frame(*vm);
+    auto objClass = vm->findClass("java/lang/Object");
+
+    // Object.getClass
+    objClass->HookInstanceFunction(&frame.getJniEnv(), "getClass", [](jnivm::ENV*env, jnivm::Object*self)
+    {
+        verbose("JBRIDGE","getClass for Object %s",self->getClass().getName().c_str());
+        return env->GetClass(self->getClass().getName().c_str());
+    });
+}
 
 

@@ -3,6 +3,13 @@
 
 #include "baron/baron.h"
 #include <fstream>
+
+
+void HookStringExtensions(FakeJni::Jvm *vm);
+void HookClassExtensions(FakeJni::Jvm *vm);
+void HookObjectExtensions(FakeJni::Jvm *vm);
+
+
 namespace jnivm
 {
     namespace java
@@ -11,10 +18,13 @@ namespace jnivm
         {
             class ClassLoader : public FakeJni::JObject
             {
+            private: 
+                std::weak_ptr<jnivm::Class> clazz;
             public:
                 DEFINE_CLASS_NAME("java/lang/ClassLoader")
+                ClassLoader(jnivm::Object* clazz);
                 static std::shared_ptr<FakeJni::JString> findLibrary(std::shared_ptr<FakeJni::JString> name);
-                ClassLoader();
+                
             };
             class StringBuilder : public FakeJni::JObject
             {
