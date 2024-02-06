@@ -20,17 +20,20 @@ This project does not aim to be able to run your App out of the box. It is meant
 (This process will be simplified later on)
 
 1. Create a armhf chroot environment for building and testing. I recommend [this VM](https://forum.odroid.com/viewtopic.php?p=306185#p306185) image as a starting point.
-2. Clone the repository into your chroot
-3. Create the folder "./libjnivm/build" inside the repository and enter it
-4. `cmake .. -DJNIVM_ENABLE_TRACE=ON -DJNIVM_ENABLE_GC=ON -DJNIVM_ENABLE_DEBUG=ON -DJNIVM_USE_FAKE_JNI_CODEGEN=ON `
-5. `make -j8`
-6. Create the folder "./build" inside the repository and enter it
-7. `cmake ..` 
-8. `make -j8`
+2. Inside your chroot, get the requisites `apt install cmake git libzip-dev`
+3. Clone the repository into your chroot
+4. Create the folder "./libjnivm/build" inside the repository and enter it
+5. `cmake .. -DJNIVM_ENABLE_TRACE=ON -DJNIVM_ENABLE_GC=ON -DJNIVM_ENABLE_DEBUG=ON -DJNIVM_USE_FAKE_JNI_CODEGEN=ON `
+6. `make -j8`
+7. Create the folder "./build" inside the repository and enter it
+8. `cmake ..` 
+9. `make -j8`
 
-By default this will build the `unityloader` project. If you want to build a different project, you can specify the project in step 7 with `cmake .. --build -DPROJ=<project name>`
+By default this will build the `unityloader` project. If you want to build a different project, you can specify the project in step 8 with `cmake .. --build -DPROJ=<project name>`
 
 # Running
+
+*Please note that most loaders require /proc to be mounted, which is not the case in the chroot environment in the VM image. Run `mount -t proc none /proc` as root inside the chroot environment to fix this.*
 
 `unityloader` uses a TOML config file to configure paths and properties. An example config file is provided in `configs/unity.toml`. If you run the program directly from the build directory and have extracted your APK in `gamefiles/unity/` you can use this config without changes:
 
@@ -47,7 +50,7 @@ By default this will build the `unityloader` project. If you want to build a dif
 1. Exit your chroot, we will call the binary directly
 2. Enter the build directory 
 3. Start the binary with: 
-`QEMU_LD_PREFIX=/mnt/data/armhf/ qemu-arm-static -g 5 ./unityloader ../gamefiles/testgame/`
+`QEMU_LD_PREFIX=/mnt/data/armhf/ qemu-arm-static -g 5 ./unityloader ../configs/unity.toml`
 4. Open another terminal and type in `gdb-multiarch`
 5. Enter the location of your chroot: `set sysroot /mnt/data/armhf`
 6. Enter the location of your binary: `file /mnt/data/armhf/root/bogodroid/build/unityloader`
@@ -73,26 +76,25 @@ See `tools/unity_traces` for a trace of a minimal Unity game starting up
 
 # Ports in Progress
 
-| Name                              | Arch  | Status        | Notes                                                                                                              |
-|-----------------------------------|-------|---------------|--------------------------------------------------------------------------------------------------------------------|
-| Unity (Mono)                      | ARMv7 | Not Booting   | Makes it 70% through initialization. Crashes when Mono creates first thread.  Pthread bridge needs to be reworked. |
-| Super Hexagon                     | ARMv7 | Not Booting   | Crashes very early during init while writing first log message. Issue with libc++_shared.so                      |
-| Crazy Taxi Classic                | ARMv7 | Investigated  | Requires better file handling for loading the big OBB files, before it can be attempted.                                                       |
-| Limbo                             | ARMv7 | Not attempted |                                                                                                                    |
-| Terraria                          | ARMv7 | Not attempted | (Engine: FNA, Monogame port might be easier)                                                                       |
-| Baba is you                       | ARMv7 | Not attempted |                                                                                                                    |
-| Super Meat Boy Forever            | ARMv7 | Not attempted |                                                                                                                    |
-| Streets of rage 4                 | ARMv7 | Not attempted | (Engine: FNA, Monogame port might be easier)                                                                       |
-| Chrono Trigger                    | ARMv7 | Not attempted | (Engine: cocos2d-x)                                                                                                |
-| Dead Cells                        | ARMv7 | Not attempted |                                                                                                                    |
-| Brotato                           | ARMv7 | Not attempted |                                                                                                                    |
-| Castlevania Symphony of the Night | ARMv7 | Not attempted |                                                                                                                    |
-| Five Nights At Freddy             | ARMv7 | Not attempted |                                                                                                                    |
-| Gris                              | ARMv7 | Not attempted |                                                                                                                    |
-| The way home                      | ARMv7 | Not attempted |                                                                                                                    |
-| Vampire Survivors                 | ARMv7 | Not attempted |                                                                                                                    |
-| Scourgebringer                    | ARMv7 | Not attempted |                                                                                                                    |
-| Haak                              | ARMv7 | Not attempted |                                                                                                                    |
-
+| Name                              | Project Name  | Status        | Notes                                                                                                              |
+|-----------------------------------|---------------|---------------|--------------------------------------------------------------------------------------------------------------------|
+| Unity (Mono)                      | unityloader   | Not Booting   | Makes it 70% through initialization. Crashes when Mono creates first thread.  Pthread bridge needs to be reworked. |
+| Super Hexagon                     | hexagonloader | Not Booting   | Crashes very early during init while writing first log message. Issue with libc++_shared.so                        |
+| Crazy Taxi Classic                | taxiloader    | Investigated  | Requires better file handling for loading the big OBB files, before it can be attempted.                           |
+| Limbo                             | -             | Not attempted |                                                                                                                    |
+| Terraria                          | -             | Not attempted | (Engine: FNA, Monogame port might be easier)                                                                       |
+| Baba is you                       | -             | Not attempted |                                                                                                                    |
+| Super Meat Boy Forever            | -             | Not attempted |                                                                                                                    |
+| Streets of rage 4                 | -             | Not attempted | (Engine: FNA, Monogame port might be easier)                                                                       |
+| Chrono Trigger                    | -             | Not attempted | (Engine: cocos2d-x)                                                                                                |
+| Dead Cells                        | -             | Not attempted |                                                                                                                    |
+| Brotato                           | -             | Not attempted |                                                                                                                    |
+| Castlevania Symphony of the Night | -             | Not attempted |                                                                                                                    |
+| Five Nights At Freddy             | -             | Not attempted |                                                                                                                    |
+| Gris                              | -             | Not attempted |                                                                                                                    |
+| The Way Home                      | -             | Not attempted |                                                                                                                    |
+| Vampire Survivors                 | -             | Not attempted |                                                                                                                    |
+| Scourgebringer                    | -             | Not attempted |                                                                                                                    |
+| Haak                              | -             | Not attempted |                                                                                                                    |
 
 
