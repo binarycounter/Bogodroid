@@ -7,6 +7,30 @@ namespace jnivm
 {
     namespace android
     {
+        namespace view
+        {
+            class Display : public FakeJni::JObject
+            {
+                public:
+                    DEFINE_CLASS_NAME("android/view/Display")  
+                    int getDisplayId();
+                    int getRotation();
+                    int getWidth();
+                    int getHeight();
+            };
+        }
+        namespace hardware
+        {
+            namespace display
+            {
+                class DisplayManager : public FakeJni::JObject
+                {
+                public:
+                    DEFINE_CLASS_NAME("android/hardware/display/DisplayManager")
+                    std::shared_ptr<jnivm::android::view::Display> getDisplay();
+                };
+            }
+        }
 
         namespace os
         {
@@ -26,15 +50,15 @@ namespace jnivm
 
             class Looper : public FakeJni::JObject
             {
-              public:
-                DEFINE_CLASS_NAME("android/os/Looper")  
+            public:
+                DEFINE_CLASS_NAME("android/os/Looper")
                 static std::shared_ptr<Looper> getMainLooper();
             };
 
             class Handler : public FakeJni::JObject
             {
-              public:
-                DEFINE_CLASS_NAME("android/os/Handler")  
+            public:
+                DEFINE_CLASS_NAME("android/os/Handler")
                 Handler(std::shared_ptr<Looper> looper);
             };
 
@@ -89,8 +113,8 @@ namespace jnivm
             public:
                 DEFINE_CLASS_NAME("android/content/SharedPreferences$Editor")
                 void apply();
-                std::shared_ptr<jnivm::android::content::SharedPreferencesEditor> putInt(std::shared_ptr<FakeJni::JString> key,int val);
-                std::shared_ptr<jnivm::android::content::SharedPreferencesEditor> putString(std::shared_ptr<FakeJni::JString> key,std::shared_ptr<FakeJni::JString> val);
+                std::shared_ptr<jnivm::android::content::SharedPreferencesEditor> putInt(std::shared_ptr<FakeJni::JString> key, int val);
+                std::shared_ptr<jnivm::android::content::SharedPreferencesEditor> putString(std::shared_ptr<FakeJni::JString> key, std::shared_ptr<FakeJni::JString> val);
             };
 
             class SharedPreferences : public FakeJni::JObject
@@ -99,7 +123,7 @@ namespace jnivm
                 DEFINE_CLASS_NAME("android/content/SharedPreferences")
                 bool contains(std::shared_ptr<FakeJni::JString> key);
                 int getInt(std::shared_ptr<FakeJni::JString> key, int def);
-                std::shared_ptr<FakeJni::JString> getString(std::shared_ptr<FakeJni::JString> key,std::shared_ptr<FakeJni::JString> def);
+                std::shared_ptr<FakeJni::JString> getString(std::shared_ptr<FakeJni::JString> key, std::shared_ptr<FakeJni::JString> def);
                 std::shared_ptr<jnivm::java::util::Map> getAll();
                 std::shared_ptr<jnivm::android::content::SharedPreferencesEditor> edit();
             };
@@ -109,6 +133,7 @@ namespace jnivm
             public:
                 DEFINE_CLASS_NAME("android/content/Context")
                 inline static FakeJni::JString LOCATION_SERVICE = (FakeJni::JString) "LOCATION_SERVICE";
+                inline static FakeJni::JString DISPLAY_SERVICE = (FakeJni::JString) "DISPLAY_SERVICE";
 
                 inline static int MODE_PRIVATE = 0;
 

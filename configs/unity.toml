@@ -17,4 +17,11 @@ versionName="0.1"
 mainIntentBundle = { unity = "-forcegles20" }
 
 
+[device]
+
+displayWidth=640
+displayHeight=480
+displayRotation=0
+
+
 

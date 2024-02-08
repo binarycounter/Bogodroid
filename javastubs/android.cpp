@@ -8,6 +8,37 @@ extern toml::table config;
 #include "platform.h"
 
 
+///// Display
+
+int jnivm::android::view::Display::getDisplayId()
+{
+    return 0;
+}
+
+int jnivm::android::view::Display::getRotation()
+{
+    return config["device"]["displayRotation"].value_or<int>(0);
+}
+
+int jnivm::android::view::Display::getWidth()
+{
+    return config["device"]["displayWidth"].value_or<int>(640);
+}
+
+int jnivm::android::view::Display::getHeight()
+{
+    return config["device"]["displayHeight"].value_or<int>(480);
+}
+
+
+///// DisplayManager
+
+std::shared_ptr<jnivm::android::view::Display>
+jnivm::android::hardware::display::DisplayManager::getDisplay()
+{
+    return std::make_shared<jnivm::android::view::Display>();
+}
+
 
 ///// PackageManager
 
@@ -91,7 +122,11 @@ jnivm::android::content::Context::getApplicationInfo()
 std::shared_ptr<FakeJni::JObject>
 jnivm::android::content::Context::getSystemService(std::shared_ptr<FakeJni::JString> service)
 {
-    return nullptr;
+    if(*service == LOCATION_SERVICE)
+        return nullptr;
+    
+    if(*service == DISPLAY_SERVICE)
+        return std::make_shared<jnivm::android::hardware::display::DisplayManager>();
 }
 
 std::shared_ptr<FakeJni::JString>
@@ -211,6 +246,18 @@ jnivm::android::os::Environment::getExternalStorageState()
 
 ///// Descriptors
 
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::Display){FakeJni::Constructor<Display>{}},
+    {FakeJni::Function<&Display::getDisplayId>{}, "getDisplayId", FakeJni::JMethodID::PUBLIC},
+    {FakeJni::Function<&Display::getRotation>{}, "getRotation", FakeJni::JMethodID::PUBLIC},
+    {FakeJni::Function<&Display::getWidth>{}, "getWidth", FakeJni::JMethodID::PUBLIC},
+    {FakeJni::Function<&Display::getHeight>{}, "getHeight", FakeJni::JMethodID::PUBLIC},
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::hardware::display::DisplayManager){FakeJni::Constructor<DisplayManager>{}},
+    {FakeJni::Function<&DisplayManager::getDisplay>{}, "getDisplay", FakeJni::JMethodID::PUBLIC},
+    END_NATIVE_DESCRIPTOR
+
+
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::pm::PackageInfo){FakeJni::Constructor<PackageInfo>{}},
     {FakeJni::Field<&PackageInfo::versionName>{}, "versionName", FakeJni::JFieldID::PUBLIC},
     END_NATIVE_DESCRIPTOR
@@ -249,6 +296,7 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::res::AssetManager){FakeJni::Con
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::Context){FakeJni::Constructor<Context>{}},
     {FakeJni::Field<&Context::LOCATION_SERVICE>{}, "LOCATION_SERVICE", FakeJni::JFieldID::STATIC},
+    {FakeJni::Field<&Context::DISPLAY_SERVICE>{}, "DISPLAY_SERVICE", FakeJni::JFieldID::STATIC},
     {FakeJni::Field<&Context::MODE_PRIVATE>{}, "MODE_PRIVATE", FakeJni::JFieldID::STATIC},
     {FakeJni::Function<&Context::getSystemService>{}, "getSystemService", FakeJni::JMethodID::PUBLIC},
     {FakeJni::Function<&Context::getAssets>{}, "getAssets", FakeJni::JMethodID::PUBLIC},

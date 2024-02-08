@@ -25,6 +25,8 @@ void InitJNIBinding(FakeJni::Jvm *vm)
     // vm->registerClass<jnivm::com::unity3d::player::OrientationLockListener>();
     // vm->registerClass<jnivm::com::google::androidgamesdk::ChoreographerCallback>();
     // vm->registerClass<jnivm::com::google::androidgamesdk::SwappyDisplayManager>();
+    vm->registerClass<jnivm::android::view::Display>();
+    vm->registerClass<jnivm::android::hardware::display::DisplayManager>();
     vm->registerClass<jnivm::android::os::Environment>();
     vm->registerClass<jnivm::android::os::Looper>();
     vm->registerClass<jnivm::android::os::Handler>();
