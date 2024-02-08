@@ -14,3 +14,7 @@ android_source_dirs=["/fakepath_source"]
 
 packageName="com.example.package"
 versionName="0.1"
+mainIntentBundle = { unity = "-forcegles20" }
+
+
+
