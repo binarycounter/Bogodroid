@@ -234,51 +234,110 @@ ABI_ATTR int pthread_join_bridge(pthread_t th, void **thread_return)
 }
 
 
-/* Copyright (C) 2002-2018 Free Software Foundation, Inc.
-   This file is part of the GNU C Library.
-   Contributed by Ulrich Drepper <drepper@redhat.com>, 2002.
-
-   The GNU C Library is free software; you can redistribute it and/or
-   modify it under the terms of the GNU Lesser General Public
-   License as published by the Free Software Foundation; either
-   version 2.1 of the License, or (at your option) any later version.
-
-   The GNU C Library is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-   Lesser General Public License for more details.
-
-   You should have received a copy of the GNU Lesser General Public
-   License along with the GNU C Library; if not, see
-   <http://www.gnu.org/licenses/>.  */
+typedef struct {
+  uint32_t flags;
+  void* stack_base;
+  size_t stack_size;
+  size_t guard_size;
+  int32_t sched_policy;
+  int32_t sched_priority;
+#ifdef __LP64__
+  char __reserved[16];
+#endif
+} android_pthread_attr_t;
 
 
-ABI_ATTR int pthread_getattr_np_bridge (pthread_t t, pthread_attr_t* attr)
+ABI_ATTR int pthread_attr_init_bridge (android_pthread_attr_t* attr)
 {
-    
+    verbose("NATIVE","pthread_init %p",attr);
+    pthread_attr_t attr2;
+    if(pthread_attr_init(&attr2)!=0)
+        return -1;
     verbose("NATIVE","pthread_getattr_np %p",attr);
-    attr=t;
+    pthread_attr_getstackaddr(&attr2,&(attr->stack_base));
+    pthread_attr_getstacksize(&attr2,&(attr->stack_size));
+    attr->flags=0;
+    
+    verbose("NATIVE","pthread_init %p",attr);
     return 0;
 }
+
+ABI_ATTR int pthread_getattr_np_bridge (pthread_t t, android_pthread_attr_t* attr)
+{
+    verbose("NATIVE","pthread_getattr_np %p",attr);
+    pthread_attr_t attr2;
+    if(pthread_getattr_np(t,&attr2)!=0)
+        return -1;
+    verbose("NATIVE","pthread_getattr_np %p",attr);
+    pthread_attr_getstackaddr(&attr2,&(attr->stack_base));
+    pthread_attr_getstacksize(&attr2,&(attr->stack_size));
+    attr->flags=0;
+    
+    verbose("NATIVE","pthread_getattr_np %p",attr);
+    return 0;
+}
+
+ABI_ATTR int pthread_attr_getstack_bridge(android_pthread_attr_t* attr,
+                          void **stackaddr, size_t *stacksize)// uintptr_t more,uintptr_t more2, uintptr_t more3,uintptr_t more4)
+{
+
+    verbose("NATIVE","pthread_attr_getstack %p - %p - %p",attr,stackaddr,stacksize);
+    // printf("[NATIVE] more %p - %p - %p - %p\n",more,more2,more3,more4);
+
+    *stacksize=attr->stack_size;
+    *stackaddr=attr->stack_base;
+
+    verbose("NATIVE","done   _attr_getstack %p - %p - %p",attr,stackaddr,stacksize);
+    return 0;
+}
+
+ABI_ATTR int pthread_attr_getstacksize_bridge(android_pthread_attr_t* attr, size_t *stacksize)// uintptr_t more,uintptr_t more2, uintptr_t more3,uintptr_t more4)
+{
+
+    verbose("NATIVE","pthread_attr_getstacksize %p - %p",attr,stacksize);
+    // printf("[NATIVE] more %p - %p - %p - %p\n",more,more2,more3,more4);
+
+    *stacksize=attr->stack_size;
+
+    verbose("NATIVE","done   _attr_getstack %p - %p",attr,stacksize);
+    return 0;
+}
+
+
+#define ANDROID_PTHREAD_ATTR_FLAG_DETACHED 0x00000001
+#define ANDROID_PTHREAD_ATTR_FLAG_USER_ALLOCATED_STACK 0x00000002
+#define ANDROID_PTHREAD_ATTR_FLAG_JOINED 0x00000004
+#define ANDROID_PTHREAD_ATTR_FLAG_MAIN_THREAD 0x80000000
+#define ANDROID_PTHREAD_CREATE_DETACHED 1
+#define ANDROID_PTHREAD_CREATE_JOINABLE 0
+
+ABI_ATTR int pthread_attr_getdetachstate_bridge(android_pthread_attr_t* attr, int *detachstate)
+{
+
+    verbose("NATIVE","pthread_attr_getdetachstate %p - %p - %p",attr,detachstate);
+    // printf("[NATIVE] more %p - %p - %p - %p\n",more,more2,more3,more4);
+
+    *detachstate= (attr->flags & ANDROID_PTHREAD_ATTR_FLAG_DETACHED) ? ANDROID_PTHREAD_CREATE_DETACHED : ANDROID_PTHREAD_CREATE_JOINABLE;
+
+    verbose("NATIVE","done   _attr_getstack %p - %p - %p",attr,detachstate);
+    return 0;
+}
+
+
+// struct android_sched_param {
+//   int sched_priority;
+// };
+
+// pthread_getschedparam_bridge(pthread_t t, int* policy, android_sched_param* param)
+// {
+//     sched_getparam()
+// }
 
 ABI_ATTR int retn1()
 {
     return 0;
 }
 
-ABI_ATTR int pthread_attr_getstack_bridge(pthread_t t,
-                          void **stackaddr, size_t *stacksize)// uintptr_t more,uintptr_t more2, uintptr_t more3,uintptr_t more4)
-{
-
-    verbose("NATIVE","pthread_attr_getstack %p - %p - %p",&t,stackaddr,stacksize);
-    // printf("[NATIVE] more %p - %p - %p - %p\n",more,more2,more3,more4);
-
-    pthread_attr_t *attr2;
-    pthread_getattr_np(pthread_self(),attr2);
-    pthread_attr_getstack(attr2,stackaddr,stacksize);
-    verbose("NATIVE","done   _attr_getstack %p - %p - %p",t,stackaddr,stacksize);
-    return 0;
-}
 
 
 DynLibFunction symtable_pthread[] = {
@@ -303,17 +362,18 @@ DynLibFunction symtable_pthread[] = {
     {"pthread_once", (uintptr_t)&pthread_once_bridge},
     {"pthread_create", (uintptr_t)&pthread_create_bridge},
     {"pthread_equal", (uintptr_t)&pthread_equal},
+    {"pthread_setname_np", (uintptr_t)&pthread_setname_np},
 
     {"pthread_getattr_np", (uintptr_t)&pthread_getattr_np_bridge},
-    {"pthread_attr_init", (uintptr_t)&retn1},
+    {"pthread_attr_init", (uintptr_t)&pthread_attr_init_bridge},
     {"pthread_attr_setstacksize", (uintptr_t)&retn1},
-    {"pthread_attr_getdetachstate", (uintptr_t)&pthread_attr_getdetachstate},
-    {"pthread_attr_getstacksize", (uintptr_t)&pthread_attr_getstacksize},
+    {"pthread_attr_getdetachstate", (uintptr_t)&pthread_attr_getdetachstate_bridge},
+    {"pthread_attr_getstacksize", (uintptr_t)&pthread_attr_getstacksize_bridge},
     {"pthread_attr_getstack", (uintptr_t)&pthread_attr_getstack_bridge},
     {"pthread_attr_destroy", (uintptr_t)&retn1},
     {"__pthread_cleanup_push", (uintptr_t)&retn1},
     {"pthread_getschedparam", (uintptr_t)&pthread_getschedparam},
-    {"pthread_setschedparam", (uintptr_t)&retn1},
+    {"pthread_setschedparam", (uintptr_t)&pthread_setschedparam},
     {"sched_get_priority_min", (uintptr_t)&sched_get_priority_min},
     {"sched_get_priority_max", (uintptr_t)&sched_get_priority_max},
     {"sched_yield", (uintptr_t)&sched_yield},

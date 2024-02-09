@@ -110,4 +110,5 @@ DynLibFunction symtable_fcntl[] = {
     {"write", (uintptr_t)&fcntl_write},
     {"close", (uintptr_t)&fcntl_close},
     {"lseek64", (uintptr_t)&lseek64_bridge},
+    {"pipe", (uintptr_t)&pipe},
     {NULL, (uintptr_t)NULL}};
