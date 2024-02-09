@@ -35,7 +35,7 @@ By default this will build the `unityloader` project. If you want to build a dif
 
 *Please note that most loaders require /proc to be mounted, which is not the case in the chroot environment in the VM image. Run `mount -t proc none /proc` as root inside the chroot environment to fix this.*
 
-`unityloader` uses a TOML config file to configure paths and properties. An example config file is provided in `configs/unity.toml`. If you run the program directly from the build directory and have extracted your APK in `gamefiles/unity/` you can use this config without changes:
+`unityloader` and `limboloader` use a TOML config file to configure paths and properties. Example config files are provided in `configs/`. If you run the program directly from the build directory and have extracted your Unity game APK in `gamefiles/unity/` you can use this config without changes:
 
 `./unityloader ../configs/unity.toml`
 
@@ -80,8 +80,8 @@ See `tools/unity_traces` for a trace of a minimal Unity game starting up
 |-----------------------------------|---------------|---------------|--------------------------------------------------------------------------------------------------------------------|
 | Unity (Mono)                      | unityloader   | Not Booting   | Makes it 70% through initialization. Crashes when Mono creates first thread.  Pthread bridge needs to be reworked. |
 | Super Hexagon                     | hexagonloader | Not Booting   | Crashes very early during init while writing first log message. Issue with libc++_shared.so                        |
+| Limbo                             | limboloader   | Not Booting   | Requires implementation of `ANativeActivity` C struct and `NativeActivity` function bindings before being feasible.|
 | Crazy Taxi Classic                | taxiloader    | Investigated  | Requires better file handling for loading the big OBB files, before it can be attempted.                           |
-| Limbo                             | -             | Not attempted |                                                                                                                    |
 | Terraria                          | -             | Not attempted | (Engine: FNA, Monogame port might be easier)                                                                       |
 | Baba is you                       | -             | Not attempted |                                                                                                                    |
 | Super Meat Boy Forever            | -             | Not attempted |                                                                                                                    |
