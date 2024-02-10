@@ -166,6 +166,12 @@ namespace jnivm
                 DEFINE_CLASS_NAME("android/app/Activity")
                 std::shared_ptr<jnivm::android::content::Intent> getIntent();
             };
+
+            class NativeActivity : public jnivm::android::app::Activity
+            {
+            public:
+                DEFINE_CLASS_NAME("android/app/NativeActivity")
+            };
         }
 
     }

@@ -278,6 +278,9 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::res::AssetManager){FakeJni::Con
     {FakeJni::Function<&Activity::getIntent>{}, "getIntent", FakeJni::JMethodID::PUBLIC},
     END_NATIVE_DESCRIPTOR
 
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::app::NativeActivity){FakeJni::Constructor<NativeActivity>{}},
+    END_NATIVE_DESCRIPTOR
+
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::SharedPreferencesEditor){FakeJni::Constructor<SharedPreferencesEditor>{}},
     {FakeJni::Function<&SharedPreferencesEditor::apply>{}, "apply", FakeJni::JMethodID::PUBLIC},

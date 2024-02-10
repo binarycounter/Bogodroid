@@ -9,7 +9,9 @@ extern toml::table config;
 
 ABI_ATTR AConfiguration* AConfiguration_new()
 {
-
+    AConfiguration* config = new AConfiguration;
+    memset(config, 0, sizeof(AConfiguration));
+    return config;
 }
 
 ABI_ATTR void AConfiguration_fromAssetManager(AConfiguration* out, void* am)
@@ -70,6 +72,26 @@ ABI_ATTR int32_t AConfiguration_getUiModeNight(AConfiguration* aconfig) {
     return 0;
 }
 
+ABI_ATTR ALooper* ALooper_prepare(int opts) {
+    ALooper looper={};
+    return &looper;
+}
+
+ABI_ATTR int32_t ALooper_addFd(ALooper *looper, int fd, int ident, int events, void* callback,void *data) {
+    return 0;
+}
+
+ABI_ATTR int32_t ANativeWindow_getWidth(ANativeWindow* window) {
+    return config["device"]["displayWidth"].value_or<int>(640);
+}
+
+ABI_ATTR int32_t ANativeWindow_getHeight(ANativeWindow* window) {
+    return config["device"]["displayHeight"].value_or<int>(480);
+}
+
+
+
+
 DynLibFunction symtable_ndk[] = {
     {"AConfiguration_new", (uintptr_t)&AConfiguration_new},
     {"AConfiguration_fromAssetManager", (uintptr_t)&AConfiguration_fromAssetManager},
@@ -89,4 +111,8 @@ DynLibFunction symtable_ndk[] = {
     {"AConfiguration_getScreenLong", (uintptr_t)&AConfiguration_getScreenLong},
     {"AConfiguration_getUiModeType", (uintptr_t)&AConfiguration_getUiModeType},
     {"AConfiguration_getUiModeNight", (uintptr_t)&AConfiguration_getUiModeNight},
+    {"ALooper_prepare", (uintptr_t)&ALooper_prepare},
+    {"ALooper_addFd", (uintptr_t)&ALooper_addFd},
+    {"ANativeWindow_getWidth", (uintptr_t)&ANativeWindow_getWidth},
+    {"ANativeWindow_getHeight", (uintptr_t)&ANativeWindow_getHeight},
     {NULL, (uintptr_t)NULL}};

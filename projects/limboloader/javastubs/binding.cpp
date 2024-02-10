@@ -32,6 +32,7 @@ void InitJNIBinding(FakeJni::Jvm *vm)
     vm->registerClass<jnivm::android::os::Process>();
     vm->registerClass<jnivm::android::os::Bundle>();
     vm->registerClass<jnivm::android::app::Activity>();
+    vm->registerClass<jnivm::android::app::NativeActivity>();
     vm->registerClass<jnivm::android::content::Context>();
     vm->registerClass<jnivm::android::content::SharedPreferences>();
     vm->registerClass<jnivm::android::content::SharedPreferencesEditor>();
