@@ -25,6 +25,7 @@ DynLibFunction *so_dynamic_libraries[] = {
     symtable_fcntl,
     symtable_ctype,
     symtable_math,
+    symtable_ndk,
     // symtable_openal,
     NULL};
 
@@ -93,7 +94,7 @@ int main(int argc, char *argv[])
   mainJNI_OnLoad(&vm, nullptr);
 
   auto mainOnCreate = (jint(*)(JavaVM * vm))(so_symbol(&lmain, "ANativeActivity_onCreate"));
-  mainOnCreate(&vm, nullptr);
+  mainOnCreate(&vm);
 
  
   printf("Exit.\n");

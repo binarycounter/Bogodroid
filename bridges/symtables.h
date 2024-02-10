@@ -13,5 +13,6 @@ extern DynLibFunction symtable_stdio[];
 extern DynLibFunction symtable_openal[];
 extern DynLibFunction symtable_vorbis[];
 extern DynLibFunction symtable_zip[];
+extern DynLibFunction symtable_ndk[];
 
 #endif /* __SYMTABLES_H__ */

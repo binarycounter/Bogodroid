@@ -31,6 +31,7 @@ bridges/fcntl_bridge.c
 bridges/ctype_bridge.c
 bridges/math_bridge.c
 bridges/gles2_bridge.c
+bridges/ndk_bridge.cpp
 )
 
 target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC 
