@@ -80,7 +80,7 @@ See `tools/unity_traces` for a trace of a minimal Unity game starting up
 |-----------------------------------|---------------|---------------|--------------------------------------------------------------------------------------------------------------------|
 | Unity (Mono)                      | unityloader   | Not Booting   | Makes it 70% through initialization. Crashes when Mono creates first thread.  Pthread bridge needs to be reworked. |
 | Super Hexagon                     | hexagonloader | Not Booting   | Crashes very early during init while writing first log message. Issue with libc++_shared.so                        |
-| Limbo                             | limboloader   | Not Booting   | Requires implementation of `ANativeActivity` C struct and `NativeActivity` function bindings before being feasible.|
+| Limbo                             | limboloader   | Loading Screen| Immediately crashes after first frame of the loading screen. Requires implementation of `ALooper` function bindings|
 | Crazy Taxi Classic                | taxiloader    | Investigated  | Requires better file handling for loading the big OBB files, before it can be attempted.                           |
 | Terraria                          | -             | Not attempted | (Engine: FNA, Monogame port might be easier)                                                                       |
 | Baba is you                       | -             | Not attempted |                                                                                                                    |

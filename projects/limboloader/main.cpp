@@ -12,6 +12,8 @@ toml::table config;
 #include <csignal>
 #include <unistd.h>
 #include "javastubs/binding.h"
+#include "javastubs/limbo.h"
+#include "ndk_bridge.h"
 
 using namespace FakeJni;
 
@@ -93,10 +95,54 @@ int main(int argc, char *argv[])
   auto mainJNI_OnLoad = (jint(*)(JavaVM * vm, void *reserved))(so_symbol(&lmain, "JNI_OnLoad"));
   mainJNI_OnLoad(&vm, nullptr);
 
-  auto mainOnCreate = (jint(*)(JavaVM * vm))(so_symbol(&lmain, "ANativeActivity_onCreate"));
-  mainOnCreate(&vm);
 
- 
+  ANativeActivity nActivity;
+  FakeJni::LocalFrame frame(vm);
+  memset( &nActivity, 0, sizeof( ANativeActivity ) );
+  nActivity.callbacks=new ANativeActivityCallbacks;
+  memset( nActivity.callbacks, 0, sizeof( ANativeActivityCallbacks ) );
+  nActivity.vm=&vm;
+  nActivity.env=&(frame.getJniEnv());
+  nActivity.clazz=std::make_shared<jnivm::com::playdead::limbo::LimboActivity>();
+
+  printf("%p %p\n",&nActivity,nActivity.callbacks);
+  printf("calling ANativeActivity_onCreate from liblimbo.so\n");
+  auto mainOnCreate = (jint(*)(ANativeActivity* act))(so_symbol(&lmain, "ANativeActivity_onCreate"));
+  mainOnCreate(&nActivity);
+
+  printf("calling ANativeActivity_onNativeWindowCreated from liblimbo.so\n");
+  nActivity.callbacks->onNativeWindowCreated(&nActivity,nullptr);
+
+
+  // verbose("Callbacks","onStart %p",nActivity.callbacks->onStart);
+  // verbose("Callbacks","onResume %p",nActivity.callbacks->onResume);
+  // verbose("Callbacks","onSaveInstanceState %p",nActivity.callbacks->onSaveInstanceState);
+  // verbose("Callbacks","onPause %p",nActivity.callbacks->onPause);
+  // verbose("Callbacks","onStop %p",nActivity.callbacks->onStop);
+  // verbose("Callbacks","onDestroy %p",nActivity.callbacks->onDestroy);
+  // verbose("Callbacks","onWindowFocusChanged %p",nActivity.callbacks->onWindowFocusChanged);
+  // verbose("Callbacks","onNativeWindowCreated %p",nActivity.callbacks->onNativeWindowCreated);
+  // verbose("Callbacks","onNativeWindowResized %p",nActivity.callbacks->onNativeWindowResized);
+  // verbose("Callbacks","onNativeWindowRedrawNeeded %p",nActivity.callbacks->onNativeWindowRedrawNeeded);
+  // verbose("Callbacks","onNativeWindowDestroyed %p",nActivity.callbacks->onNativeWindowDestroyed);
+  // verbose("Callbacks","onInputQueueCreated %p",nActivity.callbacks->onInputQueueCreated);
+  // verbose("Callbacks","onInputQueueDestroyed %p",nActivity.callbacks->onInputQueueDestroyed);
+  // verbose("Callbacks","onContentRectChanged %p",nActivity.callbacks->onContentRectChanged);
+  // verbose("Callbacks","onConfigurationChanged %p",nActivity.callbacks->onConfigurationChanged);
+  // verbose("Callbacks","onLowMemory %p",nActivity.callbacks->onLowMemory);
+
+  printf("calling ANativeActivity_onStart from liblimbo.so\n");
+  nActivity.callbacks->onStart(&nActivity);
+
+  sleep(1);
+
+  printf("calling native_ReportVSyncCallEvent from liblimbo.so\n");
+  auto mainFrame = (jint(*)(long frameTime))(so_symbol(&lmain, "Java_com_playdead_limbo_LimboActivity_native_1ReportVSyncCallEvent"));
+  mainFrame(100000);
+
   printf("Exit.\n");
+
+  
+
   return 0;
 }

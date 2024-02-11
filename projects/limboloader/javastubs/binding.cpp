@@ -1,6 +1,7 @@
 #include "baron/baron.h"
 #include "android.h"
 #include "javac.h"
+#include "limbo.h"
 
 
 void InitJNIBinding(FakeJni::Jvm *vm)
@@ -42,6 +43,7 @@ void InitJNIBinding(FakeJni::Jvm *vm)
     vm->registerClass<jnivm::android::content::pm::PackageInfo>();
     vm->registerClass<jnivm::android::content::pm::ApplicationInfo>();
 
+    vm->registerClass<jnivm::com::playdead::limbo::LimboActivity>();
 
 
     HookStringExtensions(vm);
