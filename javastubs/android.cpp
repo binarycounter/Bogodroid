@@ -124,9 +124,14 @@ jnivm::android::content::Context::getSystemService(std::shared_ptr<FakeJni::JStr
 {
     if(*service == LOCATION_SERVICE)
         return nullptr;
+
+    if(*service == AUDIO_SERVICE)
+        return nullptr;
     
     if(*service == DISPLAY_SERVICE)
         return std::make_shared<jnivm::android::hardware::display::DisplayManager>();
+
+    return nullptr;
 }
 
 std::shared_ptr<FakeJni::JString>
@@ -163,6 +168,12 @@ std::shared_ptr<jnivm::java::io::File>
 jnivm::android::content::Context::getFilesDir()
 {
     return std::make_shared<jnivm::java::io::File>(std::make_shared<FakeJni::JString>(config["paths"]["android_files"].value_or<std::string>("/path_not_defined_files")));
+}
+
+std::shared_ptr<jnivm::java::io::File>
+jnivm::android::content::Context::getCacheDir()
+{
+    return std::make_shared<jnivm::java::io::File>(std::make_shared<FakeJni::JString>(config["paths"]["android_cache"].value_or<std::string>("/path_not_defined_cache")));
 }
 
 std::shared_ptr<jnivm::java::io::File>
@@ -300,6 +311,7 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::res::AssetManager){FakeJni::Con
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::Context){FakeJni::Constructor<Context>{}},
     {FakeJni::Field<&Context::LOCATION_SERVICE>{}, "LOCATION_SERVICE", FakeJni::JFieldID::STATIC},
     {FakeJni::Field<&Context::DISPLAY_SERVICE>{}, "DISPLAY_SERVICE", FakeJni::JFieldID::STATIC},
+    {FakeJni::Field<&Context::AUDIO_SERVICE>{}, "AUDIO_SERVICE", FakeJni::JFieldID::STATIC},
     {FakeJni::Field<&Context::MODE_PRIVATE>{}, "MODE_PRIVATE", FakeJni::JFieldID::STATIC},
     {FakeJni::Function<&Context::getSystemService>{}, "getSystemService", FakeJni::JMethodID::PUBLIC},
     {FakeJni::Function<&Context::getAssets>{}, "getAssets", FakeJni::JMethodID::PUBLIC},
@@ -310,12 +322,22 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::res::AssetManager){FakeJni::Con
     {FakeJni::Function<&Context::getSharedPreferences>{}, "getSharedPreferences", FakeJni::JMethodID::PUBLIC},
     {FakeJni::Function<&Context::getExternalFilesDir>{}, "getExternalFilesDir", FakeJni::JMethodID::PUBLIC},
     {FakeJni::Function<&Context::getFilesDir>{}, "getFilesDir", FakeJni::JMethodID::PUBLIC},
+    {FakeJni::Function<&Context::getCacheDir>{}, "getCacheDir", FakeJni::JMethodID::PUBLIC},
     {FakeJni::Function<&Context::getObbDir>{}, "getObbDir", FakeJni::JMethodID::PUBLIC},
     {FakeJni::Function<&Context::getObbDirs>{}, "getObbDirs", FakeJni::JMethodID::PUBLIC},
     END_NATIVE_DESCRIPTOR
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::Intent){FakeJni::Constructor<Intent>{}},
     {FakeJni::Function<&Intent::getExtras>{}, "getExtras", FakeJni::JMethodID::PUBLIC},
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::os::Build){FakeJni::Constructor<Build>{}},
+    {FakeJni::Field<&Build::MANUFACTURER>{}, "MANUFACTURER", FakeJni::JMethodID::STATIC},
+    {FakeJni::Field<&Build::MODEL>{}, "MODEL", FakeJni::JMethodID::STATIC},
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::os::BuildVersion){FakeJni::Constructor<BuildVersion>{}},
+    {FakeJni::Field<&BuildVersion::SDK_INT>{}, "SDK_INT", FakeJni::JMethodID::STATIC},
     END_NATIVE_DESCRIPTOR
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::os::Bundle){FakeJni::Constructor<Bundle>{}},

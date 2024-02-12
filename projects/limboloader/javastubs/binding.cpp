@@ -32,6 +32,8 @@ void InitJNIBinding(FakeJni::Jvm *vm)
     vm->registerClass<jnivm::android::os::Handler>();
     vm->registerClass<jnivm::android::os::Process>();
     vm->registerClass<jnivm::android::os::Bundle>();
+    vm->registerClass<jnivm::android::os::Build>();
+    vm->registerClass<jnivm::android::os::BuildVersion>();
     vm->registerClass<jnivm::android::app::Activity>();
     vm->registerClass<jnivm::android::app::NativeActivity>();
     vm->registerClass<jnivm::android::content::Context>();

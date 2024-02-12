@@ -11,12 +11,12 @@ namespace jnivm
         {
             class Display : public FakeJni::JObject
             {
-                public:
-                    DEFINE_CLASS_NAME("android/view/Display")  
-                    int getDisplayId();
-                    int getRotation();
-                    int getWidth();
-                    int getHeight();
+            public:
+                DEFINE_CLASS_NAME("android/view/Display")
+                int getDisplayId();
+                int getRotation();
+                int getWidth();
+                int getHeight();
             };
         }
         namespace hardware
@@ -34,6 +34,22 @@ namespace jnivm
 
         namespace os
         {
+
+            class Build : public FakeJni::JObject
+            {
+            public:
+                DEFINE_CLASS_NAME("android/os/Build");
+                inline static FakeJni::JString MANUFACTURER = (FakeJni::JString) "Rockchip";
+                inline static FakeJni::JString MODEL = (FakeJni::JString) "RK3326";
+            };
+
+            class BuildVersion : public FakeJni::JObject
+            {
+            public:
+                DEFINE_CLASS_NAME("android/os/Build$VERSION");
+                static const int SDK_INT = 24;
+            };
+
             class Process : public FakeJni::JObject
             {
             public:
@@ -134,6 +150,7 @@ namespace jnivm
                 DEFINE_CLASS_NAME("android/content/Context")
                 inline static FakeJni::JString LOCATION_SERVICE = (FakeJni::JString) "LOCATION_SERVICE";
                 inline static FakeJni::JString DISPLAY_SERVICE = (FakeJni::JString) "DISPLAY_SERVICE";
+                inline static FakeJni::JString AUDIO_SERVICE = (FakeJni::JString) "AUDIO_SERVICE";
 
                 inline static int MODE_PRIVATE = 0;
 
@@ -145,6 +162,7 @@ namespace jnivm
                 std::shared_ptr<jnivm::android::content::pm::PackageManager> getPackageManager();
                 std::shared_ptr<jnivm::android::content::SharedPreferences> getSharedPreferences(std::shared_ptr<FakeJni::JString> str, int num);
                 std::shared_ptr<jnivm::java::io::File> getFilesDir();
+                std::shared_ptr<jnivm::java::io::File> getCacheDir();
                 std::shared_ptr<jnivm::java::io::File> getExternalFilesDir(std::shared_ptr<FakeJni::JString> path);
                 std::shared_ptr<jnivm::java::io::File> getObbDir();
                 std::shared_ptr<jnivm::Array<jnivm::java::io::File>> getObbDirs();
