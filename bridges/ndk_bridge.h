@@ -4,6 +4,8 @@
 #include "platform.h"
 #include "baron/baron.h"
 #include "android.h"
+#include <vector>
+
 typedef struct
 {
    // Number of bytes in this structure.
@@ -12,10 +14,19 @@ typedef struct
 
 typedef struct
 {
-   // Number of bytes in this structure.
-    uint32_t size;
+    int fd;
+    int ident;
+    int events;
+    void* callback;
+    void *data;
+} LooperEntry;
+
+typedef struct
+{
+   std::vector<LooperEntry> *events;
 } ALooper;
 
+static std::map<pid_t, ALooper*> loopers={};
 
 typedef struct
 {

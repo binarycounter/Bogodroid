@@ -337,7 +337,7 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::res::AssetManager){FakeJni::Con
     END_NATIVE_DESCRIPTOR
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::os::BuildVersion){FakeJni::Constructor<BuildVersion>{}},
-    {FakeJni::Field<&BuildVersion::SDK_INT>{}, "SDK_INT", FakeJni::JMethodID::STATIC},
+    //{FakeJni::Field<&BuildVersion::SDK_INT>{}, "SDK_INT", FakeJni::JMethodID::STATIC},
     END_NATIVE_DESCRIPTOR
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::os::Bundle){FakeJni::Constructor<Bundle>{}},

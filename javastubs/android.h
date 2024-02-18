@@ -47,7 +47,7 @@ namespace jnivm
             {
             public:
                 DEFINE_CLASS_NAME("android/os/Build$VERSION");
-                static const int SDK_INT = 24;
+                //static const int SDK_INT = 24;
             };
 
             class Process : public FakeJni::JObject

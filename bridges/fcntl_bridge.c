@@ -70,6 +70,13 @@ ABI_ATTR
 ABI_ATTR ssize_t fcntl_write(int fd, void *buf, size_t count)
 {
     verbose("NATIVE","writing %d bytes to file %d",count,fd);
+    int i;
+    for (i = 0; i < count; i++)
+    {
+        if (i > 0) printf(":");
+        printf("%02X", ((char*)buf)[i]);
+    }
+    printf("\n");
     return write(fd, buf, count);
 }
 
@@ -77,6 +84,12 @@ ABI_ATTR int fcntl_close(int fd)
 {
     verbose("NATIVE","Closing file %d",fd);
     return close(fd);
+}
+
+ABI_ATTR int chdir_bridge(const char* dir)
+{
+    verbose("NATIVE","Changing directory to %s",dir);
+    return chdir(dir);
 }
 
 
@@ -111,4 +124,5 @@ DynLibFunction symtable_fcntl[] = {
     {"close", (uintptr_t)&fcntl_close},
     {"lseek64", (uintptr_t)&lseek64_bridge},
     {"pipe", (uintptr_t)&pipe},
+    {"chdir",(uintptr_t)&chdir_bridge},
     {NULL, (uintptr_t)NULL}};
