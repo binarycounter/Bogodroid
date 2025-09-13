@@ -244,7 +244,10 @@ jclass GetObjectClass(JNIEnv *env, jobject jo) {
 	return jo ? JNITypes<std::shared_ptr<jnivm::Class>>::ToJNIType(ENV::FromJNIEnv(env), JNITypes<std::shared_ptr<jnivm::Object>>::JNICast(ENV::FromJNIEnv(env), jo)->getClassInternal(ENV::FromJNIEnv(env))) : env->FindClass("Invalid");
 };
 jboolean IsInstanceOf(JNIEnv *env, jobject jo, jclass cl) {
-	printf("[JNIVM] Is %s an instance of %s? - %d\n",JNITypes<std::shared_ptr<jnivm::Object>>::JNICast(ENV::FromJNIEnv(env), jo).get()->getClass().getName().c_str(),JNITypes<std::shared_ptr<jnivm::Class>>::JNICast(ENV::FromJNIEnv(env), cl).get()->getClass().getName().c_str(),  jo && IsAssignableFrom(env, GetObjectClass(env, jo), cl));
+	printf("[JNIVM] Is %s an instance of %s? - %d\n",
+		JNITypes<std::shared_ptr<jnivm::Object>>::JNICast(ENV::FromJNIEnv(env), jo).get()->getClass().getName().c_str(),
+		JNITypes<std::shared_ptr<jnivm::Class>>::JNICast(ENV::FromJNIEnv(env), cl).get()->getName().c_str(),
+		jo && IsAssignableFrom(env, GetObjectClass(env, jo), cl));
 	return jo && IsAssignableFrom(env, GetObjectClass(env, jo), cl);
 };
 

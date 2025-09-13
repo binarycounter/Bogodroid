@@ -104,6 +104,30 @@ ABI_ATTR int pthread_mutex_unlock_impl(BIONIC_pthread_mutex_t *_uid)
     return pthread_mutex_unlock(*uid);
 }
 
+ABI_ATTR int pthread_mutex_trylock_impl(BIONIC_pthread_mutex_t *_uid)
+{
+    pthread_mutex_t **uid = (pthread_mutex_t**)_uid;
+
+    // Sanity check the handle's address
+    if (uid < (pthread_mutex_t**)0x1000)
+        return EINVAL; // Return a proper errno value
+
+    // Lazy initialization: if the handle is null, create the underlying Glibc mutex
+    if (!*uid)
+    {
+        int ret = pthread_mutex_init_impl(_uid, NULL);
+        if (ret != 0)
+        {
+            // If init fails, return the error. EBUSY is a possible return here
+            // if the mutex is locked, but it shouldn't be during init.
+            return ret;
+        }
+    }
+    
+    // Dereference the handle to get the real Glibc mutex and call the function
+    return pthread_mutex_trylock(*uid);
+}
+
 ABI_ATTR int pthread_cond_init_impl(pthread_cond_t **cnd, const int *condattr)
 {
     pthread_cond_t *c = (pthread_cond_t *)calloc(1, sizeof(pthread_cond_t));

@@ -2,6 +2,7 @@
 #include "android.h"
 #include "javac.h"
 #include "unity.h"
+#include "fakefmod.h"
 #include "jnibridge.h"
 
 void InitJNIBinding(FakeJni::Jvm *vm)
@@ -26,11 +27,16 @@ void InitJNIBinding(FakeJni::Jvm *vm)
     vm->registerClass<jnivm::com::unity3d::player::PlayAssetDeliveryUnityWrapper>();
     vm->registerClass<jnivm::com::unity3d::player::UnityPlayerActivity>();
     vm->registerClass<jnivm::bitter::jnibridge::JNIBridge>();
+
+    //Fake FMOD
+
+    vm->registerClass<jnivm::org::fmod::FMODAudioDevice>();
     
 
 
     HookStringExtensions(vm);
     HookClassExtensions(vm);
+    HookIntExtensions(vm);
     HookObjectExtensions(vm);
 
     FakeJni::LocalFrame frame(*vm);
@@ -40,5 +46,11 @@ void InitJNIBinding(FakeJni::Jvm *vm)
     classClass->HookInstanceFunction(&frame.getJniEnv(), "initializeGoogleAr", [](jnivm::ENV*env, jnivm::Object*self)
     {
         return false;
+    });
+
+    //No idea why this is in Class either....
+    classClass->HookInstanceFunction(&frame.getJniEnv(), "getLaunchURL", [](jnivm::ENV*env, jnivm::Object*self)
+    {
+        return std::make_shared<FakeJni::JString>("");
     });
 }

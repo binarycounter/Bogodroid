@@ -130,6 +130,7 @@ extern ABI_ATTR int pthread_mutex_init_impl(BIONIC_pthread_mutex_t *, pthread_mu
 extern ABI_ATTR int pthread_mutex_destroy_impl(BIONIC_pthread_mutex_t *);
 extern ABI_ATTR int pthread_mutex_lock_impl(BIONIC_pthread_mutex_t *);
 extern ABI_ATTR int pthread_mutex_unlock_impl(BIONIC_pthread_mutex_t *);
+extern ABI_ATTR int pthread_mutex_trylock_impl(BIONIC_pthread_mutex_t *);
 extern ABI_ATTR int pthread_cond_init_impl(pthread_cond_t **, const int *);
 extern ABI_ATTR int pthread_cond_broadcast_impl(pthread_cond_t **);
 extern ABI_ATTR int pthread_cond_signal_impl(pthread_cond_t **);

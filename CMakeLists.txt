@@ -72,8 +72,8 @@ ${PROJ_SOURCE_DIR}/javastubs
 target_compile_definitions(${CMAKE_PROJECT_NAME} PUBLIC TOML_HEADER_ONLY=0)
 target_compile_definitions(${CMAKE_PROJECT_NAME} PUBLIC EnableJNIVMGC)
 # target_compile_definitions(${CMAKE_PROJECT_NAME} PUBLIC JNIVM_FAKE_JNI_SYNTAX=1)
-target_compile_definitions(${CMAKE_PROJECT_NAME} PUBLIC JNI_DEBUG)
-target_compile_definitions(${CMAKE_PROJECT_NAME} PUBLIC VERBOSE_LOG)
+#target_compile_definitions(${CMAKE_PROJECT_NAME} PUBLIC JNI_DEBUG)
+# target_compile_definitions(${CMAKE_PROJECT_NAME} PUBLIC VERBOSE_LOG)
 #target_compile_definitions(${CMAKE_PROJECT_NAME} PUBLIC FAKE_EGL)
 
 target_link_libraries(${CMAKE_PROJECT_NAME} ${CMAKE_SOURCE_DIR}/libjnivm/build/libfake-jni.a ${CMAKE_SOURCE_DIR}/libjnivm/build/libbaron.a ${CMAKE_SOURCE_DIR}/libjnivm/build/libjnivm.a SDL2 dl pthread bsd)

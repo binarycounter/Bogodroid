@@ -77,13 +77,13 @@ uintptr_t select_either_ptr(void *fn, const char *symname)
 template <auto F>
 void *resolve_thunked(const char *symbol, int &index, DynLibFunction tab[], void *(*resolve)(const char *symbol))
 {
-    printf("Attempting to resolve symbol %s =>",symbol);
+    //printf("Attempting to resolve symbol %s =>",symbol);
     void *f = (void*)resolve(symbol);
     if (f) {
         tab[index++] = (DynLibFunction){symbol, select_either_ptr<F>(f, symbol)};
         tab[index] = {NULL};
     }
-    printf("%p\n",f);
+    //printf("%p\n",f);
 
     return f;
 }

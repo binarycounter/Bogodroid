@@ -13,7 +13,7 @@ bool jnivm::com::unity3d::player::PlayAssetDeliveryUnityWrapper::playCoreApiMiss
     return true;
 }
 
-BEGIN_NATIVE_DESCRIPTOR(jnivm::com::unity3d::player::PlayAssetDeliveryUnityWrapper)
+BEGIN_NATIVE_DESCRIPTOR(jnivm::com::unity3d::player::PlayAssetDeliveryUnityWrapper){ FakeJni::Constructor<PlayAssetDeliveryUnityWrapper> {} },
 {FakeJni::Function<&PlayAssetDeliveryUnityWrapper::init>{}, "init", FakeJni::JMethodID::STATIC },
 {FakeJni::Function<&PlayAssetDeliveryUnityWrapper::playCoreApiMissing>{}, "playCoreApiMissing", FakeJni::JMethodID::PUBLIC },
 END_NATIVE_DESCRIPTOR

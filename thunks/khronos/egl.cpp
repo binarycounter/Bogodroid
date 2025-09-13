@@ -19,21 +19,21 @@ DynLibFunction symtable_egl[256] = {
 #define PTR_RESOLVE(x) resolve_thunked<&glad_##x>(#x, symtable_egl_index, symtable_egl, SDL_GL_GetProcAddress)
 ABI_ATTR __eglMustCastToProperFunctionPointerType EGLAPIENTRY eglGetProcAddress_impl (const char *procname)
 {
-    printf("(EGL) Attempting to resolve symbol %s =>",procname);
+    //printf("(EGL) Attempting to resolve symbol %s =>",procname);
     for (int i = 0; symtable_gles2[i].symbol; i++) {
         if (strcmp(symtable_gles2[i].symbol, procname) == 0) {
-            printf("%p\n",symtable_gles2[i].func);
+            //printf("%p\n",symtable_gles2[i].func);
             return (__eglMustCastToProperFunctionPointerType)symtable_gles2[i].func;
         }
     }
 
     for (int i = 0; symtable_egl_sdl[i].symbol; i++) {
         if (strcmp(symtable_egl_sdl[i].symbol, procname) == 0) {
-            printf("%p\n",symtable_egl_sdl[i].func);
+            //printf("%p\n",symtable_egl_sdl[i].func);
             return (__eglMustCastToProperFunctionPointerType)symtable_egl_sdl[i].func;
         }
     }
-    printf("NULL!\n");
+    //printf("NULL!\n");
     return NULL;
 }
 
