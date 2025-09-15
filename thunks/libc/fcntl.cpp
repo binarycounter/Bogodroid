@@ -48,7 +48,7 @@ ABI_ATTR int open_impl(const char *filename, int flags)
 
 ABI_ATTR ssize_t read_impl(int fd, void *buf, size_t count)
 {
-    verbose("NATIVE","reading %d bytes from file %d",count,fd);
+    verbose("NATIVE","reading %zu bytes from file %d",count,fd);
     int ret=read(fd, buf, count);
     // int i;
     // for (i = 0; i < count; i++)
@@ -65,7 +65,7 @@ ABI_ATTR
 
 ABI_ATTR ssize_t write_impl(int fd, void *buf, size_t count)
 {
-    verbose("NATIVE","writing %d bytes to file %d",count,fd);
+    verbose("NATIVE","writing %zu bytes to file %d",count,fd);
     // int i;
     // for (i = 0; i < count; i++)
     // {

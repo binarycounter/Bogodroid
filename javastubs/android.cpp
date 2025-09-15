@@ -7,6 +7,7 @@ extern toml::table config;
 #include "logging.h"
 #include <fstream>
 #include <pthread.h>
+#include <inttypes.h>
 
 ///// Uri
 
@@ -204,11 +205,11 @@ void jnivm::android::view::Choreographer::postFrameCallback(std::shared_ptr<Fram
     if (!callback)
         return;
     pthread_mutex_lock(&mCallbacksMutex);
-    verbose("Choreographer", "[Thread: %p] [Instance: %p] postFrameCallback ENTER. Queue size before: %zu",
-        pthread_self(), this, mCallbacks.size());
+    verbose("Choreographer", "[Thread: %" PRIxPTR "] [Instance: %p] postFrameCallback ENTER. Queue size before: %zu",
+        (uintptr_t)pthread_self(), this, mCallbacks.size());
     mCallbacks.push_back(callback);
-    verbose("Choreographer", "[Thread: %p] [Instance: %p] postFrameCallback EXIT. Queue size after: %zu",
-        pthread_self(), this, mCallbacks.size());
+    verbose("Choreographer", "[Thread: %" PRIxPTR "] [Instance: %p] postFrameCallback EXIT. Queue size after: %zu",
+        (uintptr_t)pthread_self(), this, mCallbacks.size());
     pthread_mutex_unlock(&mCallbacksMutex);
 }
 
@@ -234,14 +235,14 @@ void jnivm::android::view::Choreographer::dispatchFrameCallbacks(bool isRealVSyn
     }
 
     std::vector<std::shared_ptr<FrameCallback>> callbacksToRun;
-    verbose("Choreographer", "[Thread: %p] [Instance: %p] dispatch ENTER (isRealVSync: %s). Queue size before swap: %zu",
-        pthread_self(), this, isRealVSync ? "true" : "false", mCallbacks.size());
+    verbose("Choreographer", "[Thread: %" PRIxPTR "] [Instance: %p] dispatch ENTER (isRealVSync: %s). Queue size before swap: %zu",
+        (uintptr_t)pthread_self(), this, isRealVSync ? "true" : "false", mCallbacks.size());
     pthread_mutex_lock(&mCallbacksMutex);
     mCallbacks.swap(callbacksToRun);
     pthread_mutex_unlock(&mCallbacksMutex);
 
-    verbose("Choreographer", "[Thread: %p] [Instance: %p] dispatch EXIT. Callbacks to run: %zu. Queue size after swap: %zu",
-        pthread_self(), this, callbacksToRun.size(), mCallbacks.size());
+    verbose("Choreographer", "[Thread: %" PRIxPTR "] [Instance: %p] dispatch EXIT. Callbacks to run: %zu. Queue size after swap: %zu",
+        (uintptr_t)pthread_self(), this, callbacksToRun.size(), mCallbacks.size());
 
     if (callbacksToRun.empty()) {
         verbose("Choreographer", "No callbacks to dispatch (isRealVSync: %s)", isRealVSync ? "true" : "false");
