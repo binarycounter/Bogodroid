@@ -289,9 +289,9 @@ bool jnivm::android::media::AudioManager::isBluetoothA2dpOn()
 std::shared_ptr<FakeJni::JString> jnivm::android::media::AudioManager::getProperty(std::shared_ptr<FakeJni::JString> property)
 {
     if (*property == PROPERTY_OUTPUT_FRAMES_PER_BUFFER)
-        return std::make_shared<FakeJni::JString>("256"); // ... uh i dunno i haven't written the audio implementation yet
+        return std::make_shared<FakeJni::JString>("64"); // ... uh i dunno i haven't written the audio implementation yet
     if (*property == PROPERTY_OUTPUT_SAMPLE_RATE)
-        return std::make_shared<FakeJni::JString>("44100"); // ... uhhh sure
+        return std::make_shared<FakeJni::JString>("24000"); // ... uhhh sure
     return nullptr;
 }
 

@@ -147,10 +147,10 @@ namespace android {
         class Build : public FakeJni::JObject {
         public:
             DEFINE_CLASS_NAME("android/os/Build");
-            inline static FakeJni::JString MANUFACTURER = (FakeJni::JString) "Rockchip";
-            inline static FakeJni::JString MODEL = (FakeJni::JString) "RK3326";
+            inline static FakeJni::JString MANUFACTURER = (FakeJni::JString) "Allwinner";
+            inline static FakeJni::JString MODEL = (FakeJni::JString) "h700";
             inline static FakeJni::JString DEVICE = (FakeJni::JString) "R36S";
-            inline static FakeJni::JString ID = (FakeJni::JString) "1";
+            inline static FakeJni::JString ID = (FakeJni::JString) "0.01";
         };
 
         class BuildVersion : public FakeJni::JObject {
@@ -158,7 +158,7 @@ namespace android {
             DEFINE_CLASS_NAME("android/os/Build$VERSION");
             inline static int SDK_INT = 24;
             inline static FakeJni::JString RELEASE = (FakeJni::JString) "Oreo";
-            inline static FakeJni::JString INCREMENTAL = (FakeJni::JString) "Oreo123";
+            inline static FakeJni::JString INCREMENTAL = (FakeJni::JString) "Bogodroid";
         };
 
         class Process : public FakeJni::JObject {

@@ -215,23 +215,15 @@ int main(int argc, char* argv[])
 
     printf("NativeRender returned %d, Entering loop...\n", ret3.z);
 
-    // Audio stuff, currently unimplemented and sometimes causes a segfault, need to investigate that.
-    // JClass* fmodClass = vm.findClass("org/fmod/FMODAudioDevice").get();
-    // auto fmodProcess = fmodClass->getMethod("(Ljava/nio/ByteBuffer;)I", "fmodProcess");
-
-    void* buffer = malloc(10000);
     constexpr auto frame_duration = std::chrono::milliseconds(15);
     // The app has created new threads and is happily doing its thing, we just do nothing for now. Eventually, this will be a SDL based event loop for controller input.
     while (1) {
         // printf(".");
         fflush(stdout);
         auto start = std::chrono::steady_clock::now();
-
         auto ret4 = unityNRender.invoke(frame3.getJniEnv(), unityClass);
-
         auto end = std::chrono::steady_clock::now();
         auto elapsed = end - start;
-
         if (elapsed < frame_duration) {
             std::this_thread::sleep_for(frame_duration - elapsed);
         }

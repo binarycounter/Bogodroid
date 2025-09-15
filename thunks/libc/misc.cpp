@@ -81,11 +81,9 @@ extern "C" long syscall_impl(long number,
         return ret;
     }
 
-    if(number != 122)
-    {printf("UNIMPLEMENTED SYSCALL %ld\n", number);
-    exit(1);}
+    {printf("UNIMPLEMENTED SYSCALL %ld\n", number);}
 
-    return 0;
+    return syscall(number,arg1,arg2,arg3,arg4,arg5,arg6);
 }
 
 extern "C" ABI_ATTR void abort_impl(void)
