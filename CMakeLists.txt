@@ -17,7 +17,12 @@ file(GLOB_RECURSE PROJ_SOURCES ${PROJ_SOURCE_DIR}/*.c ${PROJ_SOURCE_DIR}/*.cc ${
 
 add_executable(${CMAKE_PROJECT_NAME} 
 ${PROJ_SOURCES}
-javastubs/android.cpp
+javastubs/android_view.cpp
+javastubs/android_content.cpp
+javastubs/android_os.cpp
+javastubs/android_media.cpp
+javastubs/android_misc.cpp
+javastubs/android_descriptors.cpp
 javastubs/javac.cpp
 platform/common/toml_include.cpp
 platform/common/debug_utils.cpp
@@ -78,3 +83,22 @@ target_compile_definitions(${CMAKE_PROJECT_NAME} PUBLIC VERBOSE_LOG)
 
 target_link_libraries(${CMAKE_PROJECT_NAME} ${CMAKE_SOURCE_DIR}/libjnivm/build/libfake-jni.a ${CMAKE_SOURCE_DIR}/libjnivm/build/libbaron.a ${CMAKE_SOURCE_DIR}/libjnivm/build/libjnivm.a SDL2 dl pthread bsd)
 set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+
+# Get all libc thunk files to exclude from PCH
+file(GLOB LIBC_THUNK_FILES "thunks/libc/*.cpp")
+
+# Exclude problematic files from PCH before setting up PCH
+set_source_files_properties(
+    thunks/ndk/alooper.c
+    thunks/ndk/asset_manager.c
+    loader/so_util.cpp
+    thunks/egl_sdl/egl_sdl.cpp
+    ${LIBC_THUNK_FILES}
+    PROPERTIES SKIP_PRECOMPILE_HEADERS TRUE
+)
+
+# Precompiled headers for faster compilation of template-heavy code
+target_precompile_headers(${CMAKE_PROJECT_NAME} PRIVATE
+    <baron/baron.h>
+    <javac.h>
+)

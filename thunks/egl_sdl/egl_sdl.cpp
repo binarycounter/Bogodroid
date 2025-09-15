@@ -8,6 +8,7 @@
 #include "thunk_gen.h"
 #include <memory>
 #include <chrono>
+#include <inttypes.h>
 
 SDL_Window* sdl_win;
 SDL_GLContext sdl_ctx;
@@ -48,7 +49,7 @@ EGLBoolean eglSwapBuffers_impl(EGLDisplay display,
         lastTime = now;
         warning("FPS: %f\n",fps); 
     }
-    verbose("Choreographer", "[Thread: %p] eglSwapBuffers about to call getInstance().", pthread_self());
+    verbose("Choreographer", "[Thread: %" PRIxPTR "] eglSwapBuffers about to call getInstance().", (uintptr_t)pthread_self());
 
     auto choreographer = jnivm::android::view::Choreographer::getInstance();
     if (choreographer) {

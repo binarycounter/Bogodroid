@@ -1,0 +1,284 @@
+#include "toml++/toml.hpp"
+extern toml::table config;
+
+#include "android.h"
+#include "baron/baron.h"
+#include "javac.h"
+#include "logging.h"
+#include <fstream>
+#include <pthread.h>
+#include <inttypes.h>
+
+///// PackageManager
+
+std::shared_ptr<jnivm::android::content::pm::PackageInfo>
+jnivm::android::content::pm::PackageManager::getPackageInfo(std::shared_ptr<FakeJni::JString> packageName, int number)
+{
+    return std::make_shared<jnivm::android::content::pm::PackageInfo>();
+}
+
+bool jnivm::android::content::pm::PackageManager::hasSystemFeature(std::shared_ptr<FakeJni::JString> feature)
+{
+    verbose("JBRIDGE", "App asks about availability of feature: %s", feature.get()->c_str());
+    return false; // We don't claim support of anything right now
+}
+
+///// AssetManager
+
+std::shared_ptr<jnivm::java::io::InputStream>
+jnivm::android::content::res::AssetManager::open(std::shared_ptr<FakeJni::JString> filename)
+{
+    verbose("JBRIDGE", "AssetManager opening file %s", filename.get()->c_str());
+    return std::make_shared<jnivm::java::io::InputStream>(std::make_shared<FakeJni::JString>(std::string("assets/").append(filename.get()->c_str())));
+}
+
+///// Resources
+
+int jnivm::android::content::res::Resources::getIdentifier(std::shared_ptr<FakeJni::JString> name, std::shared_ptr<FakeJni::JString> defType, std::shared_ptr<FakeJni::JString> defPackage)
+{
+    verbose("JBRIDGE", "Resources requesting identifier for %s - %s - %s", name.get()->c_str(), defType.get()->c_str(), defPackage.get()->c_str());
+    return 1337420;
+}
+
+///// SharedPreferences
+
+bool jnivm::android::content::SharedPreferences::contains(std::shared_ptr<FakeJni::JString> key)
+{
+    return false;
+}
+
+int jnivm::android::content::SharedPreferences::getInt(std::shared_ptr<FakeJni::JString> key, int def)
+{
+    return def;
+}
+
+std::shared_ptr<FakeJni::JString> jnivm::android::content::SharedPreferences::getString(std::shared_ptr<FakeJni::JString> key, std::shared_ptr<FakeJni::JString> def)
+{
+    return def;
+}
+
+std::shared_ptr<jnivm::java::util::Map> jnivm::android::content::SharedPreferences::getAll()
+{
+    return std::make_shared<jnivm::java::util::Map>();
+}
+
+std::shared_ptr<jnivm::android::content::SharedPreferencesEditor> jnivm::android::content::SharedPreferences::edit()
+{
+    return std::make_shared<SharedPreferencesEditor>();
+}
+
+///// SharedPreferencesEditor
+
+void jnivm::android::content::SharedPreferencesEditor::apply()
+{
+}
+
+std::shared_ptr<jnivm::android::content::SharedPreferencesEditor> jnivm::android::content::SharedPreferencesEditor::putInt(std::shared_ptr<FakeJni::JString> key, int val)
+{
+    return std::shared_ptr<SharedPreferencesEditor>(this);
+}
+
+std::shared_ptr<jnivm::android::content::SharedPreferencesEditor> jnivm::android::content::SharedPreferencesEditor::putString(std::shared_ptr<FakeJni::JString> key, std::shared_ptr<FakeJni::JString> val)
+{
+    return std::shared_ptr<SharedPreferencesEditor>(this);
+}
+
+///// Context
+
+std::shared_ptr<jnivm::android::content::res::AssetManager>
+jnivm::android::content::Context::getAssets()
+{
+    return std::make_shared<jnivm::android::content::res::AssetManager>();
+}
+
+std::shared_ptr<jnivm::android::content::pm::ApplicationInfo>
+jnivm::android::content::Context::getApplicationInfo()
+{
+    return std::make_shared<jnivm::android::content::pm::ApplicationInfo>();
+}
+
+std::shared_ptr<FakeJni::JObject>
+jnivm::android::content::Context::getSystemService(std::shared_ptr<FakeJni::JString> service)
+{
+    if (*service == LOCATION_SERVICE)
+        return nullptr;
+
+    if (*service == AUDIO_SERVICE)
+        return std::make_shared<jnivm::android::media::AudioManager>();
+
+    if (*service == DISPLAY_SERVICE)
+        return std::make_shared<jnivm::android::hardware::display::DisplayManager>();
+
+    if (*service == POWER_SERVICE)
+        return std::make_shared<jnivm::android::os::PowerManager>();
+
+    if (*service == MEDIA_ROUTER_SERVICE)
+        return std::make_shared<jnivm::android::media::MediaRouter>();
+
+    return nullptr;
+}
+
+std::shared_ptr<FakeJni::JString>
+jnivm::android::content::Context::getPackageName()
+{
+    return std::make_shared<FakeJni::JString>(config["package"]["packageName"].value_or<std::string>("package.name.not.defined"));
+}
+
+std::shared_ptr<jnivm::android::content::pm::PackageManager>
+jnivm::android::content::Context::getPackageManager()
+{
+    return std::make_shared<jnivm::android::content::pm::PackageManager>();
+}
+
+std::shared_ptr<jnivm::android::content::SharedPreferences>
+jnivm::android::content::Context::getSharedPreferences(std::shared_ptr<FakeJni::JString> str, int num)
+{
+    return std::make_shared<jnivm::android::content::SharedPreferences>();
+}
+
+std::shared_ptr<FakeJni::JString>
+jnivm::android::content::Context::getPackageCodePath()
+{
+    return std::make_shared<FakeJni::JString>(config["paths"]["android_package_code"].value_or<std::string>("./path_not_defined_code"));
+}
+
+std::shared_ptr<jnivm::java::io::File>
+jnivm::android::content::Context::getExternalFilesDir(std::shared_ptr<FakeJni::JString> path)
+{
+    return std::make_shared<jnivm::java::io::File>(std::make_shared<FakeJni::JString>(config["paths"]["android_external_files"].value_or<std::string>("./path_not_defined_external")));
+}
+
+std::shared_ptr<jnivm::java::io::File>
+jnivm::android::content::Context::getFilesDir()
+{
+    return std::make_shared<jnivm::java::io::File>(std::make_shared<FakeJni::JString>(config["paths"]["android_files"].value_or<std::string>("./path_not_defined_files")));
+}
+
+std::shared_ptr<jnivm::java::io::File>
+jnivm::android::content::Context::getCacheDir()
+{
+    return std::make_shared<jnivm::java::io::File>(std::make_shared<FakeJni::JString>(config["paths"]["android_cache"].value_or<std::string>("./path_not_defined_cache")));
+}
+
+std::shared_ptr<jnivm::java::io::File>
+jnivm::android::content::Context::getExternalCacheDir()
+{
+    return std::make_shared<jnivm::java::io::File>(std::make_shared<FakeJni::JString>(config["paths"]["android_cache"].value_or<std::string>("./path_not_defined_cache")));
+}
+
+std::shared_ptr<jnivm::java::io::File>
+jnivm::android::content::Context::getObbDir()
+{
+    // return std::make_shared<jnivm::java::io::File>(config["paths"]["obb_dir"][0].value_or<std::string>("/path_not_defined_obb"));
+    return NULL;
+}
+
+std::shared_ptr<jnivm::Array<jnivm::java::io::File>>
+jnivm::android::content::Context::getObbDirs()
+{
+    return NULL;
+}
+
+int jnivm::android::content::Context::checkCallingOrSelfPermission(std::shared_ptr<FakeJni::JString> permission)
+{
+    verbose("JBRIDGE", "Granting permission: %s", permission.get()->c_str());
+    return jnivm::android::content::pm::PackageManager::PERMISSION_GRANTED; // Sure why not, what could go wrong....
+}
+
+std::shared_ptr<jnivm::android::content::res::Resources> jnivm::android::content::Context::getResources()
+{
+    return std::make_shared<jnivm::android::content::res::Resources>();
+}
+
+std::shared_ptr<jnivm::android::view::Window> jnivm::android::content::Context::getWindow()
+{
+    return std::make_shared<jnivm::android::view::Window>();
+}
+
+///// Intent
+
+std::shared_ptr<jnivm::android::os::Bundle>
+jnivm::android::content::Intent::getExtras()
+{
+    return std::make_shared<jnivm::android::os::Bundle>();
+}
+
+///// Content Descriptors
+
+BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::pm::ActivityInfo) { FakeJni::Constructor<ActivityInfo> {} },
+    { FakeJni::Field<&ActivityInfo::SCREEN_ORIENTATION_PORTRAIT> {}, "SCREEN_ORIENTATION_PORTRAIT", FakeJni::JFieldID::STATIC },
+    { FakeJni::Field<&ActivityInfo::SCREEN_ORIENTATION_REVERSE_PORTRAIT> {}, "SCREEN_ORIENTATION_REVERSE_PORTRAIT", FakeJni::JFieldID::STATIC },
+    { FakeJni::Field<&ActivityInfo::SCREEN_ORIENTATION_REVERSE_LANDSCAPE> {}, "SCREEN_ORIENTATION_REVERSE_LANDSCAPE", FakeJni::JFieldID::STATIC },
+    { FakeJni::Field<&ActivityInfo::SCREEN_ORIENTATION_LANDSCAPE> {}, "SCREEN_ORIENTATION_LANDSCAPE", FakeJni::JFieldID::STATIC },
+    { FakeJni::Field<&ActivityInfo::SCREEN_ORIENTATION_FULL_USER> {}, "SCREEN_ORIENTATION_FULL_USER", FakeJni::JFieldID::STATIC },
+    { FakeJni::Field<&ActivityInfo::SCREEN_ORIENTATION_USER_PORTRAIT> {}, "SCREEN_ORIENTATION_USER_PORTRAIT", FakeJni::JFieldID::STATIC },
+    { FakeJni::Field<&ActivityInfo::SCREEN_ORIENTATION_USER_LANDSCAPE> {}, "SCREEN_ORIENTATION_USER_LANDSCAPE", FakeJni::JFieldID::STATIC },
+    { FakeJni::Field<&ActivityInfo::SCREEN_ORIENTATION_SENSOR> {}, "SCREEN_ORIENTATION_SENSOR", FakeJni::JFieldID::STATIC },
+    { FakeJni::Field<&ActivityInfo::SCREEN_ORIENTATION_UNSPECIFIED> {}, "SCREEN_ORIENTATION_UNSPECIFIED", FakeJni::JFieldID::STATIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::pm::PackageInfo) { FakeJni::Constructor<PackageInfo> {} },
+    { FakeJni::Field<&PackageInfo::versionName> {}, "versionName", FakeJni::JFieldID::PUBLIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::pm::ApplicationInfo) { FakeJni::Constructor<ApplicationInfo> {} },
+    { FakeJni::Field<&ApplicationInfo::splitPublicSourceDirs> {}, "splitPublicSourceDirs", FakeJni::JMethodID::PUBLIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::pm::PackageManager) { FakeJni::Constructor<PackageManager> {} },
+    { FakeJni::Field<&PackageManager::FEATURE_AUDIO_LOW_LATENCY> {}, "FEATURE_AUDIO_LOW_LATENCY", FakeJni::JFieldID::STATIC },
+    { FakeJni::Field<&PackageManager::PERMISSION_GRANTED> {}, "PERMISSION_GRANTED", FakeJni::JFieldID::STATIC },
+    { FakeJni::Function<&PackageManager::getPackageInfo> {}, "getPackageInfo", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&PackageManager::hasSystemFeature> {}, "hasSystemFeature", FakeJni::JMethodID::PUBLIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::res::AssetManager) { FakeJni::Constructor<AssetManager> {} },
+    { FakeJni::Function<&AssetManager::open> {}, "open", FakeJni::JMethodID::PUBLIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::res::Resources) { FakeJni::Constructor<Resources> {} },
+    { FakeJni::Function<&Resources::getIdentifier> {}, "getIdentifier", FakeJni::JMethodID::PUBLIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::SharedPreferencesEditor) { FakeJni::Constructor<SharedPreferencesEditor> {} },
+    { FakeJni::Function<&SharedPreferencesEditor::apply> {}, "apply", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&SharedPreferencesEditor::putInt> {}, "putInt", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&SharedPreferencesEditor::putString> {}, "putString", FakeJni::JMethodID::PUBLIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::SharedPreferences) { FakeJni::Constructor<SharedPreferences> {} },
+    { FakeJni::Function<&SharedPreferences::contains> {}, "contains", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&SharedPreferences::getInt> {}, "getInt", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&SharedPreferences::getString> {}, "getString", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&SharedPreferences::getAll> {}, "getAll", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&SharedPreferences::edit> {}, "edit", FakeJni::JMethodID::PUBLIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::Context) { FakeJni::Constructor<Context> {} },
+    { FakeJni::Field<&Context::LOCATION_SERVICE> {}, "LOCATION_SERVICE", FakeJni::JFieldID::STATIC },
+    { FakeJni::Field<&Context::DISPLAY_SERVICE> {}, "DISPLAY_SERVICE", FakeJni::JFieldID::STATIC },
+    { FakeJni::Field<&Context::AUDIO_SERVICE> {}, "AUDIO_SERVICE", FakeJni::JFieldID::STATIC },
+    { FakeJni::Field<&Context::MEDIA_ROUTER_SERVICE> {}, "MEDIA_ROUTER_SERVICE", FakeJni::JFieldID::STATIC },
+    { FakeJni::Field<&Context::POWER_SERVICE> {}, "POWER_SERVICE", FakeJni::JFieldID::STATIC },
+    { FakeJni::Field<&Context::MODE_PRIVATE> {}, "MODE_PRIVATE", FakeJni::JFieldID::STATIC },
+    { FakeJni::Function<&Context::getSystemService> {}, "getSystemService", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Context::getAssets> {}, "getAssets", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Context::getApplicationInfo> {}, "getApplicationInfo", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Context::getPackageName> {}, "getPackageName", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Context::getPackageManager> {}, "getPackageManager", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Context::getPackageCodePath> {}, "getPackageCodePath", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Context::getSharedPreferences> {}, "getSharedPreferences", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Context::getExternalFilesDir> {}, "getExternalFilesDir", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Context::getFilesDir> {}, "getFilesDir", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Context::getCacheDir> {}, "getCacheDir", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Context::getExternalCacheDir> {}, "getExternalCacheDir", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Context::getObbDir> {}, "getObbDir", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Context::getObbDirs> {}, "getObbDirs", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Context::checkCallingOrSelfPermission> {}, "checkCallingOrSelfPermission", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Context::getResources> {}, "getResources", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Context::getWindow> {}, "getWindow", FakeJni::JMethodID::PUBLIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::Intent) { FakeJni::Constructor<Intent> {} },
+    { FakeJni::Function<&Intent::getExtras> {}, "getExtras", FakeJni::JMethodID::PUBLIC },
+    END_NATIVE_DESCRIPTOR
