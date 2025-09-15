@@ -15,8 +15,12 @@
 
 #define __INTRODUCED_IN(...)
 #define __RENAME(...)
+#ifndef __attribute_pure__
 #define __attribute_pure__
+#endif
+#ifndef __attribute_const__
 #define __attribute_const__
+#endif
 #define __RENAME_LDBL(...)
 #define __RENAME_LDBL_NO_GUARD_FOR_NDK(...)
 #define __INTRODUCED_IN_X86_NO_GUARD_FOR_NDK(...)
@@ -24,7 +28,9 @@
 #define __wur 
 #define __BIONIC_ALLOC_SIZE(...)
 #define __mallocfunc
+#ifndef __printflike
 #define __printflike(...)
+#endif
 #define __scanflike(...)
 #pragma GCC diagnostic pop
 
