@@ -20,7 +20,9 @@ namespace bitter {
          */
         class JNIBridgeProxy : public jnivm::java::lang::Runnable,
                                public jnivm::android::os::Handler::Callback,
-                               public jnivm::android::view::Choreographer::FrameCallback {
+                               public jnivm::android::view::Choreographer::FrameCallback,
+                               public jnivm::android::hardware::input::InputManager::InputDeviceListener //Stub, since we're probably not handling device additions and removals
+                                {
         public:
             // This gives the class a stable, registerable name for your JNI layer.
             DEFINE_CLASS_NAME("bitter/jnibridge/JNIBridgeProxy")

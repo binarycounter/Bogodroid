@@ -6,8 +6,9 @@ extern toml::table config;
 #include "javac.h"
 #include "logging.h"
 #include <fstream>
-#include <pthread.h>
+#include <input_backend.h>
 #include <inttypes.h>
+#include <pthread.h>
 
 ///// Display
 
@@ -75,22 +76,183 @@ float jnivm::android::view::DisplayMode::getRefreshRate()
 
 int jnivm::android::view::InputDevice::getSources()
 {
-    return 1025; // hardcoded to SOURCE_GAMEPAD for now
+    return this->source;
+}
+
+int jnivm::android::view::InputDevice::getId()
+{
+    return this->id;
+}
+
+int jnivm::android::view::InputDevice::getVendorId()
+{
+    return this->vendor;
+}
+
+int jnivm::android::view::InputDevice::getProductId()
+{
+    return this->product;
+}
+
+std::shared_ptr<FakeJni::JString> jnivm::android::view::InputDevice::getName()
+{
+    return this->name;
+}
+
+std::shared_ptr<FakeJni::JString> jnivm::android::view::InputDevice::getDescriptorString()
+{
+    return this->name;
+}
+
+bool jnivm::android::view::InputDevice::isVirtual()
+{
+    return false;
+}
+
+std::shared_ptr<jnivm::java::util::List> jnivm::android::view::InputDevice::getMotionRanges()
+{
+    verbose("InputDevice", "getMotionRanges() called for device %d. Returning %zu ranges.", id, motionRanges.size());
+    auto list = std::make_shared<jnivm::java::util::ArrayList>();
+    for (const auto& range : motionRanges) {
+        list->add(range);
+    }
+    return list;
 }
 
 std::shared_ptr<jnivm::android::view::InputDevice> jnivm::android::view::InputDevice::getDevice(int device)
 {
-    return std::make_shared<jnivm::android::view::InputDevice>();
+    return InputBackend::instance().getDevice(device);
 }
 
 std::shared_ptr<FakeJni::JArray<int>> jnivm::android::view::InputDevice::getDeviceIds()
 {
-    verbose("JBRIDGE", "App requests InputDevice IDs....");
-    auto array = std::make_shared<FakeJni::JArray<int>>(2);
-    (*array)[0] = 1; // Touch
-    (*array)[1] = 2; // Controller
+    return InputBackend::instance().getDeviceIds();
+}
 
-    return array;
+void jnivm::android::view::InputDevice::addMotionRange(int axis, int src, float min, float max, float flat, float fuzz)
+{
+    motionRanges.push_back(std::make_shared<MotionRange>(axis, src, min, max, flat, fuzz));
+}
+
+///// InputEvent
+
+long jnivm::android::view::InputEvent::getEventTime()
+{
+    return this->timestamp;
+}
+
+std::shared_ptr<jnivm::android::view::InputDevice> jnivm::android::view::InputEvent::getDevice()
+{
+    return this->device;
+}
+
+int jnivm::android::view::InputEvent::getDeviceId()
+{
+    return this->device.get()->getId();
+}
+
+int jnivm::android::view::InputEvent::getSource()
+{
+    return this->device.get()->getSources();
+}
+
+///// KeyEvent
+
+int jnivm::android::view::KeyEvent::getKeyCode()
+{
+    return this->keyCode;
+}
+
+int jnivm::android::view::KeyEvent::getMetaState()
+{
+    return this->state;
+}
+
+int jnivm::android::view::KeyEvent::getAction()
+{
+    return this->action;
+}
+
+long jnivm::android::view::KeyEvent::getEventTime()
+{
+    return this->timestamp;
+}
+
+///// MotionEvent
+
+int jnivm::android::view::MotionEvent::getPointerCount()
+{
+    // For mouse and joystick, there's always one "pointer".
+    return 1;
+}
+
+int jnivm::android::view::MotionEvent::getHistorySize()
+{
+    // We don't generate historical data, so this is always 0.
+    return 0;
+}
+
+float jnivm::android::view::MotionEvent::getAxisValue(int axis, int pointerIndex)
+{
+    auto it = axisValues.find(axis);
+    return (it != axisValues.end()) ? it->second : 0.0f;
+}
+
+int jnivm::android::view::MotionEvent::getToolType(int pointerIndex)
+{
+    return 0;
+}
+
+float jnivm::android::view::MotionEvent::getX(int pointerIndex)
+{
+    return this->x;
+}
+
+float jnivm::android::view::MotionEvent::getY(int pointerIndex)
+{
+    return this->y;
+}
+
+long jnivm::android::view::MotionEvent::getEventTime()
+{
+    return this->timestamp;
+}
+
+std::shared_ptr<jnivm::android::view::MotionEvent> jnivm::android::view::MotionEvent::obtain(std::shared_ptr<MotionEvent> other)
+{
+    if (!other)
+        return nullptr;
+    // Create a new MotionEvent by copying the data from the other one.
+    auto newEvent = std::make_shared<MotionEvent>(other->device, other->action, other->x, other->y);
+    newEvent->axisValues = other->axisValues;
+    return newEvent;
+    return other;
+}
+
+///// KeyCharacterMap
+
+// --- Singleton implementation for our dummy map ---
+static std::shared_ptr<jnivm::android::view::KeyCharacterMap> gDummyMap;
+static pthread_once_t gDummyMapOnce = PTHREAD_ONCE_INIT;
+
+static void create_dummy_map_once()
+{
+    gDummyMap = std::shared_ptr<jnivm::android::view::KeyCharacterMap>(new jnivm::android::view::KeyCharacterMap());
+}
+
+// --- Method Implementations ---
+
+std::shared_ptr<jnivm::android::view::KeyCharacterMap> jnivm::android::view::KeyCharacterMap::load(int deviceId)
+{
+    // Always return the same shared, dummy instance, regardless of device ID.
+    pthread_once(&gDummyMapOnce, create_dummy_map_once);
+    return gDummyMap;
+}
+
+int jnivm::android::view::KeyCharacterMap::get(int keyCode, int metaState)
+{
+
+    return 97; // For testing lets just always return lowercase a
 }
 
 ///// Window
@@ -260,13 +422,7 @@ std::shared_ptr<jnivm::android::content::res::Resources> jnivm::android::view::C
 
 ///// View Descriptors
 
-BEGIN_NATIVE_DESCRIPTOR(jnivm::android::util::DisplayMetrics) { FakeJni::Constructor<DisplayMetrics> {} },
-    { FakeJni::Field<&DisplayMetrics::widthPixels> {}, "widthPixels", FakeJni::JFieldID::PUBLIC },
-    { FakeJni::Field<&DisplayMetrics::heightPixels> {}, "heightPixels", FakeJni::JFieldID::PUBLIC },
-    { FakeJni::Field<&DisplayMetrics::densityDpi> {}, "densityDpi", FakeJni::JFieldID::PUBLIC },
-    END_NATIVE_DESCRIPTOR
-
-    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::Display) { FakeJni::Constructor<Display> {} },
+BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::Display) { FakeJni::Constructor<Display> {} },
     { FakeJni::Function<&Display::getDisplayId> {}, "getDisplayId", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&Display::getRotation> {}, "getRotation", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&Display::getAppVsyncOffsetNanos> {}, "getAppVsyncOffsetNanos", FakeJni::JMethodID::PUBLIC },
@@ -289,8 +445,55 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::util::DisplayMetrics) { FakeJni::Constru
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::InputDevice) { FakeJni::Constructor<InputDevice> {} },
     { FakeJni::Function<&InputDevice::getSources> {}, "getSources", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&InputDevice::getId> {}, "getId", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&InputDevice::getProductId> {}, "getProductId", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&InputDevice::getVendorId> {}, "getVendorId", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&InputDevice::getName> {}, "getName", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&InputDevice::getDescriptorString> {}, "getDescriptor", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&InputDevice::isVirtual> {}, "isVirtual", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&InputDevice::getMotionRanges> {}, "getMotionRanges", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&InputDevice::getDevice> {}, "getDevice", FakeJni::JMethodID::STATIC },
     { FakeJni::Function<&InputDevice::getDeviceIds> {}, "getDeviceIds", FakeJni::JMethodID::STATIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::InputEvent) { FakeJni::Constructor<InputEvent, std::shared_ptr<jnivm::android::view::InputDevice>> {} },
+    { FakeJni::Function<&InputEvent::getEventTime> {}, "getEventTime", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&InputEvent::getDevice> {}, "getDevice", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&InputEvent::getDeviceId> {}, "getDeviceId", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&InputEvent::getSource> {}, "getSource", FakeJni::JMethodID::PUBLIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::KeyEvent) { FakeJni::Constructor<KeyEvent, std::shared_ptr<jnivm::android::view::InputDevice>, int, int, int> {} },
+
+    { FakeJni::Function<&KeyEvent::getKeyCode> {}, "getKeyCode", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&KeyEvent::getAction> {}, "getAction", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&KeyEvent::getMetaState> {}, "getMetaState", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&KeyEvent::getEventTime> {}, "getEventTime", FakeJni::JMethodID::PUBLIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::MotionRange) { FakeJni::Constructor<MotionRange, int, int, float, float, float, float> {} },
+    { FakeJni::Function<&MotionRange::getAxis> {}, "getAxis", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionRange::getSource> {}, "getSource", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionRange::getMin> {}, "getMin", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionRange::getMax> {}, "getMax", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionRange::getFlat> {}, "getFlat", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionRange::getFuzz> {}, "getFuzz", FakeJni::JMethodID::PUBLIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::MotionEvent) { FakeJni::Constructor<MotionEvent, std::shared_ptr<jnivm::android::view::InputDevice>, int, int, int> {} },
+    { FakeJni::Function<&MotionEvent::getEventTime> {}, "getEventTime", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getPointerCount> {}, "getPointerCount", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getHistorySize> {}, "getHistorySize", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getAxisValue> {}, "getAxisValue", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getToolType> {}, "getToolType", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getX> {}, "getX", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getY> {}, "getY", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::obtain> {}, "obtain", FakeJni::JMethodID::STATIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::KeyCharacterMap) { FakeJni::Constructor<KeyCharacterMap> {} },
+    { FakeJni::Function<&KeyCharacterMap::load> {}, "load", FakeJni::JMethodID::STATIC },
+    { FakeJni::Function<&KeyCharacterMap::get> {}, "get", FakeJni::JMethodID::PUBLIC },
     END_NATIVE_DESCRIPTOR
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::Window) { FakeJni::Constructor<Window> {} },

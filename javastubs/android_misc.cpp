@@ -6,8 +6,8 @@ extern toml::table config;
 #include "javac.h"
 #include "logging.h"
 #include <fstream>
-#include <pthread.h>
 #include <inttypes.h>
+#include <pthread.h>
 
 ///// Uri
 
@@ -22,6 +22,22 @@ std::shared_ptr<jnivm::android::view::Display>
 jnivm::android::hardware::display::DisplayManager::getDisplay(int disp)
 {
     return std::make_shared<jnivm::android::view::Display>();
+}
+
+///// InputManager
+
+std::shared_ptr<jnivm::android::view::InputDevice> jnivm::android::hardware::input::InputManager::getInputDevice(int device)
+{
+    return jnivm::android::view::InputDevice::getDevice(device);
+}
+
+std::shared_ptr<jnivm::Array<int>> jnivm::android::hardware::input::InputManager::getInputDeviceIds()
+{
+    return jnivm::android::view::InputDevice::getDeviceIds();
+}
+
+void jnivm::android::hardware::input::InputManager::registerInputDeviceListener(std::shared_ptr<InputDeviceListener> listener, std::shared_ptr<jnivm::android::os::Handler> handler)
+{
 }
 
 ///// Activity
@@ -65,8 +81,23 @@ std::shared_ptr<jnivm::android::view::View> jnivm::android::app::Activity::findV
 
 ///// Misc Descriptors
 
-BEGIN_NATIVE_DESCRIPTOR(jnivm::android::net::Uri) { FakeJni::Constructor<Uri> {} },
+BEGIN_NATIVE_DESCRIPTOR(jnivm::android::util::DisplayMetrics) { FakeJni::Constructor<DisplayMetrics> {} },
+    { FakeJni::Field<&DisplayMetrics::widthPixels> {}, "widthPixels", FakeJni::JFieldID::PUBLIC },
+    { FakeJni::Field<&DisplayMetrics::heightPixels> {}, "heightPixels", FakeJni::JFieldID::PUBLIC },
+    { FakeJni::Field<&DisplayMetrics::densityDpi> {}, "densityDpi", FakeJni::JFieldID::PUBLIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::net::Uri) { FakeJni::Constructor<Uri> {} },
     { FakeJni::Function<&Uri::encode> {}, "encode", FakeJni::JMethodID::STATIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::hardware::input::InputManager) { FakeJni::Constructor<InputManager> {} },
+    { FakeJni::Function<&InputManager::getInputDeviceIds> {}, "getInputDeviceIds", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&InputManager::getInputDevice> {}, "getInputDevice", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&InputManager::registerInputDeviceListener> {}, "registerInputDeviceListener", FakeJni::JMethodID::PUBLIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::hardware::input::InputManager::InputDeviceListener) { FakeJni::Constructor<InputDeviceListener> {} },
     END_NATIVE_DESCRIPTOR
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::hardware::display::DisplayManager) { FakeJni::Constructor<DisplayManager> {} },

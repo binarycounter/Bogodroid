@@ -27,27 +27,26 @@ namespace java {
             long longValue();
         };
 
-         class Boolean : public virtual Object {
-    private:
-        jboolean value;
+        class Boolean : public virtual Object {
+        private:
+            jboolean value;
 
-    public:
-        DEFINE_CLASS_NAME("java/lang/Boolean")
+        public:
+            DEFINE_CLASS_NAME("java/lang/Boolean")
 
-        // The constructor the application is calling
-        Boolean(jboolean val);
+            // The constructor the application is calling
+            Boolean(jboolean val);
 
-        // The unboxing method to get the primitive value back
-        jboolean booleanValue();
+            // The unboxing method to get the primitive value back
+            jboolean booleanValue();
 
-        // Standard static factory method
-        static std::shared_ptr<Boolean> valueOf(jboolean val);
+            // Standard static factory method
+            static std::shared_ptr<Boolean> valueOf(jboolean val);
 
-        // Standard public static fields
-        static std::shared_ptr<Boolean> TRUE_;
-        static std::shared_ptr<Boolean> FALSE_;
-    };
-
+            // Standard public static fields
+            static std::shared_ptr<Boolean> TRUE_;
+            static std::shared_ptr<Boolean> FALSE_;
+        };
 
         class ClassLoader : public FakeJni::JObject {
         private:
@@ -165,12 +164,13 @@ namespace java {
     }
 
     namespace util {
-        class Iterator : public FakeJni::JObject {
+        class Iterator : public virtual FakeJni::JObject {
         public:
-            DEFINE_CLASS_NAME("java/util/Iterator");
-            bool hasNext();
-            std::shared_ptr<FakeJni::JObject> next();
+            DEFINE_CLASS_NAME("java/util/Iterator")
+            virtual bool hasNext();
+            virtual std::shared_ptr<FakeJni::JObject> next();
         };
+
         class Set : public FakeJni::JObject {
         public:
             DEFINE_CLASS_NAME("java/util/Set");
@@ -181,6 +181,40 @@ namespace java {
         public:
             DEFINE_CLASS_NAME("java/util/Map");
             std::shared_ptr<jnivm::java::util::Set> entrySet();
+        };
+
+        class List : public virtual FakeJni::JObject {
+        public:
+            DEFINE_CLASS_NAME("java/util/List")
+            virtual std::shared_ptr<Iterator> iterator();
+            virtual int size();
+            virtual void add(std::shared_ptr<FakeJni::JObject> obj){}
+            // Internal helper to get element at index, for the iterator
+            virtual std::shared_ptr<FakeJni::JObject> get(int index){return 0;}
+        };
+
+        class ArrayList : public jnivm::java::util::List {
+        private:
+            std::vector<std::shared_ptr<FakeJni::JObject>> elements;
+
+        public:
+            DEFINE_CLASS_NAME("java/util/ArrayList", jnivm::java::util::List)
+            std::shared_ptr<Iterator> iterator() override;
+            int size() override;
+            void add(std::shared_ptr<FakeJni::JObject> obj) override;
+            std::shared_ptr<FakeJni::JObject> get(int index) override;
+        };
+
+        class ArrayListIterator : public jnivm::java::util::Iterator {
+        private:
+            std::shared_ptr<ArrayList> list;
+            size_t index;
+
+        public:
+            DEFINE_CLASS_NAME("java/util/ArrayList$Iterator", jnivm::java::util::Iterator)
+            ArrayListIterator(std::shared_ptr<ArrayList> l);
+            bool hasNext() override;
+            std::shared_ptr<FakeJni::JObject> next() override;
         };
 
         class Scanner : public FakeJni::JObject {
@@ -196,30 +230,37 @@ namespace java {
             std::shared_ptr<FakeJni::JString> nextLine();
         };
 
+        class Locale : public FakeJni::JObject {
+        public:
+            DEFINE_CLASS_NAME("java/util/Locale")
+            static std::shared_ptr<jnivm::java::util::Locale> getDefault();
+            std::shared_ptr<FakeJni::JString> toLanguageTag();
+        };
+
     }
 }
 }
 
 // --- Template Metaprogramming helper to detect std::shared_ptr ---
-template<typename T>
-struct is_shared_ptr : std::false_type {};
+template <typename T>
+struct is_shared_ptr : std::false_type { };
 
-template<typename T>
-struct is_shared_ptr<std::shared_ptr<T>> : std::true_type {};
+template <typename T>
+struct is_shared_ptr<std::shared_ptr<T>> : std::true_type { };
 // -----------------------------------------------------------------
 
-
-template<typename T>
-std::shared_ptr<jnivm::java::lang::Object> autobox(T value) {
-     // Path 1: Handle primitive long types
-     if constexpr (std::is_same_v<T, jlong> || std::is_same_v<T, long long> || std::is_same_v<T, long>) {
+template <typename T>
+std::shared_ptr<jnivm::java::lang::Object> autobox(T value)
+{
+    // Path 1: Handle primitive long types
+    if constexpr (std::is_same_v<T, jlong> || std::is_same_v<T, long long> || std::is_same_v<T, long>) {
         return std::make_shared<jnivm::java::lang::Long>(value);
-    } 
+    }
     // Path 2: Handle std::shared_ptr types
     else if constexpr (is_shared_ptr<T>::value) {
         // Get the type inside the shared_ptr (e.g., Message)
         using ContainedType = typename T::element_type;
-        
+
         // Now check if the contained type inherits from Object
         if constexpr (std::is_base_of_v<jnivm::java::lang::Object, ContainedType>) {
             // It's a valid object pointer, so upcast it to the base type.
@@ -229,7 +270,7 @@ std::shared_ptr<jnivm::java::lang::Object> autobox(T value) {
             static_assert(!std::is_same_v<T, T>, "Cannot autobox a shared_ptr to a non-Object type");
             return nullptr;
         }
-    } 
+    }
     // Path 3: Fallback for unsupported types
     else {
         static_assert(!std::is_same_v<T, T>, "Unsupported type for autoboxing in JNIBridge");

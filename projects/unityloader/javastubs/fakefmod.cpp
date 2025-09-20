@@ -110,15 +110,15 @@ void FMODAudioDevice::runAudio() {
 
 int FMODAudioDevice::local_fmodGetInfo(int info_id) {
     FakeJni::LocalFrame frame(vm);
-    auto fmodGetInfo = fmodClass->getMethod("(I)I", "fmodGetInfo");
+    static auto fmodGetInfo = fmodClass->getMethod("(I)I", "fmodGetInfo");
     return fmodGetInfo.invoke(frame.getJniEnv(),fmodClass,info_id).i;
 }
 
 int FMODAudioDevice::local_fmodProcess()
 {
     FakeJni::LocalFrame frame(vm);
-    auto buffer = frame.getJniEnv().NewDirectByteBuffer(mAudioBuffer.data(),mAudioBuffer.size());
-    auto fmodProcess = fmodClass->getMethod("(Ljava/nio/ByteBuffer;)I", "fmodProcess");
+    static auto buffer = frame.getJniEnv().NewDirectByteBuffer(mAudioBuffer.data(),mAudioBuffer.size());
+    static auto fmodProcess = fmodClass->getMethod("(Ljava/nio/ByteBuffer;)I", "fmodProcess");
     return fmodProcess.invoke(frame.getJniEnv(),fmodClass,buffer).i;
 }
 

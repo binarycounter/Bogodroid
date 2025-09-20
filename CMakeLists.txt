@@ -27,6 +27,7 @@ javastubs/javac.cpp
 platform/common/toml_include.cpp
 platform/common/debug_utils.cpp
 platform/common/config.cpp
+platform/common/input_backend.cpp
 
 
 loader/so_util.cpp

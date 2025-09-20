@@ -91,6 +91,7 @@ std::shared_ptr<FakeJni::JString> jnivm::java::io::File::getPath()
 }
 
 ///// Thread
+#include <chrono>
 #include <thread>
 jnivm::java::lang::Thread::Thread(std::shared_ptr<FakeJni::JString> name) { }
 jnivm::java::lang::Thread::Thread(std::shared_ptr<Runnable> runnable)
@@ -180,6 +181,66 @@ std::shared_ptr<jnivm::java::util::Iterator> jnivm::java::util::Set::iterator()
     return std::make_shared<Iterator>();
 }
 
+///// List
+
+std::shared_ptr<jnivm::java::util::Iterator> jnivm::java::util::List::iterator()
+{
+    // Return a new instance of your existing empty iterator. This is perfect.
+    return std::make_shared<Iterator>();
+}
+
+int jnivm::java::util::List::size()
+{
+    return 0; // The list is always empty for now.
+}
+
+///// ArrayList
+
+// ArrayList Implementation
+std::shared_ptr<jnivm::java::util::Iterator> jnivm::java::util::ArrayList::iterator()
+{
+    auto self = std::dynamic_pointer_cast<ArrayList>(shared_from_this());
+    if (!self) {
+        return nullptr;
+    }
+    return std::make_shared<ArrayListIterator>(std::move(self));
+}
+
+int jnivm::java::util::ArrayList::size() { return elements.size(); }
+void jnivm::java::util::ArrayList::add(std::shared_ptr<FakeJni::JObject> obj) { elements.push_back(obj); }
+std::shared_ptr<FakeJni::JObject> jnivm::java::util::ArrayList::get(int index) { return elements.at(index); }
+
+///// ArrayListIterator
+
+// ArrayListIterator Implementation
+jnivm::java::util::ArrayListIterator::ArrayListIterator(std::shared_ptr<jnivm::java::util::ArrayList> l)
+    : list(l)
+    , index(0)
+{
+}
+
+bool jnivm::java::util::ArrayListIterator::hasNext()
+{
+    return index < list.get()->size();
+}
+
+std::shared_ptr<FakeJni::JObject> jnivm::java::util::ArrayListIterator::next()
+{
+    return list.get()->get(index++);
+}
+
+///// Locale
+
+std::shared_ptr<jnivm::java::util::Locale> jnivm::java::util::Locale::getDefault()
+{
+    return std::make_shared<jnivm::java::util::Locale>();
+}
+
+std::shared_ptr<FakeJni::JString> jnivm::java::util::Locale::toLanguageTag()
+{
+    return std::make_shared<FakeJni::JString>("en-US");
+}
+
 ///// Iterator
 
 bool jnivm::java::util::Iterator::hasNext()
@@ -263,9 +324,29 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::java::lang::Long) { FakeJni::Constructor<Long, jl
     { FakeJni::Function<&Set::iterator> {}, "iterator", FakeJni::JMethodID::PUBLIC },
     END_NATIVE_DESCRIPTOR
 
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::java::util::List) { FakeJni::Constructor<List> {} },
+    { FakeJni::Function<&List::iterator> {}, "iterator", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&List::size> {}, "size", FakeJni::JMethodID::PUBLIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::java::util::ArrayList) { FakeJni::Constructor<ArrayList> {} },
+    { FakeJni::Function<&ArrayList::iterator> {}, "iterator", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&ArrayList::size> {}, "size", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&ArrayList::add> {}, "size", FakeJni::JMethodID::PUBLIC },
+    END_NATIVE_DESCRIPTOR
+
     BEGIN_NATIVE_DESCRIPTOR(jnivm::java::util::Iterator) { FakeJni::Constructor<Iterator> {} },
     { FakeJni::Function<&Iterator::hasNext> {}, "hasNext", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&Iterator::next> {}, "next", FakeJni::JMethodID::PUBLIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::java::util::ArrayListIterator) { FakeJni::Function<&ArrayListIterator::hasNext> {}, "hasNext", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&ArrayListIterator::next> {}, "next", FakeJni::JMethodID::PUBLIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::java::util::Locale) { FakeJni::Constructor<Locale> {} },
+    { FakeJni::Function<&Locale::getDefault> {}, "getDefault", FakeJni::JMethodID::STATIC },
+    { FakeJni::Function<&Locale::toLanguageTag> {}, "toLanguageTag", FakeJni::JMethodID::PUBLIC },
     END_NATIVE_DESCRIPTOR
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::java::lang::Runnable) { FakeJni::Function<&Runnable::run> {}, "run", FakeJni::JMethodID::PUBLIC },
@@ -310,8 +391,12 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::java::lang::Long) { FakeJni::Constructor<Long, jl
     vm->registerClass<jnivm::java::io::File>();
     vm->registerClass<jnivm::java::util::Map>();
     vm->registerClass<jnivm::java::util::Set>();
+    vm->registerClass<jnivm::java::util::List>();
+    vm->registerClass<jnivm::java::util::ArrayList>();
     vm->registerClass<jnivm::java::util::Iterator>();
+    vm->registerClass<jnivm::java::util::ArrayListIterator>();
     vm->registerClass<jnivm::java::util::Scanner>();
+    vm->registerClass<jnivm::java::util::Locale>();
 }
 
 ///// Extensions to built-in Java classes

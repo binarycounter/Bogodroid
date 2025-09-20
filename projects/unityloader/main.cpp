@@ -25,6 +25,7 @@ toml::table config;
 
 #include "debug_utils.h"
 #include "egl_sdl.h"
+#include "input_backend.h"
 #include "glad.h"
 #include "glad_egl.h"
 #include "gles2.h"
@@ -183,6 +184,22 @@ int main(int argc, char* argv[])
     auto activity = std::make_shared<jnivm::android::app::Activity>();
     LocalFrame frame2(vm);
     unityInitJni.invoke(frame2.getJniEnv(), unityClass, activity);
+
+    auto unityActivity = std::make_shared<jnivm::com::unity3d::player::UnityPlayerActivity>();
+    auto& backend = InputBackend::instance();
+
+    backend.setKeyCallback([unityActivity](std::shared_ptr<jnivm::android::view::KeyEvent> event) {
+            unityActivity->injectEvent(event);
+    });
+
+    backend.setMotionCallback([unityActivity](std::shared_ptr<jnivm::android::view::MotionEvent> event) {
+            unityActivity->injectEvent(event);
+    });
+
+    // In another thread, start the event loop
+    std::thread([&backend]() {
+        backend.runEventLoop();
+    }).detach();
 
     // vm.printStatistics();
     // return 0;

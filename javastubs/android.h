@@ -5,6 +5,7 @@
 #include "baron/baron.h"
 #include "javac.h"
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <memory>
 #include <mutex>
@@ -62,13 +63,6 @@ namespace android {
         public:
             DEFINE_CLASS_NAME("android/view/Surface")
         };
-        class InputDevice : public FakeJni::JObject {
-        public:
-            DEFINE_CLASS_NAME("android/view/InputDevice")
-            int getSources();
-            static std::shared_ptr<jnivm::android::view::InputDevice> getDevice(int device);
-            static std::shared_ptr<FakeJni::JArray<int>> getDeviceIds();
-        };
 
         class View : public FakeJni::JObject {
         public:
@@ -94,6 +88,296 @@ namespace android {
             DEFINE_CLASS_NAME("android/view/Window")
             void setFlags(int flag1, int flag2);
             std::shared_ptr<jnivm::android::view::View> getDecorView();
+        };
+
+        class MotionRange : public FakeJni::JObject {
+        public:
+            DEFINE_CLASS_NAME("android/view/InputDevice$MotionRange")
+
+            int axis, source;
+            float min, max, flat, fuzz;
+
+            MotionRange(int ax, int src, float mn, float mx, float fl, float fz)
+                : axis(ax)
+                , source(src)
+                , min(mn)
+                , max(mx)
+                , flat(fl)
+                , fuzz(fz)
+            {
+            }
+
+            int getAxis() { return axis; }
+            int getSource() { return source; }
+            float getMin() { return min; }
+            float getMax() { return max; }
+            float getFlat() { return flat; }
+            float getFuzz() { return fuzz; }
+        };
+
+        class InputDevice : public FakeJni::JObject {
+        public:
+            DEFINE_CLASS_NAME("android/view/InputDevice")
+
+            static inline int SOURCE_KEYBOARD = 0x00000101;
+            static inline int SOURCE_GAMEPAD = 0x00000401;
+            static inline int SOURCE_JOYSTICK = 0x01000010;
+            static inline int SOURCE_MOUSE = 0x00002002;
+
+            int id = 0;
+            int vendor = 0x045e; // Microsoft
+            int product = 0x028e; // Xbox 360 controller
+            std::shared_ptr<FakeJni::JString> name = std::make_shared<FakeJni::JString>("Microsoft X-Box 360 pad");
+            int source = SOURCE_GAMEPAD; // Gamepad
+            std::vector<std::shared_ptr<MotionRange>> motionRanges;
+
+            int getSources();
+            int getId();
+            int getProductId();
+            int getVendorId();
+            std::shared_ptr<FakeJni::JString> getName();
+            std::shared_ptr<FakeJni::JString> getDescriptorString(); // Actually getDescriptor() but that's already taken
+            bool isVirtual();
+            std::shared_ptr<java::util::List> getMotionRanges();
+            static std::shared_ptr<jnivm::android::view::InputDevice> getDevice(int device);
+            static std::shared_ptr<FakeJni::JArray<int>> getDeviceIds();
+
+            void addMotionRange(int axis, int src, float min, float max, float flat, float fuzz); // Helper
+        };
+
+        class InputEvent : public FakeJni::JObject {
+        public:
+            DEFINE_CLASS_NAME("android/view/InputEvent")
+            std::shared_ptr<jnivm::android::view::InputDevice> device;
+            long timestamp = duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+            InputEvent(std::shared_ptr<jnivm::android::view::InputDevice> dev)
+                : device(dev)
+            {
+            }
+            int getDeviceId();
+            int getSource();
+            long getEventTime();
+            std::shared_ptr<jnivm::android::view::InputDevice> getDevice();
+        };
+
+        class KeyEvent : public InputEvent {
+        public:
+            DEFINE_CLASS_NAME("android/view/KeyEvent", jnivm::android::view::InputEvent)
+
+            static inline int KEYCODE_UNKNOWN = 0;
+            static inline int KEYCODE_SOFT_LEFT = 1;
+            static inline int KEYCODE_SOFT_RIGHT = 2;
+            static inline int KEYCODE_HOME = 3;
+            static inline int KEYCODE_BACK = 4;
+            static inline int KEYCODE_CALL = 5;
+            static inline int KEYCODE_ENDCALL = 6;
+            static inline int KEYCODE_0 = 7;
+            static inline int KEYCODE_1 = 8;
+            static inline int KEYCODE_2 = 9;
+            static inline int KEYCODE_3 = 10;
+            static inline int KEYCODE_4 = 11;
+            static inline int KEYCODE_5 = 12;
+            static inline int KEYCODE_6 = 13;
+            static inline int KEYCODE_7 = 14;
+            static inline int KEYCODE_8 = 15;
+            static inline int KEYCODE_9 = 16;
+            static inline int KEYCODE_STAR = 17;
+            static inline int KEYCODE_POUND = 18;
+            static inline int KEYCODE_DPAD_UP = 19;
+            static inline int KEYCODE_DPAD_DOWN = 20;
+            static inline int KEYCODE_DPAD_LEFT = 21;
+            static inline int KEYCODE_DPAD_RIGHT = 22;
+            static inline int KEYCODE_DPAD_CENTER = 23;
+            static inline int KEYCODE_VOLUME_UP = 24;
+            static inline int KEYCODE_VOLUME_DOWN = 25;
+            static inline int KEYCODE_POWER = 26;
+            static inline int KEYCODE_CAMERA = 27;
+            static inline int KEYCODE_CLEAR = 28;
+            static inline int KEYCODE_A = 29;
+            static inline int KEYCODE_B = 30;
+            static inline int KEYCODE_C = 31;
+            static inline int KEYCODE_D = 32;
+            static inline int KEYCODE_E = 33;
+            static inline int KEYCODE_F = 34;
+            static inline int KEYCODE_G = 35;
+            static inline int KEYCODE_H = 36;
+            static inline int KEYCODE_I = 37;
+            static inline int KEYCODE_J = 38;
+            static inline int KEYCODE_K = 39;
+            static inline int KEYCODE_L = 40;
+            static inline int KEYCODE_M = 41;
+            static inline int KEYCODE_N = 42;
+            static inline int KEYCODE_O = 43;
+            static inline int KEYCODE_P = 44;
+            static inline int KEYCODE_Q = 45;
+            static inline int KEYCODE_R = 46;
+            static inline int KEYCODE_S = 47;
+            static inline int KEYCODE_T = 48;
+            static inline int KEYCODE_U = 49;
+            static inline int KEYCODE_V = 50;
+            static inline int KEYCODE_W = 51;
+            static inline int KEYCODE_X = 52;
+            static inline int KEYCODE_Y = 53;
+            static inline int KEYCODE_Z = 54;
+            static inline int KEYCODE_COMMA = 55;
+            static inline int KEYCODE_PERIOD = 56;
+            static inline int KEYCODE_ALT_LEFT = 57;
+            static inline int KEYCODE_ALT_RIGHT = 58;
+            static inline int KEYCODE_SHIFT_LEFT = 59;
+            static inline int KEYCODE_SHIFT_RIGHT = 60;
+            static inline int KEYCODE_TAB = 61;
+            static inline int KEYCODE_SPACE = 62;
+            static inline int KEYCODE_SYM = 63;
+            static inline int KEYCODE_EXPLORER = 64;
+            static inline int KEYCODE_ENVELOPE = 65;
+            static inline int KEYCODE_ENTER = 66;
+            static inline int KEYCODE_DEL = 67;
+            static inline int KEYCODE_GRAVE = 68;
+            static inline int KEYCODE_MINUS = 69;
+            static inline int KEYCODE_EQUALS = 70;
+            static inline int KEYCODE_LEFT_BRACKET = 71;
+            static inline int KEYCODE_RIGHT_BRACKET = 72;
+            static inline int KEYCODE_BACKSLASH = 73;
+            static inline int KEYCODE_SEMICOLON = 74;
+            static inline int KEYCODE_APOSTROPHE = 75;
+            static inline int KEYCODE_SLASH = 76;
+            static inline int KEYCODE_AT = 77;
+            static inline int KEYCODE_NUM = 78;
+            static inline int KEYCODE_HEADSETHOOK = 79;
+            static inline int KEYCODE_FOCUS = 80;
+            static inline int KEYCODE_PLUS = 81;
+            static inline int KEYCODE_MENU = 82;
+            static inline int KEYCODE_NOTIFICATION = 83;
+            static inline int KEYCODE_SEARCH = 84;
+            static inline int KEYCODE_MEDIA_PLAY_PAUSE = 85;
+            static inline int KEYCODE_MEDIA_STOP = 86;
+            static inline int KEYCODE_MEDIA_NEXT = 87;
+            static inline int KEYCODE_MEDIA_PREVIOUS = 88;
+            static inline int KEYCODE_MEDIA_REWIND = 89;
+            static inline int KEYCODE_MEDIA_FAST_FORWARD = 90;
+            static inline int KEYCODE_MUTE = 91;
+            static inline int KEYCODE_PAGE_UP = 92;
+            static inline int KEYCODE_PAGE_DOWN = 93;
+            static inline int KEYCODE_PICTSYMBOLS = 94;
+            static inline int KEYCODE_SWITCH_CHARSET = 95;
+            static inline int KEYCODE_BUTTON_A = 96;
+            static inline int KEYCODE_BUTTON_B = 97;
+            static inline int KEYCODE_BUTTON_C = 98;
+            static inline int KEYCODE_BUTTON_X = 99;
+            static inline int KEYCODE_BUTTON_Y = 100;
+            static inline int KEYCODE_BUTTON_Z = 101;
+            static inline int KEYCODE_BUTTON_L1 = 102;
+            static inline int KEYCODE_BUTTON_R1 = 103;
+            static inline int KEYCODE_BUTTON_L2 = 104;
+            static inline int KEYCODE_BUTTON_R2 = 105;
+            static inline int KEYCODE_BUTTON_THUMBL = 106;
+            static inline int KEYCODE_BUTTON_THUMBR = 107;
+            static inline int KEYCODE_BUTTON_START = 108;
+            static inline int KEYCODE_BUTTON_SELECT = 109;
+            static inline int KEYCODE_BUTTON_MODE = 110;
+            static inline int KEYCODE_CTRL_LEFT = 113;
+            static inline int KEYCODE_CTRL_RIGHT = 114;
+            static inline int KEYCODE_CAPS_LOCK = 115;
+            static inline int KEYCODE_F1 = 131;
+            static inline int KEYCODE_F2 = 132;
+            static inline int KEYCODE_F3 = 133;
+            static inline int KEYCODE_F4 = 134;
+            static inline int KEYCODE_F5 = 135;
+            static inline int KEYCODE_F6 = 136;
+            static inline int KEYCODE_F7 = 137;
+            static inline int KEYCODE_F8 = 138;
+            static inline int KEYCODE_F9 = 139;
+            static inline int KEYCODE_F10 = 140;
+            static inline int KEYCODE_F11 = 141;
+            static inline int KEYCODE_F12 = 142;
+
+            static inline int MAX_KEYCODE = 84;
+            static inline int META_ALT_ON = 2;
+            static inline int META_ALT_LEFT_ON = 16;
+            static inline int META_ALT_RIGHT_ON = 32;
+            static inline int META_SHIFT_ON = 1;
+            static inline int META_SHIFT_LEFT_ON = 64;
+            static inline int META_SHIFT_RIGHT_ON = 128;
+            static inline int META_SYM_ON = 4;
+            static inline int FLAG_WOKE_HERE = 1;
+            static inline int FLAG_SOFT_KEYBOARD = 2;
+            static inline int FLAG_KEEP_TOUCH_MODE = 4;
+            static inline int FLAG_FROM_SYSTEM = 8;
+            static inline int FLAG_EDITOR_ACTION = 16;
+            static inline int FLAG_CANCELED = 32;
+            static inline int FLAG_VIRTUAL_HARD_KEY = 64;
+            static inline int FLAG_LONG_PRESS = 128;
+            static inline int FLAG_CANCELED_LONG_PRESS = 256;
+            static inline int FLAG_TRACKING = 512;
+
+            static inline int ACTION_DOWN = 0;
+            static inline int ACTION_UP = 1;
+            static inline int ACTION_MULTIPLE = 2;
+
+            int action;
+            int keyCode;
+            int state;
+            long timestamp = duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+            KeyEvent(std::shared_ptr<jnivm::android::view::InputDevice> dev, int act, int code, int st)
+                : InputEvent(dev)
+                , action(act)
+                , keyCode(code)
+                , state(st)
+            {
+            }
+
+            int getKeyCode();
+            int getAction();
+            int getMetaState();
+            long getEventTime();
+        };
+
+        class MotionEvent : public InputEvent {
+        public:
+            DEFINE_CLASS_NAME("android/view/MotionEvent", jnivm::android::view::InputEvent)
+
+            static inline int AXIS_X = 0;
+            static inline int AXIS_Y = 1;
+            static inline int AXIS_Z = 11;
+            static inline int AXIS_RZ = 14;
+            static inline int AXIS_LTRIGGER = 17;
+            static inline int AXIS_RTRIGGER = 18;
+            static inline int AXIS_BRAKE = 23;
+            static inline int AXIS_GAS = 22;
+
+            static inline int ACTION_DOWN = 0;
+            static inline int ACTION_UP = 1;
+            static inline int ACTION_MOVE = 2;
+
+            int action;
+            float x, y;
+
+            std::unordered_map<int, float> axisValues;
+
+            long timestamp = duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+            MotionEvent(std::shared_ptr<jnivm::android::view::InputDevice> dev, int act, float pX, float pY)
+                : InputEvent(dev)
+                , action(act)
+                , x(pX)
+                , y(pY)
+            {
+            }
+            long getEventTime();
+            int getPointerCount();
+            int getHistorySize();
+            int getToolType(int pointerIndex);
+            float getAxisValue(int axis, int pointerIndex);
+            float getX(int pointerIndex);
+            float getY(int pointerIndex);
+
+            static std::shared_ptr<MotionEvent> obtain(std::shared_ptr<MotionEvent> other);
+        };
+
+        class KeyCharacterMap : public FakeJni::JObject {
+        public:
+            DEFINE_CLASS_NAME("android/view/KeyCharacterMap")
+            static std::shared_ptr<KeyCharacterMap> load(int deviceId);
+            int get(int keyCode, int metaState);
         };
     }
     namespace hardware {
@@ -389,11 +673,12 @@ namespace android {
         class Context : public FakeJni::JObject {
         public:
             DEFINE_CLASS_NAME("android/content/Context")
-            inline static FakeJni::JString LOCATION_SERVICE = (FakeJni::JString) "LOCATION_SERVICE";
-            inline static FakeJni::JString DISPLAY_SERVICE = (FakeJni::JString) "DISPLAY_SERVICE";
-            inline static FakeJni::JString AUDIO_SERVICE = (FakeJni::JString) "AUDIO_SERVICE";
-            inline static FakeJni::JString MEDIA_ROUTER_SERVICE = (FakeJni::JString) "MEDIA_ROUTER_SERVICE";
-            inline static FakeJni::JString POWER_SERVICE = (FakeJni::JString) "POWER_SERVICE";
+            inline static FakeJni::JString LOCATION_SERVICE = (FakeJni::JString) "location";
+            inline static FakeJni::JString DISPLAY_SERVICE = (FakeJni::JString) "display";
+            inline static FakeJni::JString AUDIO_SERVICE = (FakeJni::JString) "audio";
+            inline static FakeJni::JString MEDIA_ROUTER_SERVICE = (FakeJni::JString) "media_router";
+            inline static FakeJni::JString POWER_SERVICE = (FakeJni::JString) "power";
+            inline static FakeJni::JString INPUT_SERVICE = (FakeJni::JString) "input";
 
             inline static int MODE_PRIVATE = 0;
 
@@ -433,6 +718,12 @@ namespace android {
             std::shared_ptr<jnivm::android::content::res::Resources> getResources();
             std::shared_ptr<jnivm::android::view::Window> getWindow();
             std::shared_ptr<jnivm::android::view::View> findViewById(int id);
+
+            // Input
+            virtual bool onTouchEvent(std::shared_ptr<android::view::MotionEvent> event) { return false; }
+            virtual bool onKeyDown(int keyCode, std::shared_ptr<android::view::KeyEvent> event) { return false; }
+            virtual bool onKeyUp(int keyCode, std::shared_ptr<android::view::KeyEvent> event) { return false; }
+            virtual bool onGenericMotionEvent(std::shared_ptr<android::view::MotionEvent> event) { return false; }
         };
 
         class NativeActivity : public jnivm::android::app::Activity {
@@ -484,6 +775,20 @@ public:
 
     void postFrameCallback(std::shared_ptr<FrameCallback> callback);
     void signalVSync(); // The public method for eglSwapBuffers
+};
+}
+
+namespace jnivm::android::hardware::input {
+class InputManager : public FakeJni::JObject {
+public:
+    DEFINE_CLASS_NAME("android/hardware/input/InputManager")
+    class InputDeviceListener : public virtual FakeJni::JObject {
+    public:
+        DEFINE_CLASS_NAME("android/hardware/input/InputManager$InputDeviceListener")
+    };
+    std::shared_ptr<jnivm::Array<int>> getInputDeviceIds();
+    std::shared_ptr<jnivm::android::view::InputDevice> getInputDevice(int device);
+    void registerInputDeviceListener(std::shared_ptr<jnivm::android::hardware::input::InputManager::InputDeviceListener> listener, std::shared_ptr<jnivm::android::os::Handler> handler);
 };
 }
 #endif

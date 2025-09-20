@@ -6,8 +6,8 @@ extern toml::table config;
 #include "javac.h"
 #include "logging.h"
 #include <fstream>
-#include <pthread.h>
 #include <inttypes.h>
+#include <pthread.h>
 
 ///// PackageManager
 
@@ -114,6 +114,11 @@ jnivm::android::content::Context::getSystemService(std::shared_ptr<FakeJni::JStr
 
     if (*service == MEDIA_ROUTER_SERVICE)
         return std::make_shared<jnivm::android::media::MediaRouter>();
+
+    if (*service == INPUT_SERVICE)
+        return std::make_shared<jnivm::android::hardware::input::InputManager>();
+
+    verbose("JBRIDGE","App requesting unknown system service %s",service.get()->c_str());
 
     return nullptr;
 }
@@ -260,6 +265,7 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::pm::ActivityInfo) { FakeJni::Co
     { FakeJni::Field<&Context::AUDIO_SERVICE> {}, "AUDIO_SERVICE", FakeJni::JFieldID::STATIC },
     { FakeJni::Field<&Context::MEDIA_ROUTER_SERVICE> {}, "MEDIA_ROUTER_SERVICE", FakeJni::JFieldID::STATIC },
     { FakeJni::Field<&Context::POWER_SERVICE> {}, "POWER_SERVICE", FakeJni::JFieldID::STATIC },
+    { FakeJni::Field<&Context::INPUT_SERVICE> {}, "INPUT_SERVICE", FakeJni::JFieldID::STATIC },
     { FakeJni::Field<&Context::MODE_PRIVATE> {}, "MODE_PRIVATE", FakeJni::JFieldID::STATIC },
     { FakeJni::Function<&Context::getSystemService> {}, "getSystemService", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&Context::getAssets> {}, "getAssets", FakeJni::JMethodID::PUBLIC },
