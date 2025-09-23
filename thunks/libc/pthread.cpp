@@ -26,9 +26,9 @@ ABI_ATTR int pthread_key_delete_impl(pthread_key_t key)
 
 ABI_ATTR int pthread_setspecific_impl(pthread_key_t key, const void *__pointer)
 {
-    // TODO:: Investigate if this is valid - currently this works around Splash setting the zero key and causing crashes elsewhere.
-    if (key == 0)
-        return -EINVAL;
+    // // TODO:: Investigate if this is valid - currently this works around Splash setting the zero key and causing crashes elsewhere.
+    // if (key == 0)
+    //     return -EINVAL;
 
     int ret = pthread_setspecific(key, __pointer);
     return ret;

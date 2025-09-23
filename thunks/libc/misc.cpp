@@ -13,10 +13,17 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <elf.h>
+#include <inttypes.h>
+#include <link.h>
+#include <stdbool.h>
+
+
+
 
 #include "bionic_file.h"
-#include <sys/syscall.h>
 #include <linux/futex.h>
+#include <sys/syscall.h>
 
 extern "C" ABI_ATTR int login_tty_impl(int fd)
 {
@@ -24,8 +31,8 @@ extern "C" ABI_ATTR int login_tty_impl(int fd)
 }
 
 extern "C" long syscall_impl(long number,
-                             long arg1, long arg2, long arg3,
-                             long arg4, long arg5, long arg6)
+    long arg1, long arg2, long arg3,
+    long arg4, long arg5, long arg6)
 {
     if (number == 0xb2) { // __NR_gettid for aarch64
         // A simple passthrough for gettid
@@ -83,15 +90,18 @@ extern "C" long syscall_impl(long number,
         return ret;
     }
 
-    {printf("UNIMPLEMENTED SYSCALL %ld\n", number);}
+    {
+        printf("UNIMPLEMENTED SYSCALL %ld\n", number);
+    }
 
-    return syscall(number,arg1,arg2,arg3,arg4,arg5,arg6);
+    return syscall(number, arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
 extern "C" ABI_ATTR void abort_impl(void)
 {
     fatal_error("Guest called abort!\n");
-    exit(-1);
+    abort();
+    // exit(-1);
 }
 
 extern "C" ABI_ATTR void* dlopen_impl(const char* filename, int flags)
@@ -207,7 +217,7 @@ extern "C" ABI_ATTR size_t __strlen_chk(const char* __s, size_t __n) { return st
 extern "C" ABI_ATTR void android_set_abort_message_impl(const char* msg)
 {
     fatal_error("%s", msg);
-    abort();
+    //   abort();
 }
 
 extern "C" ABI_ATTR int __system_property_get_impl(const char* name, char* value)
@@ -217,10 +227,17 @@ extern "C" ABI_ATTR int __system_property_get_impl(const char* name, char* value
     return 0;
 }
 
+extern "C" ABI_ATTR void syslog_impl(int priority, const char* format, ...)
+{
+    WARN_STUB;
+}
+
+ABI_ATTR int open_impl(const char *filename, int flags);
 extern "C" ABI_ATTR int __open_2_impl(const char* pathname, int flags)
 {
-    return open(pathname, flags);
+    return open_impl(pathname, flags);
 }
+char* clean_jar_path(const char* path);
 
 // Taken from https://github.com/libhybris/libhybris/blob/master/hybris/common/hooks.c
 ABI_ATTR int scandirat_impl(int fd, const char* dir,
@@ -229,6 +246,7 @@ ABI_ATTR int scandirat_impl(int fd, const char* dir,
     int (*compar)(const struct bionic_dirent**,
         const struct bionic_dirent**))
 {
+    char* clean_path = clean_jar_path(dir);
     struct dirent** namelist_r;
     struct bionic_dirent** result;
     struct bionic_dirent* filter_r;
@@ -236,7 +254,7 @@ ABI_ATTR int scandirat_impl(int fd, const char* dir,
     int i = 0;
     size_t nItems = 0;
 
-    int res = scandirat(fd, dir, &namelist_r, NULL, NULL);
+    int res = scandirat(fd, clean_path, &namelist_r, NULL, NULL);
 
     if (res > 0 && namelist_r != NULL) {
         result = (bionic_dirent**)malloc(res * sizeof(struct bionic_dirent));
@@ -291,4 +309,160 @@ ABI_ATTR int scandir_impl(const char* dir,
 ABI_ATTR int prctl_impl(int op, int arg1, int arg2, int arg3)
 {
     return 0;
+}
+
+#ifndef LOG_DLPI
+#define LOG_DLPI 0
+#endif
+
+#define DLPI_LOG(fmt, ...)                                      \
+    do {                                                        \
+        if (LOG_DLPI)                                           \
+            fprintf(stderr, "[dlpi] " fmt "\n", ##__VA_ARGS__); \
+    } while (0)
+
+static const char* phdr_type_name(ElfW(Word) t)
+{
+    switch (t) {
+    case PT_NULL:
+        return "PT_NULL";
+    case PT_LOAD:
+        return "PT_LOAD";
+    case PT_DYNAMIC:
+        return "PT_DYNAMIC";
+    case PT_INTERP:
+        return "PT_INTERP";
+    case PT_NOTE:
+        return "PT_NOTE";
+    case PT_SHLIB:
+        return "PT_SHLIB";
+    case PT_PHDR:
+        return "PT_PHDR";
+    case PT_TLS:
+        return "PT_TLS";
+    case 0x6474e550u:
+        return "PT_GNU_EH_FRAME";
+    case 0x6474e551u:
+        return "PT_GNU_STACK";
+    case 0x6474e552u:
+        return "PT_GNU_RELRO";
+    default:
+        return "PT_<other>";
+    }
+}
+
+// Thread-local scratch to hold a normalized PHDR view per thread during callback
+static thread_local ElfW(Phdr) tl_phdr_scratch[1024];
+static inline struct dl_phdr_info make_dl_phdr_info(const struct so_module* m, bool is_main_exe)
+{
+    struct dl_phdr_info info;
+    memset(&info, 0, sizeof(info));
+
+    // This is the correct base address where the library was loaded.
+    ElfW(Addr) load_bias = (ElfW(Addr))m->base;
+
+    const char* name = is_main_exe ? "" : (m->soname ? m->soname : "");
+    DLPI_LOG("module=%p name=\"%s\" is_main=%d", (void*)m, name, is_main_exe);
+
+    if (!m->ehdr || !m->phdr) {
+        DLPI_LOG("ERROR: missing EHDR/PHDR pointers");
+        return info;
+    }
+
+    ElfW(Half) phnum = m->ehdr->e_phnum;
+    if (phnum == 0 || phnum > (sizeof(tl_phdr_scratch) / sizeof(tl_phdr_scratch[0]))) {
+        DLPI_LOG("ERROR: phnum=%u out of bounds for scratch buffer", (unsigned)phnum);
+        return info;
+    }
+
+    for (ElfW(Half) i = 0; i < phnum; i++) {
+        tl_phdr_scratch[i] = m->phdr[i]; // Make a copy
+        if (tl_phdr_scratch[i].p_vaddr >= load_bias) {
+            tl_phdr_scratch[i].p_vaddr -= load_bias;
+        }
+    }
+
+    // Fill the info struct according to the API contract
+    info.dlpi_addr = load_bias;
+    info.dlpi_phdr = tl_phdr_scratch; // Point to our corrected, relative headers
+    info.dlpi_phnum = phnum;
+    info.dlpi_name = name;
+
+    DLPI_LOG("REPORTING: dlpi_addr(load_bias)=0x%" PRIxPTR, (uintptr_t)info.dlpi_addr);
+
+    // Now, log the values as the unwinder will see and calculate them
+    bool saw_eh = false;
+    for (ElfW(Half) i = 0; i < phnum; i++) {
+        const ElfW(Phdr)* ph = &info.dlpi_phdr[i];
+        // This calculation should now yield the correct runtime address
+        ElfW(Addr) runtime_start = info.dlpi_addr + ph->p_vaddr;
+        DLPI_LOG("PHDR[%u]: type=%s p_vaddr(rel)=0x%" PRIxPTR " -> runtime_addr=0x%" PRIxPTR,
+            (unsigned)i, phdr_type_name(ph->p_type), (uintptr_t)ph->p_vaddr, (uintptr_t)runtime_start);
+        if (ph->p_type == 0x6474e550u) { // PT_GNU_EH_FRAME
+            saw_eh = true;
+            DLPI_LOG("--> PT_GNU_EH_FRAME found, runtime location will be 0x%" PRIxPTR, (uintptr_t)runtime_start);
+        }
+    }
+    if (!saw_eh)
+        DLPI_LOG("INFO: PT_GNU_EH_FRAME not present");
+
+    return info;
+}
+
+struct hybrid_state {
+    // The original callback and data from the unwinder
+    int (*original_callback)(struct dl_phdr_info* info, size_t size, void* data);
+    void* original_data;
+
+    // A list of our custom modules
+    const struct so_module* guest_modules_head;
+};
+
+// This is a new callback that we will pass to the REAL dl_iterate_phdr
+static int hybrid_callback(struct dl_phdr_info* info, size_t size, void* data)
+{
+    struct hybrid_state* state = (struct hybrid_state*)data;
+
+    // Pass the host module info to the unwinder's original callback
+    return state->original_callback(info, size, state->original_data);
+}
+
+extern "C" ABI_ATTR int dl_iterate_phdr_impl(
+    int (*callback)(struct dl_phdr_info* info, size_t size, void* data),
+    void* data)
+{
+    if (!callback)
+        return -1;
+
+    DLPI_LOG("dl_iterate_phdr_impl start");
+
+    struct hybrid_state state;
+    state.original_callback = callback;
+    state.original_data = data;
+
+    DLPI_LOG("dl_iterate_phdr_impl call real dl_iterate_phdr");
+    int ret = dl_iterate_phdr(hybrid_callback, &state);
+    DLPI_LOG("dl_iterate_phdr_impl real dl_iterate_phdr returns %d",ret);
+
+    // If the original callback asked to stop, we must respect that.
+    if (ret != 0) {
+        DLPI_LOG("dl_iterate_phdr_impl end early from real function");
+        return ret;
+    }
+
+    const struct so_module* head = so_get_head();
+    const struct so_module* m = head;
+    bool is_first = false;
+
+    for (; m != NULL; m = m->next, is_first = false) {
+        struct dl_phdr_info info = make_dl_phdr_info(m, is_first);
+        // Optional fields like dlpi_adds/subs/tls_* can remain zeroed; callers size-check via 'size'.
+        DLPI_LOG("dl_iterate_phdr_impl call callback");
+        ret = callback(&info, sizeof(info), data);
+        DLPI_LOG("dl_iterate_phdr_impl callback returned %d", ret);
+        if (ret != 0)
+            break; // stop early if callback asks to stop
+    }
+    DLPI_LOG("dl_iterate_phdr_impl end");
+    return ret; // 0 if all callbacks returned 0, or the callback's nonzero value
 }

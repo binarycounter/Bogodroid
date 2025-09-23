@@ -25,10 +25,10 @@ toml::table config;
 
 #include "debug_utils.h"
 #include "egl_sdl.h"
-#include "input_backend.h"
 #include "glad.h"
 #include "glad_egl.h"
 #include "gles2.h"
+#include "input_backend.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_hints.h>
 
@@ -66,32 +66,6 @@ extern EGLSurface egl_surface;
 
 Baron::Jvm vm;
 
-// Mangled symbols (from your last message)
-static const char* SYM_GetBackgroundJobQueue = "_Z21GetBackgroundJobQueuev";
-static const char* SYM_JobQueue_GetPending = "_ZNK8JobQueue14GetPendingJobsEv";
-static const char* SYM_AtomicList_Peek = "_ZN10AtomicList4PeekEv";
-
-// Offsets derived from decompiled code
-enum {
-    // BackgroundJobQueue fields
-    BGQ_JOBQUEUE_PTR_OFF = 0x00, // *(BGQ + 0x00) -> JobQueue*
-
-    // JobQueue fields
-    JQ_ATOMICQUEUE_PTR_OFF = 0x08, // *(JobQueue + 0x08) -> AtomicQueue* (async pending queue)
-    JQ_PENDING_COUNT_OFF = 0x144, // *(JobQueue + 0x144) -> uint32_t pending count
-
-    // AtomicQueue fields
-    AQ_HEAD_SLOT_PTR_OFF = 0x00, // *(AtomicQueue + 0x00) -> void** head_slot; head = *head_slot
-
-    // Queue node layout
-    NODE_NEXT_OFF = 0x00, // *(node + 0x00) -> next
-    GROUP_NODE_OFFSET = 0x38, // queue node is at group + 0x38, so group = node - 0x38
-
-    // Job-info node layout (from ScheduleJob)
-    JOBINFO_FUNC_OFF = 0x08, // *(jobinfo + 0x08) = job function/type pointer
-    JOBINFO_DATA_OFF = 0x10 // *(jobinfo + 0x10) = job data/context pointer
-};
-
 #pragma GCC push_options
 #pragma GCC optimize("O0")
 void gdb_break_here()
@@ -111,46 +85,67 @@ int main(int argc, char* argv[])
 
     // Init config, GLES pointers, JNI VN and bindings
     init_config(argv[1]);
-    sdl_initialize_gles();
+    // sdl_initialize_gles();
     InitJNIBinding(&vm);
+
+    printf("Loading libc++\n");
+    so_module lcpp = {};
+    uintptr_t addr_lcpp = 0x3100000000;
+    const char* path_lcpp = "lib/arm64-v8a/libc++_shared.so";
+    if (!load_so_from_file(&lcpp, path_lcpp, addr_lcpp)) {
+        printf("No libhelp found\n");
+    }
+
+    loaded_modules[0] = &lcpp;
 
     printf("Loading libmain\n");
     so_module lmain = {};
-    uintptr_t addr_lmain = 0x4000000000;
+    uintptr_t addr_lmain = 0x3200000000;
     const char* path_lmain = "lib/arm64-v8a/libmain.so";
     if (!load_so_from_file(&lmain, path_lmain, addr_lmain)) {
         return 1;
     }
 
+    loaded_modules[1] = &lmain;
+
     printf("Loading libil2cpp\n");
     so_module lil2cpp = {};
-    uintptr_t addr_lil2cpp = 0x3000000000;
+    uintptr_t addr_lil2cpp = 0x3600000000;
     const char* path_lil2cpp = "lib/arm64-v8a/libil2cpp.so";
     if (!load_so_from_file(&lil2cpp, path_lil2cpp, addr_lil2cpp)) {
         return 1;
     }
+    loaded_modules[2] = &lil2cpp;
 
     printf("Loading libunity\n");
     so_module lunity = {};
-    uintptr_t addr_lunity = 0x5000000000;
+    uintptr_t addr_lunity = 0x3800000000;
     const char* path_lunity = "lib/arm64-v8a/libunity.so";
     if (!load_so_from_file(&lunity, path_lunity, addr_lunity)) {
         return 1;
     }
 
-    // printf("Loading libburst\n");
-    // so_module lburst = {};
-    // uintptr_t addr_lburst = 0x7000000000;
-    // const char *path_lburst = "lib/arm64-v8a/lib_burst_generated.so";
-    // if (!load_so_from_file(&lburst, path_lburst, addr_lburst))
-    // {
-    //   return 1;
-    // }
+    loaded_modules[3] = &lunity;
 
-    loaded_modules[0] = &lmain;
-    loaded_modules[1] = &lunity;
-    loaded_modules[2] = &lil2cpp;
-    // loaded_modules[3]=&lburst;
+    printf("Loading libburst\n");
+    so_module lburst = {};
+    uintptr_t addr_lburst = 0x4000000000;
+    const char* path_lburst = "lib/arm64-v8a/lib_burst_generated.so";
+    if (!load_so_from_file(&lburst, path_lburst, addr_lburst)) {
+        printf("No libburst found\n");
+    }
+
+    printf("Loading libUnityHelp\n");
+    so_module lhelpers = {};
+    uintptr_t addr_lhelpers = 0x4200000000;
+    const char* path_lhelpers = "lib/arm64-v8a/libUnityHelpers_Android.so";
+    if (!load_so_from_file(&lhelpers, path_lhelpers, addr_lhelpers)) {
+        printf("No libhelp found\n");
+    }
+
+    loaded_modules[4] = &lhelpers;
+
+    loaded_modules[5] = &lburst;
 
     printf("calling JNI_OnLoad from libmain.so\n");
     auto mainJNI_OnLoad = (jint (*)(JavaVM* vm, void* reserved))(so_symbol(&lmain, "JNI_OnLoad"));
@@ -189,11 +184,11 @@ int main(int argc, char* argv[])
     auto& backend = InputBackend::instance();
 
     backend.setKeyCallback([unityActivity](std::shared_ptr<jnivm::android::view::KeyEvent> event) {
-            unityActivity->injectEvent(event);
+        unityActivity->injectEvent(event);
     });
 
     backend.setMotionCallback([unityActivity](std::shared_ptr<jnivm::android::view::MotionEvent> event) {
-            unityActivity->injectEvent(event);
+        unityActivity->injectEvent(event);
     });
 
     // In another thread, start the event loop

@@ -12,6 +12,7 @@
 #include "thunk_pthread.h"
 #include "thunk_time64.h"
 #include <signal.h>
+#include <link.h>
 
 //Some necessary types
 typedef sigset_t sigset64_t;

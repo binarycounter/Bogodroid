@@ -124,6 +124,7 @@ uintptr_t so_symbol(so_module *mod, const char *symbol);
 int so_symbol_index(so_module *mod, const char *symbol);
 void so_symbol_fix_ldmia(so_module *mod, const char *symbol);
 uint32_t so_hash(const uint8_t *name);
+so_module* so_get_head();
 
 // Defined on a per-port basis on their specific main.c files
 extern DynLibFunction *so_static_patches[];    // Functions to be replaced in the binary

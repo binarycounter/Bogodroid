@@ -10,7 +10,10 @@
 #include "so_util.h"
 #include <cstdio>
 #include <cstring>
-
+#include <dirent.h>
+#include <string.h>
+#include <stdlib.h>
+#include <sys/stat.h>
 
 ABI_ATTR int open_impl(const char *filename, int flags)
 {
@@ -80,6 +83,56 @@ ABI_ATTR int close_impl(int fd)
 {
     verbose("NATIVE","Closing file %d",fd);
     return close(fd);
+}
+
+char* clean_jar_path(const char* path) {
+    if (!path) return NULL;
+
+    size_t len = strlen(path);
+    char* clean_path = (char*)malloc(len + 1);
+    if (!clean_path) return NULL;
+
+    const char* needles[] = {"jar:file:/!", "jar:file://!"};
+    size_t num_needles = sizeof(needles) / sizeof(needles[0]);
+
+    const char* src = path;
+    char* dst = clean_path;
+
+    while (*src) {
+        int matched = 0;
+        for (size_t i = 0; i < num_needles; ++i) {
+            size_t needle_len = strlen(needles[i]);
+            if (strncmp(src, needles[i], needle_len) == 0) {
+                src += needle_len; // skip the substring
+                matched = 1;
+                break;
+            }
+        }
+        if (!matched) {
+            *dst++ = *src++;
+        }
+    }
+    *dst = '\0';
+    return clean_path;
+}
+
+ABI_ATTR DIR* opendir_impl(const char* path) {
+    char* clean_path = clean_jar_path(path);
+    if (!clean_path) return NULL;
+    DIR* dir = opendir(clean_path);
+    free(clean_path);
+    return dir;
+}
+
+// fstatat_impl
+ABI_ATTR int fstatat_impl(int dirfd, const char* path, struct stat* buf, int flags) {
+    char* clean_path = clean_jar_path(path);
+    if (!clean_path) {
+        return -1;
+    }
+    int ret = fstatat(dirfd, clean_path, buf, flags);
+    free(clean_path);
+    return ret;
 }
 
 // ABI_ATTR int chdir_bridge(const char* dir)

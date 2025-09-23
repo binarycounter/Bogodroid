@@ -370,6 +370,7 @@ namespace android {
             float getX(int pointerIndex);
             float getY(int pointerIndex);
 
+            static std::shared_ptr<FakeJni::JString> axisToString(int axis);
             static std::shared_ptr<MotionEvent> obtain(std::shared_ptr<MotionEvent> other);
         };
 

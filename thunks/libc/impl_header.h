@@ -179,7 +179,10 @@ extern "C" ABI_ATTR int __android_log_print_impl(int, const char *, const char *
 extern "C" ABI_ATTR int __android_log_vprint_impl(int, const char *, const char *, va_list);
 extern "C" ABI_ATTR void android_set_abort_message_impl(const char *);
 extern "C" ABI_ATTR int __system_property_get_impl(const char *, char *);
+extern "C" ABI_ATTR void syslog_impl(int priority, const char *format, ...);
 extern "C" ABI_ATTR int __open_2_impl(const char *, int);
+extern ABI_ATTR DIR* opendir_impl(const char *);
+extern ABI_ATTR int fstatat_impl(int dirfd, const char* path, struct stat* buf, int flags);
 extern ABI_ATTR int scandirat_impl(int, const char *, struct bionic_dirent ***, int (*)(const struct bionic_dirent *), int (*)(const struct bionic_dirent **, const struct bionic_dirent **));
 extern ABI_ATTR int scandir_impl(const char *, struct bionic_dirent ***, int (*)(const struct bionic_dirent *), int (*)(const struct bionic_dirent **, const struct bionic_dirent **));
 
@@ -195,3 +198,4 @@ ABI_ATTR ssize_t write_impl(int fd, void *buf, size_t count);
 ABI_ATTR int close_impl(int fd);
 
 ABI_ATTR int prctl_impl(int op, int arg1, int arg2, int arg3);
+extern "C" ABI_ATTR int dl_iterate_phdr_impl(void);

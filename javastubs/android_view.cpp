@@ -218,6 +218,11 @@ long jnivm::android::view::MotionEvent::getEventTime()
     return this->timestamp;
 }
 
+std::shared_ptr<FakeJni::JString> jnivm::android::view::MotionEvent::axisToString(int axis)
+{
+    return std::make_shared<FakeJni::JString>("An Axis");
+}
+
 std::shared_ptr<jnivm::android::view::MotionEvent> jnivm::android::view::MotionEvent::obtain(std::shared_ptr<MotionEvent> other)
 {
     if (!other)
@@ -343,7 +348,7 @@ void jnivm::android::view::Choreographer::watchdogLoop()
     long long lastSync = mLastVSyncTimeNanos.load();
 
     if (now - lastSync > vsyncThresholdNanos) {
-        verbose("Choreographer", "VSync stall detected. Injecting fallback frame.");
+        //verbose("Choreographer", "VSync stall detected. Injecting fallback frame.");
         // We are already on the handler thread, so we can call dispatch directly.
         dispatchFrameCallbacks(false);
     }
@@ -360,11 +365,11 @@ void jnivm::android::view::Choreographer::postFrameCallback(std::shared_ptr<Fram
     if (!callback)
         return;
     pthread_mutex_lock(&mCallbacksMutex);
-    verbose("Choreographer", "[Thread: %" PRIxPTR "] [Instance: %p] postFrameCallback ENTER. Queue size before: %zu",
-        (uintptr_t)pthread_self(), this, mCallbacks.size());
+    //verbose("Choreographer", "[Thread: %" PRIxPTR "] [Instance: %p] postFrameCallback ENTER. Queue size before: %zu",
+    //    (uintptr_t)pthread_self(), this, mCallbacks.size());
     mCallbacks.push_back(callback);
-    verbose("Choreographer", "[Thread: %" PRIxPTR "] [Instance: %p] postFrameCallback EXIT. Queue size after: %zu",
-        (uintptr_t)pthread_self(), this, mCallbacks.size());
+    //verbose("Choreographer", "[Thread: %" PRIxPTR "] [Instance: %p] postFrameCallback EXIT. Queue size after: %zu",
+    //    (uintptr_t)pthread_self(), this, mCallbacks.size());
     pthread_mutex_unlock(&mCallbacksMutex);
 }
 
@@ -390,22 +395,22 @@ void jnivm::android::view::Choreographer::dispatchFrameCallbacks(bool isRealVSyn
     }
 
     std::vector<std::shared_ptr<FrameCallback>> callbacksToRun;
-    verbose("Choreographer", "[Thread: %" PRIxPTR "] [Instance: %p] dispatch ENTER (isRealVSync: %s). Queue size before swap: %zu",
-        (uintptr_t)pthread_self(), this, isRealVSync ? "true" : "false", mCallbacks.size());
+    //verbose("Choreographer", "[Thread: %" PRIxPTR "] [Instance: %p] dispatch ENTER (isRealVSync: %s). Queue size before swap: %zu",
+    //    (uintptr_t)pthread_self(), this, isRealVSync ? "true" : "false", mCallbacks.size());
     pthread_mutex_lock(&mCallbacksMutex);
     mCallbacks.swap(callbacksToRun);
     pthread_mutex_unlock(&mCallbacksMutex);
 
-    verbose("Choreographer", "[Thread: %" PRIxPTR "] [Instance: %p] dispatch EXIT. Callbacks to run: %zu. Queue size after swap: %zu",
-        (uintptr_t)pthread_self(), this, callbacksToRun.size(), mCallbacks.size());
+    //verbose("Choreographer", "[Thread: %" PRIxPTR "] [Instance: %p] dispatch EXIT. Callbacks to run: %zu. Queue size after swap: %zu",
+    //    (uintptr_t)pthread_self(), this, callbacksToRun.size(), mCallbacks.size());
 
     if (callbacksToRun.empty()) {
-        verbose("Choreographer", "No callbacks to dispatch (isRealVSync: %s)", isRealVSync ? "true" : "false");
+        //verbose("Choreographer", "No callbacks to dispatch (isRealVSync: %s)", isRealVSync ? "true" : "false");
         return;
     }
 
-    verbose("Choreographer", "Dispatching %zu callbacks (isRealVSync: %s)",
-        callbacksToRun.size(), isRealVSync ? "true" : "false");
+    // verbose("Choreographer", "Dispatching %zu callbacks (isRealVSync: %s)",
+    //     callbacksToRun.size(), isRealVSync ? "true" : "false");
 
     // We are on the handler thread, so we can execute the callbacks directly and synchronously.
     for (const auto& callback : callbacksToRun) {
@@ -488,7 +493,9 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::Display) { FakeJni::Constructor<Di
     { FakeJni::Function<&MotionEvent::getToolType> {}, "getToolType", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&MotionEvent::getX> {}, "getX", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&MotionEvent::getY> {}, "getY", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::axisToString> {}, "axisToString", FakeJni::JMethodID::STATIC },
     { FakeJni::Function<&MotionEvent::obtain> {}, "obtain", FakeJni::JMethodID::STATIC },
+
     END_NATIVE_DESCRIPTOR
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::KeyCharacterMap) { FakeJni::Constructor<KeyCharacterMap> {} },
