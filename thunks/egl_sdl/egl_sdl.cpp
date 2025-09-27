@@ -6,9 +6,9 @@
 #include "platform.h"
 #include "so_util.h"
 #include "thunk_gen.h"
-#include <memory>
 #include <chrono>
 #include <inttypes.h>
+#include <memory>
 
 SDL_Window* sdl_win;
 SDL_GLContext sdl_ctx;
@@ -29,9 +29,9 @@ public:
 EGLBoolean eglSwapBuffers_impl(EGLDisplay display,
     EGLSurface surface)
 {
-    verbose("EGL_SDL", "Buffer swap!");
+    SDL_GL_MakeCurrent(sdl_win, sdl_ctx);
     SDL_GL_SwapWindow(sdl_win);
-        
+
     using namespace std::chrono;
 
     // Persist across calls
@@ -47,13 +47,13 @@ EGLBoolean eglSwapBuffers_impl(EGLDisplay display,
         fps = frameCount / elapsed.count();
         frameCount = 0;
         lastTime = now;
-        warning("FPS: %f\n",fps); 
+        warning("FPS: %f\n", fps);
     }
-    verbose("Choreographer", "[Thread: %" PRIxPTR "] eglSwapBuffers about to call getInstance().", (uintptr_t)pthread_self());
+    // verbose("EGL_SDL", "[Thread: %" PRIxPTR "] eglSwapBuffers about to call getInstance().", (uintptr_t)pthread_self());
 
     auto choreographer = jnivm::android::view::Choreographer::getInstance();
     if (choreographer) {
-        //choreographer->dispatchFrameCallbacks(true);
+        // choreographer->dispatchFrameCallbacks(true);
         choreographer->signalVSync();
     }
     return EGL_TRUE;
@@ -106,27 +106,28 @@ EGLDisplay eglGetDisplay_impl(NativeDisplayType native_display)
     if (glVersion) {
         printf("OpenGL Version: %s\n", glVersion);
     } else {
-        printf("Failed to retrieve OpenGL version.\n");
+        fatal_error("Failed to retrieve OpenGL version.\n");
     }
 
     if (glVendor) {
         printf("OpenGL Vendor: %s\n", glVendor);
     } else {
-        printf("Failed to retrieve OpenGL vendor.\n");
+        fatal_error("Failed to retrieve OpenGL vendor.\n");
     }
 
     if (glRenderer) {
         printf("OpenGL Renderer: %s\n", glRenderer);
     } else {
-        printf("Failed to retrieve OpenGL renderer.\n");
+        fatal_error("Failed to retrieve OpenGL renderer.\n");
     }
 
     if (glExtensions) {
         printf("OpenGL Extensions: %s\n", glExtensions);
     } else {
-        printf("Failed to retrieve OpenGL extensions.\n");
+        fatal_error("Failed to retrieve OpenGL extensions.\n");
     }
 
+    // Just for good measure
     SDL_GL_SwapWindow(sdl_win);
     SDL_GL_SwapWindow(sdl_win);
     SDL_GL_SwapWindow(sdl_win);
@@ -139,7 +140,7 @@ EGLDisplay eglGetDisplay_impl(NativeDisplayType native_display)
 // Do not actually initialize, just return the EGL version number.
 EGLBoolean eglInitialize_impl(EGLDisplay display, int* major, int* minor)
 {
-    printf("[NATIVE] eglInitialize\n");
+    verbose("EGL_SDL", "eglInitialize\n");
 #ifdef FAKE_EGL
     if (major != NULL)
         *major = 1;
@@ -154,12 +155,12 @@ EGLBoolean eglInitialize_impl(EGLDisplay display, int* major, int* minor)
     int temp_major = 0, temp_minor = 0;
     const char* versionString = ((const char* (*)(EGLDisplay, EGLint))SDL_GL_GetProcAddress("eglQueryString"))(display, EGL_VERSION);
     if (!versionString) {
-        fprintf(stderr, "Failed to retrieve EGL version string.\n");
+        fatal_error("Failed to retrieve EGL version string.\n");
         return EGL_FALSE;
     }
 
     if (sscanf(versionString, "%d.%d", &temp_major, &temp_minor) != 2) {
-        fprintf(stderr, "Failed to parse EGL version string: %s\n", versionString);
+        fatal_error("Failed to parse EGL version string: %s\n", versionString);
         return EGL_FALSE;
     }
 
@@ -174,7 +175,7 @@ EGLBoolean eglInitialize_impl(EGLDisplay display, int* major, int* minor)
 // Do not actually search for configs. Just always return the config that the current context uses
 EGLBoolean eglChooseConfig_impl(EGLDisplay display, const EGLint* attribList, EGLConfig* configs, EGLint configSize, EGLint* numConfigs)
 {
-    printf("[NATIVE] eglChooseConfig\n");
+    verbose("EGL_SDL", "eglChooseConfig\n");
 #ifdef FAKE_EGL
     *configs = malloc(1 * sizeof(EGLConfig));
     *numConfigs = 1;
@@ -184,25 +185,25 @@ EGLBoolean eglChooseConfig_impl(EGLDisplay display, const EGLint* attribList, EG
     // Inline fetching of eglGetCurrentContext
     EGLContext context = egl_context;
     if (context == EGL_NO_CONTEXT) {
-        fprintf(stderr, "Failed to get current EGLContext.\n");
+        fatal_error("Failed to get current EGLContext.\n");
         return EGL_FALSE;
     }
 
     EGLint configID;
     if (!((EGLBoolean (*)(EGLDisplay, EGLContext, EGLint, EGLint*))SDL_GL_GetProcAddress("eglQueryContext"))(display, context, EGL_CONFIG_ID, &configID)) {
-        fprintf(stderr, "Failed to query EGL_CONFIG_ID.\n");
+        fatal_error("Failed to query EGL_CONFIG_ID.\n");
         return EGL_FALSE;
     }
 
     EGLint totalConfigs;
     if (!((EGLBoolean (*)(EGLDisplay, EGLConfig*, EGLint, EGLint*))SDL_GL_GetProcAddress("eglGetConfigs"))(display, NULL, 0, &totalConfigs)) {
-        fprintf(stderr, "Failed to get the number of EGLConfigs.\n");
+        fatal_error("Failed to get the number of EGLConfigs.\n");
         return EGL_FALSE;
     }
 
     EGLConfig* allConfigs = (EGLConfig*)malloc(totalConfigs * sizeof(EGLConfig));
     if (!((EGLBoolean (*)(EGLDisplay, EGLConfig*, EGLint, EGLint*))SDL_GL_GetProcAddress("eglGetConfigs"))(display, allConfigs, totalConfigs, &totalConfigs)) {
-        fprintf(stderr, "Failed to retrieve EGLConfigs.\n");
+        fatal_error("Failed to retrieve EGLConfigs.\n");
         free(allConfigs);
         return EGL_FALSE;
     }
@@ -219,7 +220,7 @@ EGLBoolean eglChooseConfig_impl(EGLDisplay display, const EGLint* attribList, EG
     free(allConfigs);
 
     if (!matchingConfig) {
-        fprintf(stderr, "Failed to find a matching EGLConfig.\n");
+        fatal_error("Failed to find a matching EGLConfig.\n");
         return EGL_FALSE;
     }
 
@@ -236,7 +237,7 @@ EGLBoolean eglChooseConfig_impl(EGLDisplay display, const EGLint* attribList, EG
 
 EGLSurface eglCreateWindowSurface_impl(EGLDisplay display, EGLConfig config, NativeWindowType native_window, EGLint const* attrib_list)
 {
-    printf("[NATIVE] eglCreateWindowSurface\n");
+    verbose("EGL_SDL", "eglCreateWindowSurface\n");
 #ifdef FAKE_EGL
     return (EGLSurface)0xDEAD;
 #endif
@@ -245,7 +246,7 @@ EGLSurface eglCreateWindowSurface_impl(EGLDisplay display, EGLConfig config, Nat
 
 EGLBoolean eglQuerySurface_impl(EGLDisplay display, EGLSurface surface, EGLint attribute, EGLint* value)
 {
-    printf("[NATIVE] eglQuerySurface\n");
+    verbose("EGL_SDL", "eglQuerySurface\n");
 #ifdef FAKE_EGL
     if (attribute == EGL_WIDTH)
         *value = 640;
@@ -261,7 +262,7 @@ EGLContext eglCreateContext_impl(EGLDisplay display,
     EGLContext share_context,
     EGLint const* attrib_list)
 {
-    printf("[NATIVE] eglCreateContext\n");
+    verbose("EGL_SDL", "eglCreateContext\n");
 #ifdef FAKE_EGL
     return (EGLContext)0xDEAD;
 #endif
@@ -285,8 +286,9 @@ EGLBoolean eglMakeCurrent_impl(EGLDisplay display,
     EGLSurface read,
     EGLContext context)
 {
-    printf("[NATIVE] eglMakeCurrent\n");
-    return EGL_TRUE;
+    static auto cached_eglMakeCurrent = (EGLBoolean (*)(EGLDisplay, EGLSurface, EGLSurface, EGLContext))SDL_GL_GetProcAddress("eglMakeCurrent");
+    verbose("EGL_SDL", "eglMakeCurrent\n");
+    return cached_eglMakeCurrent(display, draw, read, context);
 }
 
 EGLint eglGetError_impl()
@@ -305,7 +307,7 @@ EGLBoolean eglGetConfigAttrib_impl(EGLDisplay display,
 char const* eglQueryString_impl(EGLDisplay display,
     EGLint name)
 {
-    printf("eglQueryString %d\n", name);
+    verbose("EGL_SDL", "eglQueryString %d\n", name);
     return ((char const* (*)(EGLDisplay, EGLint))SDL_GL_GetProcAddress("eglQueryString"))(display, name);
 }
 
