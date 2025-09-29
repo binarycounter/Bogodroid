@@ -257,7 +257,7 @@ constexpr int InputBackend::toAndroidKeycode(SDL_ControllerButtonEvent sdl_butto
 
 constexpr int InputBackend::toAndroidKeycode(SDL_Scancode sdl_scancode)
 {
-    switch (sdl_scancode) {
+switch (sdl_scancode) {
     case SDL_SCANCODE_0:
         return jnivm::android::view::KeyEvent::KEYCODE_0;
     case SDL_SCANCODE_1:
@@ -280,12 +280,6 @@ constexpr int InputBackend::toAndroidKeycode(SDL_Scancode sdl_scancode)
         return jnivm::android::view::KeyEvent::KEYCODE_9;
     case SDL_SCANCODE_A:
         return jnivm::android::view::KeyEvent::KEYCODE_A;
-    case SDL_SCANCODE_AC_BACK:
-        return jnivm::android::view::KeyEvent::KEYCODE_BACK;
-    case SDL_SCANCODE_AC_HOME:
-        return jnivm::android::view::KeyEvent::KEYCODE_HOME;
-    case SDL_SCANCODE_AC_SEARCH:
-        return jnivm::android::view::KeyEvent::KEYCODE_SEARCH;
     case SDL_SCANCODE_APOSTROPHE:
         return jnivm::android::view::KeyEvent::KEYCODE_APOSTROPHE;
     case SDL_SCANCODE_B:
@@ -296,18 +290,26 @@ constexpr int InputBackend::toAndroidKeycode(SDL_Scancode sdl_scancode)
         return jnivm::android::view::KeyEvent::KEYCODE_DEL;
     case SDL_SCANCODE_C:
         return jnivm::android::view::KeyEvent::KEYCODE_C;
+    case SDL_SCANCODE_CAPSLOCK:
+        return jnivm::android::view::KeyEvent::KEYCODE_CAPS_LOCK;
     case SDL_SCANCODE_CLEAR:
         return jnivm::android::view::KeyEvent::KEYCODE_CLEAR;
     case SDL_SCANCODE_COMMA:
         return jnivm::android::view::KeyEvent::KEYCODE_COMMA;
     case SDL_SCANCODE_D:
         return jnivm::android::view::KeyEvent::KEYCODE_D;
+    case SDL_SCANCODE_DELETE:
+        return jnivm::android::view::KeyEvent::KEYCODE_FORWARD_DEL;
     case SDL_SCANCODE_DOWN:
         return jnivm::android::view::KeyEvent::KEYCODE_DPAD_DOWN;
     case SDL_SCANCODE_E:
         return jnivm::android::view::KeyEvent::KEYCODE_E;
+    case SDL_SCANCODE_END:
+        return jnivm::android::view::KeyEvent::KEYCODE_MOVE_END;
     case SDL_SCANCODE_EQUALS:
         return jnivm::android::view::KeyEvent::KEYCODE_EQUALS;
+    case SDL_SCANCODE_ESCAPE:
+        return jnivm::android::view::KeyEvent::KEYCODE_ESCAPE;
     case SDL_SCANCODE_F:
         return jnivm::android::view::KeyEvent::KEYCODE_F;
     case SDL_SCANCODE_F1:
@@ -340,24 +342,58 @@ constexpr int InputBackend::toAndroidKeycode(SDL_Scancode sdl_scancode)
         return jnivm::android::view::KeyEvent::KEYCODE_GRAVE;
     case SDL_SCANCODE_H:
         return jnivm::android::view::KeyEvent::KEYCODE_H;
+    case SDL_SCANCODE_HOME:
+        return jnivm::android::view::KeyEvent::KEYCODE_MOVE_HOME;
     case SDL_SCANCODE_I:
         return jnivm::android::view::KeyEvent::KEYCODE_I;
+    case SDL_SCANCODE_INSERT:
+        return jnivm::android::view::KeyEvent::KEYCODE_INSERT;
     case SDL_SCANCODE_J:
         return jnivm::android::view::KeyEvent::KEYCODE_J;
     case SDL_SCANCODE_K:
         return jnivm::android::view::KeyEvent::KEYCODE_K;
+    case SDL_SCANCODE_KP_0:
+        return jnivm::android::view::KeyEvent::KEYCODE_NUMPAD_0;
+    case SDL_SCANCODE_KP_1:
+        return jnivm::android::view::KeyEvent::KEYCODE_NUMPAD_1;
+    case SDL_SCANCODE_KP_2:
+        return jnivm::android::view::KeyEvent::KEYCODE_NUMPAD_2;
+    case SDL_SCANCODE_KP_3:
+        return jnivm::android::view::KeyEvent::KEYCODE_NUMPAD_3;
+    case SDL_SCANCODE_KP_4:
+        return jnivm::android::view::KeyEvent::KEYCODE_NUMPAD_4;
+    case SDL_SCANCODE_KP_5:
+        return jnivm::android::view::KeyEvent::KEYCODE_NUMPAD_5;
+    case SDL_SCANCODE_KP_6:
+        return jnivm::android::view::KeyEvent::KEYCODE_NUMPAD_6;
+    case SDL_SCANCODE_KP_7:
+        return jnivm::android::view::KeyEvent::KEYCODE_NUMPAD_7;
+    case SDL_SCANCODE_KP_8:
+        return jnivm::android::view::KeyEvent::KEYCODE_NUMPAD_8;
+    case SDL_SCANCODE_KP_9:
+        return jnivm::android::view::KeyEvent::KEYCODE_NUMPAD_9;
+    case SDL_SCANCODE_KP_DIVIDE:
+        return jnivm::android::view::KeyEvent::KEYCODE_NUMPAD_DIVIDE;
+    case SDL_SCANCODE_KP_ENTER:
+        return jnivm::android::view::KeyEvent::KEYCODE_NUMPAD_ENTER;
+    case SDL_SCANCODE_KP_MINUS:
+        return jnivm::android::view::KeyEvent::KEYCODE_NUMPAD_SUBTRACT;
+    case SDL_SCANCODE_KP_MULTIPLY:
+        return jnivm::android::view::KeyEvent::KEYCODE_NUMPAD_MULTIPLY;
+    case SDL_SCANCODE_KP_PERIOD:
+        return jnivm::android::view::KeyEvent::KEYCODE_NUMPAD_DOT;
+    case SDL_SCANCODE_KP_PLUS:
+        return jnivm::android::view::KeyEvent::KEYCODE_NUMPAD_ADD;
     case SDL_SCANCODE_L:
         return jnivm::android::view::KeyEvent::KEYCODE_L;
     case SDL_SCANCODE_LALT:
         return jnivm::android::view::KeyEvent::KEYCODE_ALT_LEFT;
+    case SDL_SCANCODE_LCTRL:
+        return jnivm::android::view::KeyEvent::KEYCODE_CTRL_LEFT;
     case SDL_SCANCODE_LEFT:
         return jnivm::android::view::KeyEvent::KEYCODE_DPAD_LEFT;
     case SDL_SCANCODE_LEFTBRACKET:
         return jnivm::android::view::KeyEvent::KEYCODE_LEFT_BRACKET;
-    case SDL_SCANCODE_LCTRL:
-        return jnivm::android::view::KeyEvent::KEYCODE_CTRL_LEFT;
-    case SDL_SCANCODE_RCTRL:
-        return jnivm::android::view::KeyEvent::KEYCODE_CTRL_RIGHT;
     case SDL_SCANCODE_LSHIFT:
         return jnivm::android::view::KeyEvent::KEYCODE_SHIFT_LEFT;
     case SDL_SCANCODE_M:
@@ -370,6 +406,8 @@ constexpr int InputBackend::toAndroidKeycode(SDL_Scancode sdl_scancode)
         return jnivm::android::view::KeyEvent::KEYCODE_MUTE;
     case SDL_SCANCODE_N:
         return jnivm::android::view::KeyEvent::KEYCODE_N;
+    case SDL_SCANCODE_NUMLOCKCLEAR:
+        return jnivm::android::view::KeyEvent::KEYCODE_NUM_LOCK;
     case SDL_SCANCODE_O:
         return jnivm::android::view::KeyEvent::KEYCODE_O;
     case SDL_SCANCODE_P:
@@ -378,16 +416,22 @@ constexpr int InputBackend::toAndroidKeycode(SDL_Scancode sdl_scancode)
         return jnivm::android::view::KeyEvent::KEYCODE_PAGE_DOWN;
     case SDL_SCANCODE_PAGEUP:
         return jnivm::android::view::KeyEvent::KEYCODE_PAGE_UP;
+    case SDL_SCANCODE_PAUSE:
+        return jnivm::android::view::KeyEvent::KEYCODE_BREAK;
     case SDL_SCANCODE_PERIOD:
         return jnivm::android::view::KeyEvent::KEYCODE_PERIOD;
     case SDL_SCANCODE_POWER:
         return jnivm::android::view::KeyEvent::KEYCODE_POWER;
+    case SDL_SCANCODE_PRINTSCREEN:
+        return jnivm::android::view::KeyEvent::KEYCODE_SYSRQ;
     case SDL_SCANCODE_Q:
         return jnivm::android::view::KeyEvent::KEYCODE_Q;
     case SDL_SCANCODE_R:
         return jnivm::android::view::KeyEvent::KEYCODE_R;
     case SDL_SCANCODE_RALT:
         return jnivm::android::view::KeyEvent::KEYCODE_ALT_RIGHT;
+    case SDL_SCANCODE_RCTRL:
+        return jnivm::android::view::KeyEvent::KEYCODE_CTRL_RIGHT;
     case SDL_SCANCODE_RETURN:
         return jnivm::android::view::KeyEvent::KEYCODE_ENTER;
     case SDL_SCANCODE_RIGHT:
@@ -398,6 +442,8 @@ constexpr int InputBackend::toAndroidKeycode(SDL_Scancode sdl_scancode)
         return jnivm::android::view::KeyEvent::KEYCODE_SHIFT_RIGHT;
     case SDL_SCANCODE_S:
         return jnivm::android::view::KeyEvent::KEYCODE_S;
+    case SDL_SCANCODE_SCROLLLOCK:
+        return jnivm::android::view::KeyEvent::KEYCODE_SCROLL_LOCK;
     case SDL_SCANCODE_SELECT:
         return jnivm::android::view::KeyEvent::KEYCODE_DPAD_CENTER;
     case SDL_SCANCODE_SEMICOLON:
