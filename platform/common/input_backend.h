@@ -23,6 +23,8 @@ private:
     std::function<void(std::shared_ptr<jnivm::android::view::KeyEvent>)> onKey;
     std::function<void(std::shared_ptr<jnivm::android::view::MotionEvent>)> onMotion;
 
+    std::unordered_map<int, float> mControllerAxisState;
+
     InputBackend(); // Private constructor for singleton
 
 public:

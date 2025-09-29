@@ -37,6 +37,16 @@ InputBackend::InputBackend()
             verbose("InputBackend", "Opened Game Controller: %s", SDL_GameControllerNameForIndex(i));
         }
     }
+
+    mControllerAxisState[jnivm::android::view::MotionEvent::AXIS_X] = 0.0f;
+    mControllerAxisState[jnivm::android::view::MotionEvent::AXIS_Y] = 0.0f;
+    mControllerAxisState[jnivm::android::view::MotionEvent::AXIS_RZ] = 0.0f;
+    mControllerAxisState[jnivm::android::view::MotionEvent::AXIS_Z] = 0.0f;
+    mControllerAxisState[jnivm::android::view::MotionEvent::AXIS_BRAKE] = 0.0f;
+    mControllerAxisState[jnivm::android::view::MotionEvent::AXIS_GAS] = 0.0f;
+    // mControllerAxisState[jnivm::android::view::MotionEvent::AXIS_LTRIGGER] = 0.0f;
+    // mControllerAxisState[jnivm::android::view::MotionEvent::AXIS_RTRIGGER] = 0.0f;
+
 }
 
 InputBackend::~InputBackend()
@@ -134,14 +144,11 @@ void InputBackend::runEventLoop()
             case SDL_CONTROLLERAXISMOTION: {
                 if (!onMotion)
                     break;
-                auto dev = devices[INPUT_ID_XBOX];
-                // A joystick event has 1 "pointer" at (0,0), but its data is in the axes.
-                auto motionEvent = std::make_shared<jnivm::android::view::MotionEvent>(
-                    dev, jnivm::android::view::MotionEvent::ACTION_MOVE, 0.0f , 0.0f );
 
-                // Map SDL axis to Android axis and normalize the value
+                // --- STEP 1: Update our internal state based on the single axis that moved ---
                 int axis = -1;
                 float value = 0.0f;
+                bool isTrigger = false;
 
                 switch (e.caxis.axis) {
                 case SDL_CONTROLLER_AXIS_LEFTX:
@@ -158,23 +165,36 @@ void InputBackend::runEventLoop()
                     break;
                 case SDL_CONTROLLER_AXIS_TRIGGERLEFT:
                     axis = jnivm::android::view::MotionEvent::AXIS_BRAKE;
+                    isTrigger = true;
                     break;
                 case SDL_CONTROLLER_AXIS_TRIGGERRIGHT:
                     axis = jnivm::android::view::MotionEvent::AXIS_GAS;
+                    isTrigger = true;
                     break;
                 }
 
-                if (axis != -1) {
-                    // Normalize stick values to -1.0 to 1.0, and triggers to 0.0 to 1.0
-                    if (axis == jnivm::android::view::MotionEvent::AXIS_BRAKE || axis == jnivm::android::view::MotionEvent::AXIS_GAS) {
-                        verbose("InputBackend","TRIGGER %d",e.caxis.value);
-                        value = e.caxis.value / 32767.0f;
-                    } else {
-                        value = e.caxis.value < 0 ? e.caxis.value / 32768.0f : e.caxis.value / 32767.0f;
-                    }
-                    motionEvent->axisValues[axis] = value;
-                    onMotion(motionEvent);
+                if (axis == -1)
+                    break; // Not an axis we are mapping.
+
+                // Normalize the value
+                if (isTrigger) {
+                    value = e.caxis.value / 32767.0f;
+                } else {
+                    value = e.caxis.value < 0 ? e.caxis.value / 32768.0f : e.caxis.value / 32767.0f;
                 }
+
+                // Update the single value in our state map
+                mControllerAxisState[axis] = value;
+
+                auto dev = devices[INPUT_ID_XBOX];
+                auto motionEvent = std::make_shared<jnivm::android::view::MotionEvent>(
+                    dev, jnivm::android::view::MotionEvent::ACTION_MOVE, 0.0f , 0.0f );
+
+                // This is the crucial step: copy the entire state map.
+                motionEvent->axisValues = mControllerAxisState;
+
+                // --- STEP 3: Send the complete event ---
+                onMotion(motionEvent);
                 break;
             }
 
@@ -205,13 +225,13 @@ constexpr int InputBackend::toAndroidKeycode(SDL_ControllerButtonEvent sdl_butto
     uint8_t button = sdl_button.button;
     switch (button) {
     case SDL_CONTROLLER_BUTTON_A:
-        return jnivm::android::view::KeyEvent::KEYCODE_BUTTON_A;
-    case SDL_CONTROLLER_BUTTON_B:
         return jnivm::android::view::KeyEvent::KEYCODE_BUTTON_B;
+    case SDL_CONTROLLER_BUTTON_B:
+        return jnivm::android::view::KeyEvent::KEYCODE_BUTTON_A;
     case SDL_CONTROLLER_BUTTON_X:
-        return jnivm::android::view::KeyEvent::KEYCODE_BUTTON_X;
-    case SDL_CONTROLLER_BUTTON_Y:
         return jnivm::android::view::KeyEvent::KEYCODE_BUTTON_Y;
+    case SDL_CONTROLLER_BUTTON_Y:
+        return jnivm::android::view::KeyEvent::KEYCODE_BUTTON_X;
     case SDL_CONTROLLER_BUTTON_BACK:
         return jnivm::android::view::KeyEvent::KEYCODE_BUTTON_SELECT;
     case SDL_CONTROLLER_BUTTON_GUIDE:
