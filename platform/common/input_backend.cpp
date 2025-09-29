@@ -145,7 +145,6 @@ void InputBackend::runEventLoop()
                 if (!onMotion)
                     break;
 
-                // --- STEP 1: Update our internal state based on the single axis that moved ---
                 int axis = -1;
                 float value = 0.0f;
                 bool isTrigger = false;
@@ -190,10 +189,8 @@ void InputBackend::runEventLoop()
                 auto motionEvent = std::make_shared<jnivm::android::view::MotionEvent>(
                     dev, jnivm::android::view::MotionEvent::ACTION_MOVE, 0.0f , 0.0f );
 
-                // This is the crucial step: copy the entire state map.
                 motionEvent->axisValues = mControllerAxisState;
 
-                // --- STEP 3: Send the complete event ---
                 onMotion(motionEvent);
                 break;
             }
@@ -204,7 +201,6 @@ void InputBackend::runEventLoop()
                     break;
                 // Controller buttons are sent as KeyEvents.
                 int action = (e.type == SDL_CONTROLLERBUTTONDOWN) ? jnivm::android::view::KeyEvent::ACTION_DOWN : jnivm::android::view::KeyEvent::ACTION_UP;
-                // TODO: Map SDL_GameControllerButton to Android AKEYCODE constants
                 int keyCode = toAndroidKeycode(e.cbutton);
 
                 auto keyEvent = std::make_shared<jnivm::android::view::KeyEvent>(devices[INPUT_ID_XBOX], action, keyCode, 0);
