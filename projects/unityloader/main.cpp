@@ -37,6 +37,7 @@ int foo() { return tls0[0]++; }
 
 using namespace FakeJni;
 
+extern DynLibFunction symtable_monobridge[];
 extern DynLibFunction symtable_libc[];
 extern DynLibFunction symtable_ndk[];
 extern DynLibFunction symtable_gles2[];
@@ -113,7 +114,13 @@ int main(int argc, char* argv[])
     uintptr_t addr_lil2cpp = 0x3600000000;
     const char* path_lil2cpp = "lib/arm64-v8a/libil2cpp.so";
     if (!load_so_from_file(&lil2cpp, path_lil2cpp, addr_lil2cpp)) {
-        return 1;
+        printf("il2cpp not found, trying mono\n");
+        const char* path_mono = "lib/arm64-v8a/libmonobdwgc-2.0.so";
+        if (!load_so_from_file(&lil2cpp, path_mono, addr_lil2cpp)) {
+            return 1;
+        }
+        so_dynamic_libraries[4] = symtable_monobridge;
+        so_dynamic_libraries[5] = NULL;
     }
     loaded_modules[2] = &lil2cpp;
 
