@@ -164,6 +164,20 @@ extern ABI_ATTR int pthread_attr_getschedparam_impl(const BIONIC_pthread_attr_t 
 extern ABI_ATTR int pthread_attr_setschedpolicy_impl(BIONIC_pthread_attr_t *attr, int policy);
 extern ABI_ATTR int pthread_attr_getschedpolicy_impl(const BIONIC_pthread_attr_t *attr, int *policy);
 extern ABI_ATTR int pthread_create_impl(pthread_t *thread, const BIONIC_pthread_attr_t *bionic_attr,void *(*entry)(void *), void *arg);
+
+struct BIONIC_sem_t;
+extern ABI_ATTR int sem_init_impl(BIONIC_sem_t *sem, int pshared, unsigned int value);
+extern ABI_ATTR int sem_destroy_impl(BIONIC_sem_t *sem);
+extern ABI_ATTR int sem_wait_impl(BIONIC_sem_t *sem);
+extern ABI_ATTR int sem_trywait_impl(BIONIC_sem_t *sem);
+extern ABI_ATTR int sem_timedwait_impl(BIONIC_sem_t *sem, const struct timespec *abs_timeout);
+extern ABI_ATTR int sem_post_impl(BIONIC_sem_t *sem);
+extern ABI_ATTR int sem_getvalue_impl(BIONIC_sem_t *sem, int *sval);
+extern ABI_ATTR sem_t *sem_open_impl(const char *name, int oflag, ...);
+extern ABI_ATTR int sem_close_impl(sem_t *sem);
+extern ABI_ATTR int sem_unlink_impl(const char *name);
+
+
 extern ABI_ATTR int __aeabi_atexit_impl(void *, void (*)(void *), void *);
 extern ABI_ATTR void __aeabi_memcpy8_impl(void *, const void *, size_t);
 extern ABI_ATTR void __aeabi_memcpy4_impl(void *, const void *, size_t);

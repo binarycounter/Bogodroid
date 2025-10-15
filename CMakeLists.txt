@@ -45,6 +45,7 @@ thunks/libc/stdio.cpp
 thunks/libc/time64.cpp
 thunks/libc/sigaction.cpp
 thunks/libc/fcntl.cpp
+thunks/libc/semaphores.cpp
 
 thunks/ndk/ndk.cpp
 thunks/ndk/alooper.c
