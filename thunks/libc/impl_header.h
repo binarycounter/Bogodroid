@@ -140,13 +140,30 @@ extern ABI_ATTR int pthread_cond_destroy_impl(pthread_cond_t **);
 extern ABI_ATTR int pthread_cond_wait_impl(pthread_cond_t **, BIONIC_pthread_mutex_t *);
 extern ABI_ATTR int pthread_cond_timedwait_impl(pthread_cond_t **, BIONIC_pthread_mutex_t *, const struct timespec *);
 extern ABI_ATTR int pthread_once_impl(volatile int *, void (*)());
-extern ABI_ATTR int pthread_create_impl(pthread_t *, const void *, void *(*)(void *), void *);
 extern ABI_ATTR int pthread_mutexattr_init_impl(pthread_mutexattr_t **);
 extern ABI_ATTR int pthread_mutexattr_settype_impl(pthread_mutexattr_t **, int);
 extern ABI_ATTR int pthread_mutexattr_destroy_impl(pthread_mutexattr_t **);
 extern ABI_ATTR int pthread_join_impl(pthread_t, void **);
-extern ABI_ATTR int pthread_attr_getstackaddr_impl(const pthread_attr_t *, void **);
-extern ABI_ATTR int pthread_attr_setstackaddr_impl(pthread_attr_t *, void *);
+extern ABI_ATTR int pthread_getattr_np_impl(pthread_t thread, BIONIC_pthread_attr_t *bionic_attr);
+extern ABI_ATTR int pthread_attr_getstackaddr_impl(const BIONIC_pthread_attr_t *, void **);
+extern ABI_ATTR int pthread_attr_setstackaddr_impl(BIONIC_pthread_attr_t *, void *);
+extern ABI_ATTR int pthread_attr_init_impl(BIONIC_pthread_attr_t *attr);
+extern ABI_ATTR int pthread_attr_destroy_impl(BIONIC_pthread_attr_t *attr);
+extern ABI_ATTR int pthread_attr_setdetachstate_impl(BIONIC_pthread_attr_t *attr, int state);
+extern ABI_ATTR int pthread_attr_getdetachstate_impl(const BIONIC_pthread_attr_t *attr, int *state);
+extern ABI_ATTR int pthread_attr_setstack_impl(BIONIC_pthread_attr_t *attr, void *stackaddr, size_t stacksize);
+extern ABI_ATTR int pthread_attr_getstack_impl(const BIONIC_pthread_attr_t *attr, void **stackaddr, size_t *stacksize);
+extern ABI_ATTR int pthread_attr_setstacksize_impl(BIONIC_pthread_attr_t *attr, size_t stacksize);
+extern ABI_ATTR int pthread_attr_getstacksize_impl(const BIONIC_pthread_attr_t *attr, size_t *stacksize);
+extern ABI_ATTR int pthread_attr_setstackaddr_impl(BIONIC_pthread_attr_t *attr, void *stackaddr);
+extern ABI_ATTR int pthread_attr_getstackaddr_impl(const BIONIC_pthread_attr_t *attr, void **stackaddr);
+extern ABI_ATTR int pthread_attr_setguardsize_impl(BIONIC_pthread_attr_t *attr, size_t guardsize);
+extern ABI_ATTR int pthread_attr_getguardsize_impl(const BIONIC_pthread_attr_t *attr, size_t *guardsize);
+extern ABI_ATTR int pthread_attr_setschedparam_impl(BIONIC_pthread_attr_t *attr, const struct sched_param *param);
+extern ABI_ATTR int pthread_attr_getschedparam_impl(const BIONIC_pthread_attr_t *attr, struct sched_param *param);
+extern ABI_ATTR int pthread_attr_setschedpolicy_impl(BIONIC_pthread_attr_t *attr, int policy);
+extern ABI_ATTR int pthread_attr_getschedpolicy_impl(const BIONIC_pthread_attr_t *attr, int *policy);
+extern ABI_ATTR int pthread_create_impl(pthread_t *thread, const BIONIC_pthread_attr_t *bionic_attr,void *(*entry)(void *), void *arg);
 extern ABI_ATTR int __aeabi_atexit_impl(void *, void (*)(void *), void *);
 extern ABI_ATTR void __aeabi_memcpy8_impl(void *, const void *, size_t);
 extern ABI_ATTR void __aeabi_memcpy4_impl(void *, const void *, size_t);
@@ -192,6 +209,40 @@ extern "C" ABI_ATTR int sigaction_impl(int signum, const struct bionic_sigaction
 extern "C" ABI_ATTR int sigfillset_impl(uint64_t *bionic_set);
 extern "C" ABI_ATTR int sigdelset_impl(uint64_t *set, int signo);
 extern "C" ABI_ATTR int sigaddset_impl(uint64_t *set, int signo);
+const char *const sys_signame_impl[] = {
+    NULL,     // 0
+    "HUP",     // 1: SIGHUP
+    "INT",     // 2: SIGINT
+    "QUIT",   // 3: SIGQUIT
+    "ILL",    // 4: SIGILL
+    "TRAP",   // 5: SIGTRAP
+    "ABRT",   // 6: SIGABRT
+    "BUS",    // 7: SIGBUS
+    "FPE",    // 8: SIGFPE
+    "KILL",   // 9: SIGKILL
+    "USR1",     // 10: SIGUSR1
+    "SEGV",   // 11: SIGSEGV
+    "USR2",     // 12: SIGUSR2
+    "PIPE",     // 13: SIGPIPE
+    "ALRM",     // 14: SIGALRM
+    "TERM",     // 15: SIGTERM
+    "STKFLT",     // 16: SIGSTKFLT
+    "CHLD",     // 17: SIGCHLD
+    "CONT",     // 18: SIGCONT
+    "STOP",     // 19: SIGSTOP
+    "TSTP",     // 20: SIGTSTP
+    "TTIN",     // 21: SIGTTIN
+    "TTOU",     // 22: SIGTTOU
+    "URG",     // 23: SIGURG
+    "XCPU",     // 24: SIGXCPU
+    "XFSZ",     // 25: SIGXFSZ
+    "VTALRM",     // 26: SIGVTALRM
+    "PROF",     // 27: SIGPROF
+    "WINCH",     // 28: SIGWINCH
+    "IO",     // 29: SIGIO
+    "PWR",     // 30: SIGPWR
+    "SYS"     // 31: SIGSYS
+};
 ABI_ATTR int open_impl(const char *filename, int flags);
 ABI_ATTR ssize_t read_impl(int fd, void *buf, size_t count);
 ABI_ATTR ssize_t write_impl(int fd, void *buf, size_t count);

@@ -24,6 +24,7 @@
 #include "bionic_file.h"
 #include <linux/futex.h>
 #include <sys/syscall.h>
+#include <cstring>
 
 extern "C" ABI_ATTR int login_tty_impl(int fd)
 {
@@ -141,9 +142,7 @@ extern "C" ABI_ATTR int dladdr_impl(const void* addr, Dl_info* info)
 
 extern "C" ABI_ATTR void* dlsym_impl(void* handle, const char* name)
 {
-    // printf("App is attempting to resolve symbol %s => ",name);
     void* addr = (void*)so_resolve_link(NULL, name);
-    // printf("%p\n",addr);
     return addr;
 }
 

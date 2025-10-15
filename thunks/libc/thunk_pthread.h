@@ -21,6 +21,16 @@ typedef struct BIONIC_Mutex {
     BIONIC_pthread_mutex_t mutex;
 } BIONIC_Mutex;
 
+typedef struct BIONIC_pthread_attr_t
+{
+    uint32_t flags;
+    void*    stack_base;
+    size_t   stack_size;
+    size_t   guard_size;
+    int32_t  sched_policy;
+    int32_t  sched_priority;
+} BIONIC_pthread_attr_t;
+
 ABI_ATTR extern int   pthread_key_create_bridge(pthread_key_t *key, void (*destr_function) (void *));
 ABI_ATTR extern int   pthread_key_delete_bridge(pthread_key_t key);
 ABI_ATTR extern int   pthread_setspecific_bridge(pthread_key_t key, const void *__pointer);

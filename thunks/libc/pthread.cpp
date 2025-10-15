@@ -7,6 +7,7 @@
 
 #include "platform.h"
 #include "thunk_pthread.h"
+#include <cstring>
 
 ABI_ATTR pthread_t pthread_self_impl()
 {
@@ -211,12 +212,7 @@ ABI_ATTR int pthread_once_impl(volatile int *once_control, void (*init_routine)(
     return 0;
 }
 
-// pthread_t is an unsigned int, so it should be fine
-// TODO: probably shouldn't assume default attributes
-ABI_ATTR int pthread_create_impl(pthread_t *thread, const void *unused, void *(*entry)(void *), void *arg)
-{
-    return pthread_create(thread, NULL, entry, arg);
-}
+
 
 ABI_ATTR int pthread_mutexattr_init_impl(pthread_mutexattr_t **attr_ptr)
 {
@@ -245,20 +241,224 @@ ABI_ATTR int pthread_join_impl(pthread_t th, void **thread_return)
     return pthread_join(th, thread_return);
 }
 
-/* Return the previously set address for the stack.  */
-ABI_ATTR int pthread_attr_getstackaddr_impl (const pthread_attr_t *attr, void **stackaddr)
+#define PTHREAD_ATTR_FLAG_DETACHED 0x00000001
+// pthread_t is an unsigned int, so it should be fine
+int pthread_create_impl(pthread_t *thread, const BIONIC_pthread_attr_t *bionic_attr,
+                        void *(*entry)(void *), void *arg)
 {
-    size_t size;
-    return pthread_attr_getstack(attr, stackaddr, &size);
+    // If the caller provided NULL for the attributes, we do the same.
+    // This tells the real pthread_create to use default attributes.
+    if (true || bionic_attr == NULL) {
+        return pthread_create(thread, NULL, entry, arg);
+    }
+
+    // --- Translation Step ---
+    // The caller provided attributes, so we must translate them from our
+    // Bionic struct to a real, opaque glibc attribute object.
+
+    int result;
+    pthread_attr_t glibc_attr; // The real, opaque glibc struct.
+
+    // 1. Initialize the glibc attribute object.
+    if ((result = pthread_attr_init(&glibc_attr)) != 0) {
+        return result; // Return the error code from init.
+    }
+
+    // 2. Translate each attribute from the Bionic struct to the glibc object
+    //    using the REAL glibc pthread_attr_set* functions.
+
+    // Stack attributes
+    if (bionic_attr->stack_base != NULL) {
+        pthread_attr_setstack(&glibc_attr, bionic_attr->stack_base, bionic_attr->stack_size);
+    } else if (bionic_attr->stack_size > 0) {
+        pthread_attr_setstacksize(&glibc_attr, bionic_attr->stack_size);
+    }
+
+    // Guard size
+    if (bionic_attr->guard_size > 0) {
+        pthread_attr_setguardsize(&glibc_attr, bionic_attr->guard_size);
+    }
+
+    // Detach state
+    int detach_state = (bionic_attr->flags & PTHREAD_ATTR_FLAG_DETACHED)
+                           ? PTHREAD_CREATE_DETACHED
+                           : PTHREAD_CREATE_JOINABLE;
+    pthread_attr_setdetachstate(&glibc_attr, detach_state);
+
+    // Scheduling policy and priority
+    if (bionic_attr->sched_policy != 0) { // Assuming 0 is the default/unset state
+        pthread_attr_setschedpolicy(&glibc_attr, bionic_attr->sched_policy);
+        struct sched_param param;
+        param.sched_priority = bionic_attr->sched_priority;
+        pthread_attr_setschedparam(&glibc_attr, &param);
+    }
+
+    // 3. Call the REAL pthread_create with the fully configured glibc attribute object.
+    result = pthread_create(thread, &glibc_attr, entry, arg);
+
+    // 4. Clean up the temporary glibc attribute object as required by the API.
+    pthread_attr_destroy(&glibc_attr);
+
+    // 5. Return the result of the create call.
+    return result;
 }
 
-/* Set the starting address of the stack of the thread to be created.
-   Depending on whether the stack grows up or down the value must either
-   be higher or lower than all the address in the memory block.  The
-   minimal size of the block must be PTHREAD_STACK_MIN.  */
-ABI_ATTR int pthread_attr_setstackaddr_impl (pthread_attr_t *attr, void *stackaddr)
-{
-    size_t size;
-    pthread_attr_getstacksize(attr, &size); /* lets assume stack size didnt change... */
-    return pthread_attr_setstack(attr, stackaddr, size);
+ABI_ATTR int pthread_getattr_np_impl(pthread_t thread, BIONIC_pthread_attr_t *bionic_attr) {
+    pthread_attr_t glibc_attr;
+    int result;
+
+    result = pthread_getattr_np(thread, &glibc_attr);
+    if (result != 0) {
+        return result;
+    }
+
+    void*  stack_base;
+    size_t stack_size;
+    size_t guard_size;
+    int    policy;
+    struct sched_param param;
+
+    pthread_attr_getstack(&glibc_attr, &stack_base, &stack_size);
+    pthread_attr_getguardsize(&glibc_attr, &guard_size);
+    pthread_attr_getschedpolicy(&glibc_attr, &policy);
+    pthread_attr_getschedparam(&glibc_attr, &param);
+
+    if (bionic_attr) {
+        bionic_attr->stack_base = stack_base;
+        bionic_attr->stack_size = stack_size;
+        bionic_attr->guard_size = guard_size;
+        bionic_attr->sched_policy = policy;
+        bionic_attr->sched_priority = param.sched_priority;
+
+        bionic_attr->flags = 0;
+    }
+
+    pthread_attr_destroy(&glibc_attr);
+
+    return 0; // Return success
 }
+
+// Initialize attributes object with default values.
+int pthread_attr_init_impl(BIONIC_pthread_attr_t *attr) {
+    if (!attr) {
+        return EINVAL;
+    }
+    // Zeroing out the struct is the safest default.
+    memset(attr, 0, sizeof(BIONIC_pthread_attr_t));
+    return 0;
+}
+
+// Destroy attributes object. For our plain data struct, this is a no-op.
+int pthread_attr_destroy_impl(BIONIC_pthread_attr_t *attr) {
+    // Nothing to free or clean up. The object is just plain data.
+    (void)attr; // Suppress unused parameter warning.
+    return 0;
+}
+
+// --- Detach State ---
+int pthread_attr_setdetachstate_impl(BIONIC_pthread_attr_t *attr, int state) {
+    if (state == PTHREAD_CREATE_DETACHED) {
+        attr->flags |= PTHREAD_ATTR_FLAG_DETACHED;
+    } else if (state == PTHREAD_CREATE_JOINABLE) {
+        attr->flags &= ~PTHREAD_ATTR_FLAG_DETACHED;
+    } else {
+        return EINVAL;
+    }
+    return 0;
+}
+
+int pthread_attr_getdetachstate_impl(const BIONIC_pthread_attr_t *attr, int *state) {
+    if (attr->flags & PTHREAD_ATTR_FLAG_DETACHED) {
+        *state = PTHREAD_CREATE_DETACHED;
+    } else {
+        *state = PTHREAD_CREATE_JOINABLE;
+    }
+    return 0;
+}
+
+// --- Stack Size ---
+int pthread_attr_setstacksize_impl(BIONIC_pthread_attr_t *attr, size_t stacksize) {
+    attr->stack_size = stacksize;
+    return 0;
+}
+
+int pthread_attr_getstacksize_impl(const BIONIC_pthread_attr_t *attr, size_t *stacksize) {
+    *stacksize = attr->stack_size;
+    return 0;
+}
+
+// --- Stack Address & Size ---
+int pthread_attr_setstack_impl(BIONIC_pthread_attr_t *attr, void *stackaddr, size_t stacksize) {
+    attr->stack_base = stackaddr;
+    attr->stack_size = stacksize;
+    return 0;
+}
+
+int pthread_attr_getstack_impl(const BIONIC_pthread_attr_t *attr, void **stackaddr, size_t *stacksize) {
+    *stackaddr = attr->stack_base;
+    *stacksize = attr->stack_size;
+    return 0;
+}
+
+// --- Guard Size ---
+int pthread_attr_setguardsize_impl(BIONIC_pthread_attr_t *attr, size_t guardsize) {
+    attr->guard_size = guardsize;
+    return 0;
+}
+
+int pthread_attr_getguardsize_impl(const BIONIC_pthread_attr_t *attr, size_t *guardsize) {
+    *guardsize = attr->guard_size;
+    return 0;
+}
+
+// --- Scheduling Policy ---
+int pthread_attr_setschedpolicy_impl(BIONIC_pthread_attr_t *attr, int policy) {
+    attr->sched_policy = policy;
+    return 0;
+}
+
+int pthread_attr_getschedpolicy_impl(const BIONIC_pthread_attr_t *attr, int *policy) {
+    *policy = attr->sched_policy;
+    return 0;
+}
+
+// --- Scheduling Parameters (Priority) ---
+int pthread_attr_setschedparam_impl(BIONIC_pthread_attr_t *attr, const struct sched_param *param) {
+    attr->sched_priority = param->sched_priority;
+    return 0;
+}
+
+int pthread_attr_getschedparam_impl(const BIONIC_pthread_attr_t *attr, struct sched_param *param) {
+    param->sched_priority = attr->sched_priority;
+    return 0;
+}
+
+
+int pthread_attr_setstackaddr_impl(BIONIC_pthread_attr_t *attr, void *stackaddr) {
+    attr->stack_base = stackaddr;
+    return 0;
+}
+
+int pthread_attr_getstackaddr_impl(const BIONIC_pthread_attr_t *attr, void **stackaddr) {
+    *stackaddr = attr->stack_base;
+    return 0;
+}
+
+
+// /* Return the previously set address for the stack.  */
+// ABI_ATTR int pthread_attr_getstackaddr_impl (const BIONIC_pthread_attr_t *attr, void **stackaddr)
+// {
+//     size_t size;
+//     return pthread_attr_getstack_impl(attr, stackaddr, &size);
+// }
+
+// /* Set the starting address of the stack of the thread to be created.
+//    Depending on whether the stack grows up or down the value must either
+//    be higher or lower than all the address in the memory block.  The
+//    minimal size of the block must be PTHREAD_STACK_MIN.  */
+// ABI_ATTR int pthread_attr_setstackaddr_impl (BIONIC_pthread_attr_t *attr, void *stackaddr)
+// {
+//     size_t size;
+//     pthread_attr_getstacksize(attr, &size); /* lets assume stack size didnt change... */
+//     return pthread_attr_setstack(attr, stackaddr, size);
+// }
