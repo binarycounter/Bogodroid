@@ -165,6 +165,11 @@ extern ABI_ATTR int pthread_attr_setschedpolicy_impl(BIONIC_pthread_attr_t *attr
 extern ABI_ATTR int pthread_attr_getschedpolicy_impl(const BIONIC_pthread_attr_t *attr, int *policy);
 extern ABI_ATTR int pthread_create_impl(pthread_t *thread, const BIONIC_pthread_attr_t *bionic_attr,void *(*entry)(void *), void *arg);
 
+struct BIONIC__pthread_cleanup_t;
+typedef void (*BIONIC__pthread_cleanup_func_t)(void*);
+extern "C" ABI_ATTR void __pthread_cleanup_push_impl(BIONIC__pthread_cleanup_t* c, BIONIC__pthread_cleanup_func_t routine, void* arg);
+extern "C" ABI_ATTR void __pthread_cleanup_pop_impl(BIONIC__pthread_cleanup_t* c, int execute);
+
 struct BIONIC_sem_t;
 extern ABI_ATTR int sem_init_impl(BIONIC_sem_t *sem, int pshared, unsigned int value);
 extern ABI_ATTR int sem_destroy_impl(BIONIC_sem_t *sem);

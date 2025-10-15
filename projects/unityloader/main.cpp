@@ -9,6 +9,7 @@ toml::table config;
 
 #include "io_util.h"
 #include "javastubs/binding.h"
+#include "monocompat/monobridge.h"
 #include "platform.h"
 #include "so_util.h"
 #include <baron/baron.h>
@@ -89,6 +90,8 @@ int main(int argc, char* argv[])
     // sdl_initialize_gles();
     InitJNIBinding(&vm);
 
+    int module_count = 0;
+
     printf("Loading libc++\n");
     so_module lcpp = {};
     uintptr_t addr_lcpp = 0x3100000000;
@@ -97,7 +100,7 @@ int main(int argc, char* argv[])
         printf("No libhelp found\n");
     }
 
-    loaded_modules[0] = &lcpp;
+    loaded_modules[module_count++] = &lcpp;
 
     printf("Loading libmain\n");
     so_module lmain = {};
@@ -107,22 +110,32 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    loaded_modules[1] = &lmain;
+    loaded_modules[module_count++] = &lmain;
 
     printf("Loading libil2cpp\n");
     so_module lil2cpp = {};
     uintptr_t addr_lil2cpp = 0x3600000000;
     const char* path_lil2cpp = "lib/arm64-v8a/libil2cpp.so";
     if (!load_so_from_file(&lil2cpp, path_lil2cpp, addr_lil2cpp)) {
-        printf("il2cpp not found, trying mono\n");
+        printf("il2cpp not found, trying libmono\n");
         const char* path_mono = "lib/arm64-v8a/libmonobdwgc-2.0.so";
         if (!load_so_from_file(&lil2cpp, path_mono, addr_lil2cpp)) {
             return 1;
         }
+        printf("Loading libMonoPosixHelper.so\n");
+        so_module lposix = {};
+        uintptr_t addr_lposix = 0x3700000000;
+        const char* path_lposix = "lib/arm64-v8a/libMonoPosixHelper.so";
+        if (!load_so_from_file(&lposix, path_lposix, addr_lposix)) {
+            return 1;
+        }
+        loaded_modules[module_count++] = &lposix;
+
         so_dynamic_libraries[4] = symtable_monobridge;
         so_dynamic_libraries[5] = NULL;
+        monobridge_init(&lil2cpp);
     }
-    loaded_modules[2] = &lil2cpp;
+    loaded_modules[module_count++] = &lil2cpp;
 
     printf("Loading libunity\n");
     so_module lunity = {};
@@ -131,8 +144,7 @@ int main(int argc, char* argv[])
     if (!load_so_from_file(&lunity, path_lunity, addr_lunity)) {
         return 1;
     }
-
-    loaded_modules[3] = &lunity;
+    loaded_modules[module_count++] = &lunity;
 
     printf("Loading libburst\n");
     so_module lburst = {};
@@ -150,9 +162,9 @@ int main(int argc, char* argv[])
         printf("No libhelp found\n");
     }
 
-    loaded_modules[4] = &lhelpers;
+    loaded_modules[module_count++] = &lhelpers;
 
-    loaded_modules[5] = &lburst;
+    loaded_modules[module_count++] = &lburst;
 
     printf("calling JNI_OnLoad from libmain.so\n");
     auto mainJNI_OnLoad = (jint (*)(JavaVM* vm, void* reserved))(so_symbol(&lmain, "JNI_OnLoad"));

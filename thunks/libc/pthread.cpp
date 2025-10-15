@@ -462,3 +462,37 @@ int pthread_attr_getstackaddr_impl(const BIONIC_pthread_attr_t *attr, void **sta
 //     pthread_attr_getstacksize(attr, &size); /* lets assume stack size didnt change... */
 //     return pthread_attr_setstack(attr, stackaddr, size);
 // }
+
+
+typedef void (*BIONIC__pthread_cleanup_func_t)(void*);
+// Define a structure similar to Bionic's internal cleanup handler
+struct BIONIC__pthread_cleanup_t {
+    BIONIC__pthread_cleanup_func_t __cleanup_routine;
+    void* __cleanup_arg;
+    BIONIC__pthread_cleanup_t* __cleanup_prev;
+};
+
+
+// Use thread-local storage to maintain a separate cleanup stack for each thread
+static thread_local BIONIC__pthread_cleanup_t* __cleanup_stack = nullptr;
+
+extern "C" {
+
+    void __pthread_cleanup_push_impl(BIONIC__pthread_cleanup_t* c, BIONIC__pthread_cleanup_func_t routine, void* arg) {
+        c->__cleanup_routine = routine;
+        c->__cleanup_arg = arg;
+        c->__cleanup_prev = __cleanup_stack;
+        __cleanup_stack = c;
+    }
+
+    void __pthread_cleanup_pop_impl(BIONIC__pthread_cleanup_t* c, int execute) {
+        // The 'c' argument is used by Bionic's implementation to manage the stack frame.
+        // In our shim, we can rely on our thread-local stack.
+        // We might assert(c == __cleanup_stack) here for robustness.
+        __cleanup_stack = c->__cleanup_prev;
+        if (execute) {
+            c->__cleanup_routine(c->__cleanup_arg);
+        }
+    }
+
+}
