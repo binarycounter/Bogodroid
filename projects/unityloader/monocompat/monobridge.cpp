@@ -24,10 +24,14 @@ static void (*mono_gc_wbarrier_set_field)(void*, void*, void*) = NULL;
 static void (*mono_unity_install_unitytls_interface)(void*) = NULL;
 static void (*mono_set_find_plugin_callback)(void*) = NULL;
 static void* (*mono_domain_assembly_open)(void*, const char*) = NULL;
+
 static void* (*mono_assembly_get_image)(void*) = NULL;
 static void* (*mono_assembly_get_name)(void*) = NULL;
 static char* (*mono_stringify_assembly_name)(void*) = NULL;
+
 static void* (*mono_image_get_assembly)(void*) = NULL;
+static int (*mono_image_get_table_rows)(void*, int) = NULL;
+
 static void* (*mono_class_from_name)(void*, const char*, const char*) = NULL;
 static void* (*mono_class_get_methods)(void*, void*) = NULL;
 static const char* (*mono_class_get_name)(void*) = NULL;
@@ -35,6 +39,7 @@ static void* (*mono_class_get_image)(void*) = NULL;
 static void* (*mono_class_get_parent)(void*) = NULL;
 static void* (*mono_class_get_nested_types)(void*, void*) = NULL;
 static void* (*mono_class_get_field_from_name)(void*, const char*) = NULL;
+static void* (*mono_class_from_mono_type)(void*) = NULL;
 static int32_t (*mono_class_is_subclass_of)(void*, void*, int32_t) = NULL;
 static int32_t (*mono_unity_class_is_abstract)(void*) = NULL;
 static int32_t (*mono_class_is_generic)(void*) = NULL;
@@ -42,19 +47,39 @@ static int32_t (*mono_class_is_inflated)(void*) = NULL;
 static void (*mono_class_set_userdata)(void*, void*) = NULL;
 static void* (*mono_class_get_nesting_type)(void*) = NULL;
 static const char* (*mono_class_get_namespace)(void*) = NULL;
+
 static const char* (*mono_method_get_name)(void*) = NULL;
 static int32_t (*unity_mono_method_is_inflated)(void*) = NULL;
 static int32_t (*unity_mono_method_is_generic)(void*) = NULL;
 static void* (*mono_method_signature)(void*) = NULL;
+
 static uint32_t (*mono_signature_get_param_count)(void*) = NULL;
+static void* (*mono_signature_get_params)(void*, void*) = NULL;
 static int32_t (*mono_signature_is_instance)(void*) = NULL;
+static void* (*mono_signature_get_return_type)(void*) = NULL;
 static uint32_t (*mono_field_get_offset)(void*) = NULL;
+
+static int32_t (*mono_type_is_byref)(void*) = NULL;
+
+static void* (*mono_object_get_class)(void*) = NULL;
+
 static void* (*mono_runtime_invoke)(void*, void*, void*, void*) = NULL;
 static void* (*mono_get_corlib)() = NULL;
+
 static void* (*mono_array_class_get)(void*, uint32_t) = NULL;
 static void* (*mono_array_new)(void*, void*, uintptr_t) = NULL;
-static void* (*mono_string_new_len)(void*, const char* , unsigned int) = NULL;
+static uintptr_t (*mono_array_length)(void*) = NULL;
+
+static void* (*mono_string_new_len)(void*, const char*, unsigned int) = NULL;
+
 static uint32_t (*mono_gchandle_new)(void*, bool) = NULL;
+static void (*mono_gchandle_free)(uint32_t) = NULL;
+
+static void* (*mono_custom_attrs_from_class)(void*) = NULL;
+static int32_t (*mono_custom_attrs_has_attr)(void*, void*) = NULL;
+static void* (*mono_custom_attrs_get_attr)(void*, void*) = NULL;
+static void* (*mono_custom_attrs_construct)(void*) = NULL;
+static void (*mono_custom_attrs_free)(void*) = NULL;
 // static void (*mono_set_config_dir)(const char*) = NULL;
 // static void (*mono_unity_set_data_dir)(const char*) = NULL;
 static void* (*mono_jit_init)(const char*) = NULL;
@@ -68,7 +93,8 @@ void monobridge_init(so_module* mod)
     mono_assembly_get_image = (void* (*)(void*))so_symbol(mod, "mono_assembly_get_image");
     mono_assembly_get_name = (void* (*)(void*))so_symbol(mod, "mono_assembly_get_name");
     mono_stringify_assembly_name = (char* (*)(void*))so_symbol(mod, "mono_stringify_assembly_name");
-    mono_image_get_assembly = (void*(*)(void*))so_symbol(mod, "mono_image_get_assembly");
+    mono_image_get_assembly = (void* (*)(void*))so_symbol(mod, "mono_image_get_assembly");
+    mono_image_get_table_rows = (int (*)(void*, int))so_symbol(mod, "mono_image_get_table_rows");
     mono_set_dirs = (void (*)(const char*, const char*))so_symbol(mod, "mono_set_dirs");
     mono_class_get_userdata_offset = (int (*)())so_symbol(mod, "mono_class_get_userdata_offset");
     mono_domain_get = (void* (*)())so_symbol(mod, "mono_domain_get");
@@ -84,6 +110,7 @@ void monobridge_init(so_module* mod)
     mono_class_get_parent = (void* (*)(void*))so_symbol(mod, "mono_class_get_parent");
     mono_class_get_nested_types = (void* (*)(void*, void*))so_symbol(mod, "mono_class_get_nested_types");
     mono_class_get_field_from_name = (void* (*)(void*, const char*))so_symbol(mod, "mono_class_get_field_from_name");
+    mono_class_from_mono_type = (void* (*)(void*))so_symbol(mod, "mono_class_from_mono_type");
     mono_class_is_subclass_of = (int32_t (*)(void*, void*, int32_t))so_symbol(mod, "mono_class_is_subclass_of");
     mono_unity_class_is_abstract = (int32_t (*)(void*))so_symbol(mod, "mono_unity_class_is_abstract");
     mono_class_is_generic = (int32_t (*)(void*))so_symbol(mod, "mono_class_is_generic");
@@ -96,14 +123,25 @@ void monobridge_init(so_module* mod)
     unity_mono_method_is_generic = (int32_t (*)(void*))so_symbol(mod, "unity_mono_method_is_generic");
     mono_method_signature = (void* (*)(void*))so_symbol(mod, "mono_method_signature");
     mono_signature_get_param_count = (uint32_t (*)(void*))so_symbol(mod, "mono_signature_get_param_count");
+    mono_signature_get_params = (void* (*)(void*, void*))so_symbol(mod, "mono_signature_get_params");
     mono_signature_is_instance = (int32_t (*)(void*))so_symbol(mod, "mono_signature_is_instance");
+    mono_signature_get_return_type = (void* (*)(void*))so_symbol(mod, "mono_signature_get_return_type");
     mono_field_get_offset = (uint32_t (*)(void*))so_symbol(mod, "mono_field_get_offset");
+    mono_type_is_byref = (int32_t (*)(void*))so_symbol(mod, "mono_type_is_byref");
+    mono_object_get_class = (void* (*)(void*))so_symbol(mod, "mono_object_get_class");
     mono_runtime_invoke = (void* (*)(void*, void*, void*, void*))so_symbol(mod, "mono_runtime_invoke");
     mono_get_corlib = (void* (*)())so_symbol(mod, "mono_get_corlib");
     mono_array_class_get = (void* (*)(void*, uint32_t))so_symbol(mod, "mono_array_class_get");
     mono_array_new = (void* (*)(void*, void*, uintptr_t))so_symbol(mod, "mono_array_new");
-    mono_string_new_len = (void*(*)(void*, const char*, unsigned int))so_symbol(mod, "mono_string_new_len");
+    mono_array_length = (uintptr_t (*)(void*))so_symbol(mod, "mono_array_length");
+    mono_string_new_len = (void* (*)(void*, const char*, unsigned int))so_symbol(mod, "mono_string_new_len");
     mono_gchandle_new = (uint32_t (*)(void*, bool))so_symbol(mod, "mono_gchandle_new");
+    mono_gchandle_free = (void (*)(uint32_t))so_symbol(mod, "mono_gchandle_free");
+    mono_custom_attrs_from_class = (void* (*)(void*))so_symbol(mod, "mono_custom_attrs_from_class");
+    mono_custom_attrs_has_attr = (int32_t (*)(void*, void*))so_symbol(mod, "mono_custom_attrs_has_attr");
+    mono_custom_attrs_get_attr = (void* (*)(void*, void*))so_symbol(mod, "mono_custom_attrs_get_attr");
+    mono_custom_attrs_construct = (void* (*)(void*))so_symbol(mod, "mono_custom_attrs_construct");
+    mono_custom_attrs_free = (void (*)(void*))so_symbol(mod, "mono_custom_attrs_free");
 
     // mono_set_config_dir = (void (*)(const char*))so_symbol(mod, "mono_set_config_dir");
     // mono_unity_set_data_dir = (void (*)(const char*))so_symbol(mod, "mono_unity_set_data_dir");
@@ -213,10 +251,10 @@ void* il2cpp_array_class_get_impl(void* klass, uint32_t rank)
     return mono_array_class_get(klass, rank);
 }
 
-void il2cpp_array_length_impl()
+uint32_t il2cpp_array_length_impl(void* array)
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_array_length");
-    exit(-1);
+    verbose("Monobridge", "Bridged call: il2cpp_array_length");
+    return (uint32_t)mono_array_length(array);
 }
 
 void il2cpp_array_get_byte_length_impl()
@@ -294,13 +332,13 @@ void il2cpp_class_is_assignable_from_impl()
 bool il2cpp_class_is_subclass_of_impl(void* klass, void* klass2, bool check_interfaces)
 {
     verbose("Monobridge", "Bridged call: il2cpp_class_is_subclass_of");
-    return (bool)mono_class_is_subclass_of(klass,klass2,(int32_t)check_interfaces);
+    return (bool)mono_class_is_subclass_of(klass, klass2, (int32_t)check_interfaces);
 }
 
-void il2cpp_class_has_parent_impl()
+bool il2cpp_class_has_parent_impl(void* klass, void* klass2)
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_class_has_parent");
-    exit(-1);
+    verbose("Monobridge", "Bridged call: il2cpp_class_has_parent");
+    return (bool)mono_class_is_subclass_of(klass, klass2, (int32_t)false);
 }
 
 void il2cpp_class_from_il2cpp_type_impl()
@@ -465,10 +503,10 @@ void il2cpp_class_array_element_size_impl()
     exit(-1);
 }
 
-void il2cpp_class_from_type_impl()
+void* il2cpp_class_from_type_impl(void* type)
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_class_from_type");
-    exit(-1);
+    verbose("Monobridge", "Bridged call: il2cpp_class_from_type");
+    return mono_class_from_mono_type(type);
 }
 
 void il2cpp_class_get_type_impl()
@@ -483,10 +521,16 @@ void il2cpp_class_get_type_token_impl()
     exit(-2);
 }
 
-void il2cpp_class_has_attribute_impl()
+bool il2cpp_class_has_attribute_impl(void* klass, void* klass2)
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_class_has_attribute");
-    exit(-1);
+    verbose("Monobridge", "Bridged call: il2cpp_method_has_attribute");
+    auto attrs = mono_custom_attrs_from_class(klass);
+    if (attrs == NULL)
+        return false;
+
+    bool has_attr = (bool)mono_custom_attrs_has_attr(attrs, klass2);
+    mono_custom_attrs_free(attrs);
+    return has_attr;
 }
 
 void il2cpp_class_has_references_impl()
@@ -507,12 +551,12 @@ void* il2cpp_class_get_image_impl(void* klass)
     return mono_class_get_image(klass);
 }
 
-const char* il2cpp_class_get_assemblyname_impl(void *klass)
+const char* il2cpp_class_get_assemblyname_impl(void* klass)
 {
     verbose("Monobridge", "Bridged call: il2cpp_class_get_assemblyname");
-    auto image=mono_class_get_image(klass);
-    auto assembly=mono_image_get_assembly(image);
-    auto aname= mono_assembly_get_name(assembly);
+    auto image = mono_class_get_image(klass);
+    auto assembly = mono_image_get_assembly(image);
+    auto aname = mono_assembly_get_name(assembly);
     return mono_stringify_assembly_name(aname);
 }
 
@@ -849,10 +893,10 @@ void il2cpp_gchandle_get_target_impl()
     exit(-1);
 }
 
-void il2cpp_gchandle_free_impl()
+void il2cpp_gchandle_free_impl(uint32_t handle)
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_gchandle_free");
-    exit(-1);
+    verbose("Monobridge", "Bridged call: il2cpp_gchandle_free");
+    return mono_gchandle_free(handle);
 }
 
 void il2cpp_gchandle_foreach_get_target_impl()
@@ -921,10 +965,11 @@ void il2cpp_unity_liveness_free_struct_impl()
     exit(-1);
 }
 
-void il2cpp_method_get_return_type_impl()
+void* il2cpp_method_get_return_type_impl(void* method)
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_method_get_return_type");
-    exit(-1);
+    verbose("Monobridge", "Bridged call: il2cpp_method_get_return_type");
+    auto sig = mono_method_signature(method);
+    return mono_signature_get_return_type(sig);
 }
 
 void il2cpp_method_get_declaring_type_impl()
@@ -966,7 +1011,7 @@ int32_t il2cpp_method_is_inflated_impl(void* method)
 bool il2cpp_method_is_instance_impl(void* method)
 {
     verbose("Monobridge", "Bridged call: il2cpp_method_is_instance");
-    auto sig=mono_method_signature(method);
+    auto sig = mono_method_signature(method);
     return (bool)mono_signature_is_instance(sig);
 }
 
@@ -977,10 +1022,22 @@ uint32_t il2cpp_method_get_param_count_impl(void* method)
     return mono_signature_get_param_count(sig);
 }
 
-void il2cpp_method_get_param_impl()
+void* il2cpp_method_get_param_impl(void* method, uint32_t index)
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_method_get_param");
-    exit(-1);
+    verbose("Monobridge", "Birdged call: il2cpp_method_get_param");
+
+    if (index < 0)
+        return NULL;
+
+    auto sig = mono_method_signature(method);
+    void* iter = NULL;
+    void* param = NULL;
+
+    for (int i = 0; i <= index; i++) {
+        param = mono_signature_get_params(sig, &iter);
+    }
+
+    return param;
 }
 
 void il2cpp_method_get_class_impl()
@@ -1078,10 +1135,10 @@ void il2cpp_property_get_parent_impl()
     exit(-1);
 }
 
-void il2cpp_object_get_class_impl()
+void* il2cpp_object_get_class_impl(void* obj)
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_object_get_class");
-    exit(-1);
+    verbose("Monobridge", "Bridged call: il2cpp_object_get_class");
+    return mono_object_get_class(obj);
 }
 
 void il2cpp_object_get_size_impl()
@@ -1213,7 +1270,7 @@ void il2cpp_string_new_impl()
 void* il2cpp_string_new_len_impl(const char* str, uint32_t length)
 {
     verbose("Monobridge", "Bridged call: il2cpp_string_new_len");
-    return mono_string_new_len(cached_domain,str,(unsigned int)length);
+    return mono_string_new_len(cached_domain, str, (unsigned int)length);
 }
 
 void il2cpp_string_new_utf16_impl()
@@ -1348,10 +1405,10 @@ void il2cpp_type_get_name_impl()
     exit(-1);
 }
 
-void il2cpp_type_is_byref_impl()
+bool il2cpp_type_is_byref_impl(void* type)
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_type_is_byref");
-    exit(-1);
+    verbose("Monobridge", "Bridged call: il2cpp_type_is_byref");
+    return (bool) mono_type_is_byref(type);
 }
 
 void il2cpp_type_get_attrs_impl()
@@ -1408,10 +1465,10 @@ void il2cpp_image_get_entry_point_impl()
     exit(-1);
 }
 
-void il2cpp_image_get_class_count_impl()
+size_t il2cpp_image_get_class_count_impl(void* image)
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_image_get_class_count");
-    exit(-1);
+    verbose("Monobridge", "Bridged call: il2cpp_image_get_class_count");
+    return (size_t)mono_image_get_table_rows(image, 2); // 2 is MONO_TABLE_TYPEDEF
 }
 
 void il2cpp_image_get_class_impl()
@@ -1472,10 +1529,10 @@ void il2cpp_unity_install_unitytls_interface_impl(void* interface)
     return mono_unity_install_unitytls_interface(interface);
 }
 
-void il2cpp_custom_attrs_from_class_impl()
+void* il2cpp_custom_attrs_from_class_impl(void* klass)
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_custom_attrs_from_class");
-    exit(-1);
+    verbose("Monobridge", "Bridged call: il2cpp_custom_attrs_from_class");
+    return mono_custom_attrs_from_class(klass);
 }
 
 void il2cpp_custom_attrs_from_method_impl()
@@ -1484,28 +1541,28 @@ void il2cpp_custom_attrs_from_method_impl()
     exit(-1);
 }
 
-void il2cpp_custom_attrs_get_attr_impl()
+void* il2cpp_custom_attrs_get_attr_impl(void* ainfo, void* klass)
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_custom_attrs_get_attr");
-    exit(-1);
+    verbose("Monobridge", "Bridged call: il2cpp_custom_attrs_get_attr");
+    return mono_custom_attrs_get_attr(ainfo, klass);
 }
 
-void il2cpp_custom_attrs_has_attr_impl()
+bool il2cpp_custom_attrs_has_attr_impl(void* ainfo, void* klass)
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_custom_attrs_has_attr");
-    exit(-1);
+    verbose("Monobridge", "Bridged call: il2cpp_custom_attrs_has_attr");
+    return (bool)mono_custom_attrs_has_attr(ainfo, klass);
 }
 
-void il2cpp_custom_attrs_construct_impl()
+void* il2cpp_custom_attrs_construct_impl(void* ainfo)
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_custom_attrs_construct");
-    exit(-1);
+    verbose("Monobridge", "Bridged call: il2cpp_custom_attrs_construct");
+    return mono_custom_attrs_construct(ainfo);
 }
 
-void il2cpp_custom_attrs_free_impl()
+void il2cpp_custom_attrs_free_impl(void* ainfo)
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_custom_attrs_free");
-    exit(-1);
+    verbose("Monobridge", "Bridged call: il2cpp_custom_attrs_free");
+    return mono_custom_attrs_free(ainfo);
 }
 
 void il2cpp_class_set_userdata_impl(void* klass, void* userdata)
