@@ -79,12 +79,16 @@ static uint16_t* (*mono_string_chars)(void*) = NULL;
 
 static uint32_t (*mono_gchandle_new)(void*, bool) = NULL;
 static void (*mono_gchandle_free)(uint32_t) = NULL;
+static void (*mono_gc_collect)(int) = NULL;
+static uint8_t (*mono_gc_is_incremental)() = NULL;
 
 static void* (*mono_custom_attrs_from_class)(void*) = NULL;
 static int32_t (*mono_custom_attrs_has_attr)(void*, void*) = NULL;
 static void* (*mono_custom_attrs_get_attr)(void*, void*) = NULL;
 static void* (*mono_custom_attrs_construct)(void*) = NULL;
 static void (*mono_custom_attrs_free)(void*) = NULL;
+
+static void* (*mono_reflection_type_get_type)(void*) = NULL;
 // static void (*mono_set_config_dir)(const char*) = NULL;
 // static void (*mono_unity_set_data_dir)(const char*) = NULL;
 static void* (*mono_jit_init)(const char*) = NULL;
@@ -147,11 +151,14 @@ void monobridge_init(so_module* mod)
     mono_string_chars = (uint16_t* (*)(void*))so_symbol(mod, "mono_string_chars");
     mono_gchandle_new = (uint32_t (*)(void*, bool))so_symbol(mod, "mono_gchandle_new");
     mono_gchandle_free = (void (*)(uint32_t))so_symbol(mod, "mono_gchandle_free");
+    mono_gc_collect = (void (*)(int))so_symbol(mod, "mono_gc_collect");
+    mono_gc_is_incremental = (uint8_t (*)())so_symbol(mod, "mono_gc_is_incremental");
     mono_custom_attrs_from_class = (void* (*)(void*))so_symbol(mod, "mono_custom_attrs_from_class");
     mono_custom_attrs_has_attr = (int32_t (*)(void*, void*))so_symbol(mod, "mono_custom_attrs_has_attr");
     mono_custom_attrs_get_attr = (void* (*)(void*, void*))so_symbol(mod, "mono_custom_attrs_get_attr");
     mono_custom_attrs_construct = (void* (*)(void*))so_symbol(mod, "mono_custom_attrs_construct");
     mono_custom_attrs_free = (void (*)(void*))so_symbol(mod, "mono_custom_attrs_free");
+    mono_reflection_type_get_type = (void* (*)(void*))so_symbol(mod, "mono_reflection_type_get_type");
 
     // mono_set_config_dir = (void (*)(const char*))so_symbol(mod, "mono_set_config_dir");
     // mono_unity_set_data_dir = (void (*)(const char*))so_symbol(mod, "mono_unity_set_data_dir");
@@ -164,7 +171,9 @@ void monobridge_init(so_module* mod)
 void* il2cpp_init_impl(const char* domain)
 {
     verbose("Monobridge", "Bridged call: il2cpp_init %s", domain);
-    return mono_jit_init(domain);
+    if(cached_domain == NULL) 
+        cached_domain = mono_jit_init(domain);
+    return cached_domain;
 }
 
 void il2cpp_init_utf16_impl()
@@ -234,6 +243,8 @@ void* il2cpp_get_corlib_impl()
 void il2cpp_add_internal_call_impl(const char* name, void* method)
 {
     verbose("Monobridge", "Bridged call: il2cpp_add_internal_call %s %p", name, method);
+    if(cached_domain == NULL)
+        il2cpp_init_impl("IL2CPP Root Domain");
     return mono_add_internal_call(name, method);
 }
 
@@ -363,10 +374,11 @@ void* il2cpp_class_from_name_impl(void* image, const char* namespaze, const char
     return mono_class_from_name(image, namespaze, name);
 }
 
-void il2cpp_class_from_system_type_impl()
+void* il2cpp_class_from_system_type_impl(void* reflectiontype)
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_class_from_system_type");
-    exit(-1);
+    verbose("Monobridge", "Bridged call: il2cpp_class_from_system_type");
+    auto type = mono_reflection_type_get_type(reflectiontype);
+    return mono_class_from_mono_type(type);
 }
 
 void il2cpp_class_get_element_class_impl()
@@ -759,10 +771,10 @@ void il2cpp_field_is_literal_impl()
     exit(-1);
 }
 
-void il2cpp_gc_collect_impl()
+void il2cpp_gc_collect_impl(int generations)
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_gc_collect");
-    exit(-1);
+    verbose("Monobridge", "Bridged call: il2cpp_gc_collect");
+    return mono_gc_collect(generations);
 }
 
 void il2cpp_gc_collect_a_little_impl()
@@ -813,10 +825,10 @@ void il2cpp_gc_set_max_time_slice_ns_impl()
     exit(-1);
 }
 
-void il2cpp_gc_is_incremental_impl()
+bool il2cpp_gc_is_incremental_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_gc_is_incremental");
-    exit(-1);
+    verbose("Monobridge", "Bridged call: il2cpp_gc_is_incremental");
+    return (bool) mono_gc_is_incremental();
 }
 
 void il2cpp_gc_get_used_size_impl()
