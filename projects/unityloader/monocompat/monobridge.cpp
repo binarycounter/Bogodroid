@@ -13,26 +13,48 @@ typedef enum {
 
 static void* cached_domain = NULL;
 
+// Initialization functions
+static void* (*mono_jit_init)(const char*) = NULL;
 static void (*mono_icall_init)() = NULL;
 static void (*mono_add_internal_call)(const char*, const void*) = NULL;
-static void (*mono_runtime_unhandled_exception_policy_set)(Il2CppRuntimeUnhandledExceptionPolicy policy) = NULL;
+static void (*mono_unity_install_unitytls_interface)(void*) = NULL;
+
+// Global getters and setters
 static void (*mono_set_dirs)(const char*, const char*) = NULL;
-static int (*mono_class_get_userdata_offset)() = NULL;
-static void* (*mono_domain_get)() = NULL;
+static void (*mono_set_find_plugin_callback)(void*) = NULL;
+static void* (*mono_get_corlib)() = NULL;
+// static void (*mono_set_config_dir)(const char*) = NULL;
+// static void (*mono_unity_set_data_dir)(const char*) = NULL;
+
+// Runtime functions
+static void (*mono_runtime_unhandled_exception_policy_set)(Il2CppRuntimeUnhandledExceptionPolicy policy) = NULL;
+static void* (*mono_runtime_invoke)(void*, void*, void*, void*) = NULL;
+
+// Garbage collection functions
+static uint32_t (*mono_gchandle_new)(void*, bool) = NULL;
+static void (*mono_gchandle_free)(uint32_t) = NULL;
+static void (*mono_gc_collect)(int) = NULL;
+static uint8_t (*mono_gc_is_incremental)() = NULL;
+static void (*mono_gc_wbarrier_set_field)(void*, void*, void*) = NULL;
+
+// Thread functions
 static void* (*mono_thread_current)() = NULL;
 static void* (*mono_thread_attach)(void*) = NULL;
-static void (*mono_gc_wbarrier_set_field)(void*, void*, void*) = NULL;
-static void (*mono_unity_install_unitytls_interface)(void*) = NULL;
-static void (*mono_set_find_plugin_callback)(void*) = NULL;
+
+// Domain functions
+static void* (*mono_domain_get)() = NULL;
 static void* (*mono_domain_assembly_open)(void*, const char*) = NULL;
 
+// Assembly functions
 static void* (*mono_assembly_get_image)(void*) = NULL;
 static void* (*mono_assembly_get_name)(void*) = NULL;
 static char* (*mono_stringify_assembly_name)(void*) = NULL;
 
+// Image functions
 static void* (*mono_image_get_assembly)(void*) = NULL;
 static int (*mono_image_get_table_rows)(void*, int) = NULL;
 
+// Class functions
 static void* (*mono_class_from_name)(void*, const char*, const char*) = NULL;
 static void* (*mono_class_get_methods)(void*, void*) = NULL;
 static const char* (*mono_class_get_name)(void*) = NULL;
@@ -49,70 +71,96 @@ static void (*mono_class_set_userdata)(void*, void*) = NULL;
 static void* (*mono_class_get_nesting_type)(void*) = NULL;
 static const char* (*mono_class_get_namespace)(void*) = NULL;
 static void* (*mono_class_get_fields)(void*, void*) = NULL;
+static int (*mono_class_get_userdata_offset)() = NULL;
 
-static const char* (*mono_method_get_name)(void*) = NULL;
-static int32_t (*unity_mono_method_is_inflated)(void*) = NULL;
-static int32_t (*unity_mono_method_is_generic)(void*) = NULL;
-static void* (*mono_method_signature)(void*) = NULL;
-
-static uint32_t (*mono_signature_get_param_count)(void*) = NULL;
-static void* (*mono_signature_get_params)(void*, void*) = NULL;
-static int32_t (*mono_signature_is_instance)(void*) = NULL;
-static void* (*mono_signature_get_return_type)(void*) = NULL;
-static uint32_t (*mono_field_get_offset)(void*) = NULL;
-
-static int32_t (*mono_type_is_byref)(void*) = NULL;
-
-static void* (*mono_object_get_class)(void*) = NULL;
-static void* (*mono_object_new)(void*, void*) = NULL;
-
-static void* (*mono_runtime_invoke)(void*, void*, void*, void*) = NULL;
-static void* (*mono_get_corlib)() = NULL;
-
-static void* (*mono_array_class_get)(void*, uint32_t) = NULL;
-static void* (*mono_array_new)(void*, void*, uintptr_t) = NULL;
-static uintptr_t (*mono_array_length)(void*) = NULL;
-
-static void* (*mono_string_new_len)(void*, const char*, unsigned int) = NULL;
-static int (*mono_string_length)(void*) = NULL;
-static uint16_t* (*mono_string_chars)(void*) = NULL;
-
-static uint32_t (*mono_gchandle_new)(void*, bool) = NULL;
-static void (*mono_gchandle_free)(uint32_t) = NULL;
-static void (*mono_gc_collect)(int) = NULL;
-static uint8_t (*mono_gc_is_incremental)() = NULL;
-
+// Custom attributes functions
 static void* (*mono_custom_attrs_from_class)(void*) = NULL;
 static int32_t (*mono_custom_attrs_has_attr)(void*, void*) = NULL;
 static void* (*mono_custom_attrs_get_attr)(void*, void*) = NULL;
 static void* (*mono_custom_attrs_construct)(void*) = NULL;
 static void (*mono_custom_attrs_free)(void*) = NULL;
 
+// Method functions
+static const char* (*mono_method_get_name)(void*) = NULL;
+static int32_t (*unity_mono_method_is_inflated)(void*) = NULL;
+static int32_t (*unity_mono_method_is_generic)(void*) = NULL;
+static void* (*mono_method_signature)(void*) = NULL;
+
+// Signature functions
+static uint32_t (*mono_signature_get_param_count)(void*) = NULL;
+static void* (*mono_signature_get_params)(void*, void*) = NULL;
+static int32_t (*mono_signature_is_instance)(void*) = NULL;
+static void* (*mono_signature_get_return_type)(void*) = NULL;
+
+// Field functions
+static uint32_t (*mono_field_get_offset)(void*) = NULL;
+
+// Type functions
+static int32_t (*mono_type_is_byref)(void*) = NULL;
+
+// Reflection functions
 static void* (*mono_reflection_type_get_type)(void*) = NULL;
-// static void (*mono_set_config_dir)(const char*) = NULL;
-// static void (*mono_unity_set_data_dir)(const char*) = NULL;
-static void* (*mono_jit_init)(const char*) = NULL;
+
+// Object functions
+static void* (*mono_object_get_class)(void*) = NULL;
+static void* (*mono_object_new)(void*, void*) = NULL;
+
+// Array functions
+static void* (*mono_array_class_get)(void*, uint32_t) = NULL;
+static void* (*mono_array_new)(void*, void*, uintptr_t) = NULL;
+static uintptr_t (*mono_array_length)(void*) = NULL;
+
+// String functions
+static void* (*mono_string_new_len)(void*, const char*, unsigned int) = NULL;
+static int (*mono_string_length)(void*) = NULL;
+static uint16_t* (*mono_string_chars)(void*) = NULL;
 
 void monobridge_init(so_module* mod)
 {
     verbose("Monobridge", "Initializing monobridge");
-    mono_add_internal_call = (void (*)(const char*, const void*))so_symbol(mod, "mono_add_internal_call");
+
+    // Initialization functions
+    mono_jit_init = (void* (*)(const char*))so_symbol(mod, "mono_jit_init");
     mono_icall_init = (void (*)())so_symbol(mod, "mono_icall_init");
+    mono_add_internal_call = (void (*)(const char*, const void*))so_symbol(mod, "mono_add_internal_call");
+    mono_unity_install_unitytls_interface = (void (*)(void*))so_symbol(mod, "mono_unity_install_unitytls_interface");
+
+    // Global getters and setters
+    mono_set_dirs = (void (*)(const char*, const char*))so_symbol(mod, "mono_set_dirs");
+    mono_set_find_plugin_callback = (void (*)(void*))so_symbol(mod, "mono_set_find_plugin_callback");
+    mono_get_corlib = (void* (*)())so_symbol(mod, "mono_get_corlib");
+    // mono_set_config_dir = (void (*)(const char*))so_symbol(mod, "mono_set_config_dir");
+    // mono_unity_set_data_dir = (void (*)(const char*))so_symbol(mod, "mono_unity_set_data_dir");
+
+    // Runtime functions
     mono_runtime_unhandled_exception_policy_set = (void (*)(Il2CppRuntimeUnhandledExceptionPolicy policy))so_symbol(mod, "mono_runtime_unhandled_exception_policy_set");
+    mono_runtime_invoke = (void* (*)(void*, void*, void*, void*))so_symbol(mod, "mono_runtime_invoke");
+
+    // Garbage collection functions
+    mono_gchandle_new = (uint32_t (*)(void*, bool))so_symbol(mod, "mono_gchandle_new");
+    mono_gchandle_free = (void (*)(uint32_t))so_symbol(mod, "mono_gchandle_free");
+    mono_gc_collect = (void (*)(int))so_symbol(mod, "mono_gc_collect");
+    mono_gc_is_incremental = (uint8_t (*)())so_symbol(mod, "mono_gc_is_incremental");
+    mono_gc_wbarrier_set_field = (void (*)(void*, void*, void*))so_symbol(mod, "mono_gc_wbarrier_set_field");
+
+    // Thread functions
+    mono_thread_current = (void* (*)())so_symbol(mod, "mono_thread_current");
+    mono_thread_attach = (void* (*)(void*))so_symbol(mod, "mono_thread_attach");
+
+    // Domain functions
+    mono_domain_get = (void* (*)())so_symbol(mod, "mono_domain_get");
+    mono_domain_assembly_open = (void* (*)(void*, const char*))so_symbol(mod, "mono_domain_assembly_open");
+
+    // Assembly functions
     mono_assembly_get_image = (void* (*)(void*))so_symbol(mod, "mono_assembly_get_image");
     mono_assembly_get_name = (void* (*)(void*))so_symbol(mod, "mono_assembly_get_name");
     mono_stringify_assembly_name = (char* (*)(void*))so_symbol(mod, "mono_stringify_assembly_name");
+
+    // Image functions
     mono_image_get_assembly = (void* (*)(void*))so_symbol(mod, "mono_image_get_assembly");
     mono_image_get_table_rows = (int (*)(void*, int))so_symbol(mod, "mono_image_get_table_rows");
-    mono_set_dirs = (void (*)(const char*, const char*))so_symbol(mod, "mono_set_dirs");
-    mono_class_get_userdata_offset = (int (*)())so_symbol(mod, "mono_class_get_userdata_offset");
-    mono_domain_get = (void* (*)())so_symbol(mod, "mono_domain_get");
-    mono_thread_current = (void* (*)())so_symbol(mod, "mono_thread_current");
-    mono_thread_attach = (void* (*)(void*))so_symbol(mod, "mono_thread_attach");
-    mono_gc_wbarrier_set_field = (void (*)(void*, void*, void*))so_symbol(mod, "mono_gc_wbarrier_set_field");
-    mono_unity_install_unitytls_interface = (void (*)(void*))so_symbol(mod, "mono_unity_install_unitytls_interface");
-    mono_set_find_plugin_callback = (void (*)(void*))so_symbol(mod, "mono_set_find_plugin_callback");
-    mono_domain_assembly_open = (void* (*)(void*, const char*))so_symbol(mod, "mono_domain_assembly_open");
+
+    // Class functions
     mono_class_from_name = (void* (*)(void*, const char*, const char*))so_symbol(mod, "mono_class_from_name");
     mono_class_get_methods = (void* (*)(void*, void*))so_symbol(mod, "mono_class_get_methods");
     mono_class_get_name = (const char* (*)(void*))so_symbol(mod, "mono_class_get_name");
@@ -129,41 +177,50 @@ void monobridge_init(so_module* mod)
     mono_class_get_nesting_type = (void* (*)(void*))so_symbol(mod, "mono_class_get_nesting_type");
     mono_class_get_namespace = (const char* (*)(void*))so_symbol(mod, "mono_class_get_namespace");
     mono_class_get_fields = (void* (*)(void*, void*))so_symbol(mod, "mono_class_get_fields");
-    mono_method_get_name = (const char* (*)(void*))so_symbol(mod, "mono_method_get_name");
-    unity_mono_method_is_inflated = (int32_t (*)(void*))so_symbol(mod, "unity_mono_method_is_inflated");
-    unity_mono_method_is_generic = (int32_t (*)(void*))so_symbol(mod, "unity_mono_method_is_generic");
-    mono_method_signature = (void* (*)(void*))so_symbol(mod, "mono_method_signature");
-    mono_signature_get_param_count = (uint32_t (*)(void*))so_symbol(mod, "mono_signature_get_param_count");
-    mono_signature_get_params = (void* (*)(void*, void*))so_symbol(mod, "mono_signature_get_params");
-    mono_signature_is_instance = (int32_t (*)(void*))so_symbol(mod, "mono_signature_is_instance");
-    mono_signature_get_return_type = (void* (*)(void*))so_symbol(mod, "mono_signature_get_return_type");
-    mono_field_get_offset = (uint32_t (*)(void*))so_symbol(mod, "mono_field_get_offset");
-    mono_type_is_byref = (int32_t (*)(void*))so_symbol(mod, "mono_type_is_byref");
-    mono_object_get_class = (void* (*)(void*))so_symbol(mod, "mono_object_get_class");
-    mono_object_new = (void* (*)(void*, void*))so_symbol(mod, "mono_object_new");
-    mono_runtime_invoke = (void* (*)(void*, void*, void*, void*))so_symbol(mod, "mono_runtime_invoke");
-    mono_get_corlib = (void* (*)())so_symbol(mod, "mono_get_corlib");
-    mono_array_class_get = (void* (*)(void*, uint32_t))so_symbol(mod, "mono_array_class_get");
-    mono_array_new = (void* (*)(void*, void*, uintptr_t))so_symbol(mod, "mono_array_new");
-    mono_array_length = (uintptr_t (*)(void*))so_symbol(mod, "mono_array_length");
-    mono_string_new_len = (void* (*)(void*, const char*, unsigned int))so_symbol(mod, "mono_string_new_len");
-    mono_string_length = (int (*)(void*))so_symbol(mod, "mono_string_length");
-    mono_string_chars = (uint16_t* (*)(void*))so_symbol(mod, "mono_string_chars");
-    mono_gchandle_new = (uint32_t (*)(void*, bool))so_symbol(mod, "mono_gchandle_new");
-    mono_gchandle_free = (void (*)(uint32_t))so_symbol(mod, "mono_gchandle_free");
-    mono_gc_collect = (void (*)(int))so_symbol(mod, "mono_gc_collect");
-    mono_gc_is_incremental = (uint8_t (*)())so_symbol(mod, "mono_gc_is_incremental");
+    mono_class_get_userdata_offset = (int (*)())so_symbol(mod, "mono_class_get_userdata_offset");
+
+    // Custom attributes functions
     mono_custom_attrs_from_class = (void* (*)(void*))so_symbol(mod, "mono_custom_attrs_from_class");
     mono_custom_attrs_has_attr = (int32_t (*)(void*, void*))so_symbol(mod, "mono_custom_attrs_has_attr");
     mono_custom_attrs_get_attr = (void* (*)(void*, void*))so_symbol(mod, "mono_custom_attrs_get_attr");
     mono_custom_attrs_construct = (void* (*)(void*))so_symbol(mod, "mono_custom_attrs_construct");
     mono_custom_attrs_free = (void (*)(void*))so_symbol(mod, "mono_custom_attrs_free");
+
+    // Method functions
+    mono_method_get_name = (const char* (*)(void*))so_symbol(mod, "mono_method_get_name");
+    unity_mono_method_is_inflated = (int32_t (*)(void*))so_symbol(mod, "unity_mono_method_is_inflated");
+    unity_mono_method_is_generic = (int32_t (*)(void*))so_symbol(mod, "unity_mono_method_is_generic");
+    mono_method_signature = (void* (*)(void*))so_symbol(mod, "mono_method_signature");
+
+    // Signature functions
+    mono_signature_get_param_count = (uint32_t (*)(void*))so_symbol(mod, "mono_signature_get_param_count");
+    mono_signature_get_params = (void* (*)(void*, void*))so_symbol(mod, "mono_signature_get_params");
+    mono_signature_is_instance = (int32_t (*)(void*))so_symbol(mod, "mono_signature_is_instance");
+    mono_signature_get_return_type = (void* (*)(void*))so_symbol(mod, "mono_signature_get_return_type");
+
+    // Field functions
+    mono_field_get_offset = (uint32_t (*)(void*))so_symbol(mod, "mono_field_get_offset");
+
+    // Type functions
+    mono_type_is_byref = (int32_t (*)(void*))so_symbol(mod, "mono_type_is_byref");
+
+    // Reflection functions
     mono_reflection_type_get_type = (void* (*)(void*))so_symbol(mod, "mono_reflection_type_get_type");
 
-    // mono_set_config_dir = (void (*)(const char*))so_symbol(mod, "mono_set_config_dir");
-    // mono_unity_set_data_dir = (void (*)(const char*))so_symbol(mod, "mono_unity_set_data_dir");
-    mono_jit_init = (void* (*)(const char*))so_symbol(mod, "mono_jit_init");
+    // Object functions
+    mono_object_get_class = (void* (*)(void*))so_symbol(mod, "mono_object_get_class");
+    mono_object_new = (void* (*)(void*, void*))so_symbol(mod, "mono_object_new");
 
+    // Array functions
+    mono_array_class_get = (void* (*)(void*, uint32_t))so_symbol(mod, "mono_array_class_get");
+    mono_array_new = (void* (*)(void*, void*, uintptr_t))so_symbol(mod, "mono_array_new");
+    mono_array_length = (uintptr_t (*)(void*))so_symbol(mod, "mono_array_length");
+
+    // String functions
+    mono_string_new_len = (void* (*)(void*, const char*, unsigned int))so_symbol(mod, "mono_string_new_len");
+    mono_string_length = (int (*)(void*))so_symbol(mod, "mono_string_length");
+    mono_string_chars = (uint16_t* (*)(void*))so_symbol(mod, "mono_string_chars");
+    
     mono_icall_init();
     mono_set_dirs("assets/bin/Data/Managed/", "assets/bin/Data/Managed");
 }
@@ -171,7 +228,7 @@ void monobridge_init(so_module* mod)
 void* il2cpp_init_impl(const char* domain)
 {
     verbose("Monobridge", "Bridged call: il2cpp_init %s", domain);
-    if(cached_domain == NULL) 
+    if (cached_domain == NULL)
         cached_domain = mono_jit_init(domain);
     return cached_domain;
 }
@@ -184,8 +241,7 @@ void il2cpp_init_utf16_impl()
 
 void il2cpp_shutdown_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_shutdown");
-    exit(-1);
+    verbose("Monobridge", "Stubbed call: il2cpp_shutdown"); // Does not exist in mono and we don't really care. Memory will be cleaned up by the OS anyway when exiting.
 }
 
 void il2cpp_set_config_dir_impl(const char* config_path)
@@ -208,7 +264,7 @@ void il2cpp_set_temp_dir_impl()
 
 void il2cpp_set_commandline_arguments_impl(int argc, const char* const argv[], const char* basedir)
 {
-    verbose("Monobridge", "Stubbed call: il2cpp_set_commandline_arguments");
+    verbose("Monobridge", "Stubbed call: il2cpp_set_commandline_arguments"); // Should probably be implemented at some point, some games use these
 }
 
 void il2cpp_set_commandline_arguments_utf16_impl()
@@ -225,7 +281,7 @@ void il2cpp_set_config_utf16_impl()
 
 void il2cpp_set_config_impl()
 {
-    verbose("Monobridge", "Stubbed call: il2cpp_set_config");
+    verbose("Monobridge", "Stubbed call: il2cpp_set_config"); // No config needed
 }
 
 void il2cpp_set_memory_callbacks_impl()
@@ -243,7 +299,7 @@ void* il2cpp_get_corlib_impl()
 void il2cpp_add_internal_call_impl(const char* name, void* method)
 {
     verbose("Monobridge", "Bridged call: il2cpp_add_internal_call %s %p", name, method);
-    if(cached_domain == NULL)
+    if (cached_domain == NULL)
         il2cpp_init_impl("IL2CPP Root Domain");
     return mono_add_internal_call(name, method);
 }
@@ -602,26 +658,26 @@ void il2cpp_class_get_static_field_data_impl()
 
 void il2cpp_class_get_bitmap_size_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_class_get_bitmap_size");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_class_get_bitmap_size");
+    exit(-2);
 }
 
 void il2cpp_class_get_bitmap_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_class_get_bitmap");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_class_get_bitmap");
+    exit(-2);
 }
 
 void il2cpp_stats_dump_to_file_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_stats_dump_to_file");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_stats_dump_to_file");
+    exit(-2);
 }
 
 void il2cpp_stats_get_value_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_stats_get_value");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_stats_get_value");
+    exit(-2);
 }
 
 void* il2cpp_domain_get_impl()
@@ -671,26 +727,26 @@ void il2cpp_get_exception_argument_null_impl()
 
 void il2cpp_format_exception_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_format_exception");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_format_exception");
+    exit(-2);
 }
 
 void il2cpp_format_stack_trace_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_format_stack_trace");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_format_stack_trace");
+    exit(-2);
 }
 
 void il2cpp_unhandled_exception_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_unhandled_exception");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_unhandled_exception");
+    exit(-2);
 }
 
 void il2cpp_native_stack_trace_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_native_stack_trace");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_native_stack_trace");
+    exit(-2);
 }
 
 void il2cpp_field_get_flags_impl()
@@ -725,14 +781,14 @@ void il2cpp_field_get_type_impl()
 
 void il2cpp_field_get_value_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_field_get_value");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_field_get_value");
+    exit(-2);
 }
 
 void il2cpp_field_get_value_object_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_field_get_value_object");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_field_get_value_object");
+    exit(-2);
 }
 
 void il2cpp_field_has_attribute_impl()
@@ -743,26 +799,26 @@ void il2cpp_field_has_attribute_impl()
 
 void il2cpp_field_set_value_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_field_set_value");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_field_set_value");
+    exit(-2);
 }
 
 void il2cpp_field_static_get_value_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_field_static_get_value");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_field_static_get_value");
+    exit(-2);
 }
 
 void il2cpp_field_static_set_value_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_field_static_set_value");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_field_static_set_value");
+    exit(-2);
 }
 
 void il2cpp_field_set_value_object_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_field_set_value_object");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_field_set_value_object");
+    exit(-2);
 }
 
 void il2cpp_field_is_literal_impl()
@@ -797,14 +853,14 @@ void il2cpp_gc_disable_impl()
 
 void il2cpp_gc_enable_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_gc_enable");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_gc_enable");
+    exit(-2);
 }
 
 void il2cpp_gc_is_disabled_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_gc_is_disabled");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_gc_is_disabled");
+    exit(-2);
 }
 
 void il2cpp_gc_set_mode_impl()
@@ -828,7 +884,7 @@ void il2cpp_gc_set_max_time_slice_ns_impl()
 bool il2cpp_gc_is_incremental_impl()
 {
     verbose("Monobridge", "Bridged call: il2cpp_gc_is_incremental");
-    return (bool) mono_gc_is_incremental();
+    return (bool)mono_gc_is_incremental();
 }
 
 void il2cpp_gc_get_used_size_impl()
@@ -887,14 +943,14 @@ void il2cpp_start_gc_world_impl()
 
 void il2cpp_gc_alloc_fixed_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_gc_alloc_fixed");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_gc_alloc_fixed");
+    exit(-2);
 }
 
 void il2cpp_gc_free_fixed_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_gc_free_fixed");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_gc_free_fixed");
+    exit(-2);
 }
 
 uint32_t il2cpp_gchandle_new_impl(void* obj, bool pinned)
@@ -996,8 +1052,8 @@ void* il2cpp_method_get_return_type_impl(void* method)
 
 void il2cpp_method_get_declaring_type_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_method_get_declaring_type");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_method_get_declaring_type");
+    exit(-2);
 }
 
 const char* il2cpp_method_get_name_impl(void* method)
@@ -1076,20 +1132,20 @@ void il2cpp_method_has_attribute_impl()
 
 void il2cpp_method_get_flags_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_method_get_flags");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_method_get_flags");
+    exit(-2);
 }
 
 void il2cpp_method_get_token_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_method_get_token");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_method_get_token");
+    exit(-2);
 }
 
 void il2cpp_method_get_param_name_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_method_get_param_name");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_method_get_param_name");
+    exit(-2);
 }
 
 void il2cpp_profiler_install_impl()
@@ -1129,32 +1185,32 @@ void il2cpp_profiler_install_thread_impl()
 
 void il2cpp_property_get_flags_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_property_get_flags");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_property_get_flags");
+    exit(-2);
 }
 
 void il2cpp_property_get_get_method_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_property_get_get_method");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_property_get_get_method");
+    exit(-2);
 }
 
 void il2cpp_property_get_set_method_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_property_get_set_method");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_property_get_set_method");
+    exit(-2);
 }
 
 void il2cpp_property_get_name_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_property_get_name");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_property_get_name");
+    exit(-2);
 }
 
 void il2cpp_property_get_parent_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_property_get_parent");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_property_get_parent");
+    exit(-2);
 }
 
 void* il2cpp_object_get_class_impl(void* obj)
@@ -1195,44 +1251,44 @@ void il2cpp_value_box_impl()
 
 void il2cpp_monitor_enter_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_monitor_enter");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_monitor_enter");
+    exit(-2);
 }
 
 void il2cpp_monitor_try_enter_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_monitor_try_enter");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_monitor_try_enter");
+    exit(-2);
 }
 
 void il2cpp_monitor_exit_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_monitor_exit");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_monitor_exit");
+    exit(-2);
 }
 
 void il2cpp_monitor_pulse_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_monitor_pulse");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_monitor_pulse");
+    exit(-2);
 }
 
 void il2cpp_monitor_pulse_all_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_monitor_pulse_all");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_monitor_pulse_all");
+    exit(-2);
 }
 
 void il2cpp_monitor_wait_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_monitor_wait");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_monitor_wait");
+    exit(-2);
 }
 
 void il2cpp_monitor_try_wait_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_monitor_try_wait");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_monitor_try_wait");
+    exit(-2);
 }
 
 void* il2cpp_runtime_invoke_impl(void* method, void* obj, void* params, void* exc)
@@ -1249,8 +1305,8 @@ void il2cpp_runtime_invoke_convert_args_impl()
 
 void il2cpp_runtime_class_init_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_runtime_class_init");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_runtime_class_init");
+    exit(-2);
 }
 
 void il2cpp_runtime_object_init_impl()
@@ -1259,7 +1315,7 @@ void il2cpp_runtime_object_init_impl()
     exit(-1);
 }
 
-void *il2cpp_thread_current_impl();
+void* il2cpp_thread_current_impl();
 void il2cpp_runtime_object_init_exception_impl(void* obj, void** exc)
 {
     verbose("Monobridge", "Birdged call: il2cpp_runtime_object_init_exception");
@@ -1285,17 +1341,13 @@ void il2cpp_runtime_object_init_exception_impl(void* obj, void** exc)
         iterator++;
     }
 
-    if(constructorToInvoke)
-    {
-        if(il2cpp_thread_current_impl() == nullptr)
-        {
+    if (constructorToInvoke) {
+        if (il2cpp_thread_current_impl() == nullptr) {
             verbose("Monobridge", "ERROR: il2cpp_runtime_object_init_exception - constructorToInvoke found but no thread current");
-        }
-        else
-        {
-            //The actual unity implementation does profiling here, lets skip it for now. TODO
-            auto result=mono_runtime_invoke(constructorToInvoke, obj, nullptr, exc);
-            mono_gc_wbarrier_set_field(nullptr,&result,result);
+        } else {
+            // The actual unity implementation does profiling here, lets skip it for now. TODO
+            auto result = mono_runtime_invoke(constructorToInvoke, obj, nullptr, exc);
+            mono_gc_wbarrier_set_field(nullptr, &result, result);
         }
     }
 }
@@ -1315,13 +1367,13 @@ int32_t il2cpp_string_length_impl(void* string)
 wchar_t* il2cpp_string_chars_impl(void* string)
 {
     verbose("Monobridge", "Bridged call: il2cpp_string_chars");
-    return (wchar_t*) mono_string_chars(string);
+    return (wchar_t*)mono_string_chars(string);
 }
 
 void il2cpp_string_new_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_string_new");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_string_new");
+    exit(-2);
 }
 
 void* il2cpp_string_new_len_impl(const char* str, uint32_t length)
@@ -1344,14 +1396,14 @@ void il2cpp_string_new_wrapper_impl()
 
 void il2cpp_string_intern_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_string_intern");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_string_intern");
+    exit(-2);
 }
 
 void il2cpp_string_is_interned_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_string_is_interned");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_string_is_interned");
+    exit(-2);
 }
 
 void* il2cpp_thread_current_impl()
@@ -1379,62 +1431,62 @@ void il2cpp_thread_detach_impl()
 
 void il2cpp_thread_get_all_attached_threads_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_thread_get_all_attached_threads");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_thread_get_all_attached_threads");
+    exit(-2);
 }
 
 void il2cpp_is_vm_thread_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_is_vm_thread");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_is_vm_thread");
+    exit(-2);
 }
 
 void il2cpp_current_thread_walk_frame_stack_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_current_thread_walk_frame_stack");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_current_thread_walk_frame_stack");
+    exit(-2);
 }
 
 void il2cpp_thread_walk_frame_stack_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_thread_walk_frame_stack");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_thread_walk_frame_stack");
+    exit(-2);
 }
 
 void il2cpp_current_thread_get_top_frame_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_current_thread_get_top_frame");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_current_thread_get_top_frame");
+    exit(-2);
 }
 
 void il2cpp_thread_get_top_frame_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_thread_get_top_frame");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_thread_get_top_frame");
+    exit(-2);
 }
 
 void il2cpp_current_thread_get_frame_at_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_current_thread_get_frame_at");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_current_thread_get_frame_at");
+    exit(-2);
 }
 
 void il2cpp_thread_get_frame_at_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_thread_get_frame_at");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_thread_get_frame_at");
+    exit(-2);
 }
 
 void il2cpp_current_thread_get_stack_depth_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_current_thread_get_stack_depth");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_current_thread_get_stack_depth");
+    exit(-2);
 }
 
 void il2cpp_thread_get_stack_depth_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_thread_get_stack_depth");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_thread_get_stack_depth");
+    exit(-2);
 }
 
 void il2cpp_override_stack_backtrace_impl()
@@ -1504,8 +1556,8 @@ void il2cpp_type_is_pointer_type_impl()
 
 void il2cpp_image_get_assembly_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_image_get_assembly");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_image_get_assembly");
+    exit(-2);
 }
 
 void il2cpp_image_get_name_impl()
@@ -1516,14 +1568,14 @@ void il2cpp_image_get_name_impl()
 
 void il2cpp_image_get_filename_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_image_get_filename");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_image_get_filename");
+    exit(-2);
 }
 
 void il2cpp_image_get_entry_point_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_image_get_entry_point");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_image_get_entry_point");
+    exit(-2);
 }
 
 size_t il2cpp_image_get_class_count_impl(void* image)
@@ -1540,14 +1592,14 @@ void il2cpp_image_get_class_impl()
 
 void il2cpp_capture_memory_snapshot_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_capture_memory_snapshot");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_capture_memory_snapshot");
+    exit(-2);
 }
 
 void il2cpp_free_captured_memory_snapshot_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_free_captured_memory_snapshot");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_free_captured_memory_snapshot");
+    exit(-2);
 }
 
 void il2cpp_set_find_plugin_callback_impl(void* callback)
@@ -1568,14 +1620,14 @@ void il2cpp_debugger_set_agent_options_impl()
 
 void il2cpp_is_debugger_attached_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_is_debugger_attached");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_is_debugger_attached");
+    exit(-2);
 }
 
 void il2cpp_register_debugger_agent_transport_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_register_debugger_agent_transport");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_register_debugger_agent_transport");
+    exit(-2);
 }
 
 void il2cpp_debug_get_method_info_impl()
@@ -1640,8 +1692,8 @@ int il2cpp_class_get_userdata_offset_impl()
 
 void il2cpp_set_default_thread_affinity_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_set_default_thread_affinity");
-    exit(-1);
+    verbose("Monobridge", "SHOULD BE UNUSED!!! Unimplemented call: il2cpp_set_default_thread_affinity");
+    exit(-2);
 }
 
 void il2cpp_unity_set_android_network_up_state_func_impl()
