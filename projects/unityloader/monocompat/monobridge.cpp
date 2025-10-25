@@ -23,6 +23,8 @@ static void (*mono_unity_install_unitytls_interface)(void*) = NULL;
 static void (*mono_set_dirs)(const char*, const char*) = NULL;
 static void (*mono_set_find_plugin_callback)(void*) = NULL;
 static void* (*mono_get_corlib)() = NULL;
+static void (*mono_config_parse)(const char*) = NULL;
+static void (*mono_dllmap_insert)(void*, const char*, const char*, const char*, const char*) = NULL;
 // static void (*mono_set_config_dir)(const char*) = NULL;
 // static void (*mono_unity_set_data_dir)(const char*) = NULL;
 
@@ -149,6 +151,8 @@ void monobridge_init(so_module* mod)
     mono_set_dirs = (void (*)(const char*, const char*))so_symbol(mod, "mono_set_dirs");
     mono_set_find_plugin_callback = (void (*)(void*))so_symbol(mod, "mono_set_find_plugin_callback");
     mono_get_corlib = (void* (*)())so_symbol(mod, "mono_get_corlib");
+    mono_config_parse = (void (*)(const char*))so_symbol(mod, "mono_config_parse");
+    mono_dllmap_insert = (void (*)(void*, const char*, const char*, const char*, const char*))so_symbol(mod, "mono_dllmap_insert");
     // mono_set_config_dir = (void (*)(const char*))so_symbol(mod, "mono_set_config_dir");
     // mono_unity_set_data_dir = (void (*)(const char*))so_symbol(mod, "mono_unity_set_data_dir");
 
@@ -264,6 +268,8 @@ void monobridge_init(so_module* mod)
 
     mono_icall_init();
     mono_set_dirs("assets/bin/Data/Managed/", "assets/bin/Data/Managed");
+    mono_config_parse(NULL);
+    mono_dllmap_insert(NULL, "System.Native", NULL, "libmono-native.so", NULL);
 }
 
 void* il2cpp_init_impl(const char* domain)

@@ -114,6 +114,8 @@ int main(int argc, char* argv[])
 
     printf("Loading libil2cpp\n");
     so_module lil2cpp = {};
+    so_module lposix = {};
+    so_module lmnative = {};
     uintptr_t addr_lil2cpp = 0x3600000000;
     const char* path_lil2cpp = "lib/arm64-v8a/libil2cpp.so";
     if (!load_so_from_file(&lil2cpp, path_lil2cpp, addr_lil2cpp)) {
@@ -123,13 +125,20 @@ int main(int argc, char* argv[])
             return 1;
         }
         printf("Loading libMonoPosixHelper.so\n");
-        so_module lposix = {};
         uintptr_t addr_lposix = 0x3700000000;
         const char* path_lposix = "lib/arm64-v8a/libMonoPosixHelper.so";
         if (!load_so_from_file(&lposix, path_lposix, addr_lposix)) {
             return 1;
         }
         loaded_modules[module_count++] = &lposix;
+
+        printf("Loading libmono-native.so\n");
+        uintptr_t addr_lmnative = 0x3750000000;
+        const char* path_lmnative = "lib/arm64-v8a/libmono-native.so";
+        if (!load_so_from_file(&lmnative, path_lmnative, addr_lmnative)) {
+            return 1;
+        }
+        loaded_modules[module_count++] = &lmnative;
 
         so_dynamic_libraries[4] = symtable_monobridge;
         so_dynamic_libraries[5] = NULL;
