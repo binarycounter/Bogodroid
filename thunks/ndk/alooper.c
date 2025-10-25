@@ -165,7 +165,7 @@ int ALooper_removeFd(ALooper* looper, int fd) {
 
 void ALooper_wake(ALooper* looper) {
     uint64_t value = 1;
-    write(looper->wake_fd, &value, sizeof(value));
+    (void)! write(looper->wake_fd, &value, sizeof(value));
 }
 
 static int process_events(ALooper* looper, int timeout_ms,
@@ -179,7 +179,7 @@ static int process_events(ALooper* looper, int timeout_ms,
     for (int i = 0; i < num_events; i++) {
         if (events[i].data.fd == looper->wake_fd) {
             uint64_t value;
-            read(looper->wake_fd, &value, sizeof(value));
+            (void)! read(looper->wake_fd, &value, sizeof(value));
             return ALOOPER_POLL_WAKE;
         }
     }

@@ -831,7 +831,7 @@ NO_THUNK("close", (uintptr_t)&close_impl),
 NO_THUNK("prctl", (uintptr_t)&prctl_impl),
 
 NO_THUNK("dl_iterate_phdr", (uintptr_t)&dl_iterate_phdr_impl),
-//THUNK_DIRECT(dl_iterate_phdr),
+NO_THUNK("__assert", (uintptr_t)&__assert_impl),
 
 
 THUNK_DIRECT(fcntl),
@@ -846,7 +846,6 @@ THUNK_DIRECT(cosf),
 
 
 THUNK_DIRECT(_Exit),
-THUNK_DIRECT(__assert),
 THUNK_DIRECT(__cmsg_nxthdr),
 THUNK_DIRECT(__libc_current_sigrtmax),
 THUNK_DIRECT(__libc_current_sigrtmin),
@@ -1635,6 +1634,7 @@ THUNK_SPECIFIC("log10f",  C_FUNCS::log10f),
 THUNK_SPECIFIC("atan2",  C_FUNCS::atan2),
 THUNK_SPECIFIC("log",  C_FUNCS::log),
 THUNK_SPECIFIC("sqrtf",  C_FUNCS::sqrtf),
+THUNK_SPECIFIC("sqrt",  C_FUNCS::sqrt),
 THUNK_SPECIFIC("acos",   C_FUNCS::acos),
 THUNK_SPECIFIC("modff",  C_FUNCS::modff),
 THUNK_SPECIFIC("llabs", C_FUNCS::llabs),

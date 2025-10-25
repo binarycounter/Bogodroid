@@ -79,7 +79,7 @@ AAsset* AAssetManager_open(AAssetManager* mgr, const char* filename, int mode) {
         FILE* f = fopen(full_path, "rb");
         if(f) {
             asset->buffer = malloc(asset->length);
-            fread(asset->buffer, 1, asset->length, f);
+            (void)! fread(asset->buffer, 1, asset->length, f);
             fclose(f);
         }
     }

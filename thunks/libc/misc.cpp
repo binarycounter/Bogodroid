@@ -4,6 +4,7 @@
 #include <dlfcn.h>
 
 #include "platform.h"
+#include "logging.h"
 #include "so_util.h"
 #include <dirent.h>
 #include <errno.h>
@@ -92,7 +93,7 @@ extern "C" long syscall_impl(long number,
     }
 
     {
-        printf("UNIMPLEMENTED SYSCALL %ld\n", number);
+        verbose("SYSCALLS","Unimplemented syscall: %ld\n", number);
     }
 
     return syscall(number, arg1, arg2, arg3, arg4, arg5, arg6);
@@ -231,10 +232,10 @@ extern "C" ABI_ATTR void syslog_impl(int priority, const char* format, ...)
     WARN_STUB;
 }
 
-ABI_ATTR int open_impl(const char *filename, int flags);
+ABI_ATTR int open_impl(const char *filename, int flags, mode_t mode);
 extern "C" ABI_ATTR int __open_2_impl(const char* pathname, int flags)
 {
-    return open_impl(pathname, flags);
+    return open_impl(pathname, flags, NULL);
 }
 char* clean_jar_path(const char* path);
 
@@ -464,4 +465,10 @@ extern "C" ABI_ATTR int dl_iterate_phdr_impl(
     }
     DLPI_LOG("dl_iterate_phdr_impl end");
     return ret; // 0 if all callbacks returned 0, or the callback's nonzero value
+}
+
+
+extern "C" ABI_ATTR void __assert_impl(const char *expression, const char *file, int line) {
+    fprintf(stderr, "Guest assertion failed: %s, file %s, line %d\n", expression, file, line);
+    abort();
 }

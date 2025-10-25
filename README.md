@@ -2,7 +2,7 @@
 
 This is an experimental project attempting to create a wrapper environment around native libraries from ARM Android Apps, with the intent of running the libraries (or entire apps and games) on ARM Linux (armhf and arm64) handhelds. The current focus is on supporting the Unity game engine.
 
-The project is heavily based on [JohnnyOnFlame/droidports](https://github.com/JohnnyonFlame/gmloader-next) and [ChristopherHX/libjnivm](https://github.com/ChristopherHX/libjnivm).
+The project is heavily based on [JohnnyOnFlame/gmloader-net](https://github.com/JohnnyonFlame/gmloader-next) and [ChristopherHX/libjnivm](https://github.com/ChristopherHX/libjnivm).
 
 The idea is to:
 - load the libraries, patch them at runtime
@@ -13,21 +13,75 @@ The idea is to:
 
 This project does not aim to be able to run your App out of the box. It is meant as a framework or starting point for your own porting project. For existing porting projects, check the "Ports in progress" table and the projects folder.
 
-# How to Build (Debug)
+# How to Build
 
-(This process will be simplified later on)
+### 1. Install Prerequisites
 
-1. Create a armhf chroot environment for building and testing. I recommend [this VM](https://forum.odroid.com/viewtopic.php?p=306185#p306185) image as a starting point.
-2. Inside your chroot, get the requisites `apt install cmake git libzip-dev`
-3. Clone the repository into your chroot
-4. Create the folder "./libjnivm/build" inside the repository and enter it
-5. `cmake .. -DJNIVM_ENABLE_TRACE=ON -DJNIVM_ENABLE_GC=ON -DJNIVM_ENABLE_DEBUG=ON -DJNIVM_USE_FAKE_JNI_CODEGEN=ON `
-6. `make -j$(nproc)`
-7. Create the folder "./build" inside the repository and enter it
-8. `cmake ..` 
-9. `make -j$(nproc)`
+First, ensure you have the necessary tools and libraries installed. On a Debian-based system (like Ubuntu), you can install them with the following command:
 
-By default this will build the `unityloader` project. If you want to build a different project, you can specify the project in step 8 with `cmake .. --build -DPROJ=<project name>`
+```bash
+sudo apt update
+sudo apt install cmake git libzip-dev libsdl2-dev
+```
+
+### 2. Clone the Repository
+
+Clone the project repository to your local machine using git:
+
+```bash
+git clone --recursive --branch neo https://github.com/binarycounter/Bogodroid/
+cd Bogodroid
+```
+
+### 3. Configure the Project with CMake
+
+Create a dedicated build directory. This keeps the main project folder clean.
+
+```bash
+mkdir build && cd build
+```
+
+Next, run CMake to configure the project and generate the build files. You must specify a build type.
+
+#### To create a **Release** build:
+
+```bash
+cmake .. -DCMAKE_BUILD_TYPE=Release
+```
+
+#### To create a **Debug** build (**SLOWER!** Debug symbols and extensive trace logging):
+
+```bash
+cmake .. -DCMAKE_BUILD_TYPE=Debug
+```
+
+#### To create a **Release with Debug Info** build (optimized, but includes debug symbols):
+
+```bash
+cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo
+```
+
+### 4. Compile the Code
+
+Once CMake has finished configuring, you can compile the project using `make`. The command below uses all available CPU cores to speed up the process.
+
+```bash
+make -j$(nproc)
+```
+
+The final executable will be located in the `build` directory.
+
+---
+
+### Building a Specific Project
+
+By default, the build system compiles the `unityloader` project. If you wish to build a different project, you can specify it during the CMake configuration step (step 3) by adding the `-DPROJ` flag.
+
+For example, to build a project named `hexagonloader` as a `Release` build, you would run:
+
+```bash
+cmake .. -DCMAKE_BUILD_TYPE=Release -DPROJ=hexagonloader
+```
 
 # Running
 
@@ -72,8 +126,8 @@ See `tools/unity_traces` for a trace of a minimal Unity game starting up
 
 | Name                              | Project Name  | Status        | Notes                                                                                                              |
 |-----------------------------------|---------------|---------------|--------------------------------------------------------------------------------------------------------------------|
-| Unity 2021.3f (aarch64 il2cpp)                      | unityloader   | Working POC  | Runs simple games. Graphics, audio and input work. Needs support for "Burst" |
-| Unity 2021.3f (aarch64 mono)                      | unityloader   | Not Booting  | There are ongoing efforts to support mono on aarch64 to possibly run some PC Unity titles |
+| Unity 2021.3f (aarch64 il2cpp)                      | unityloader   | Working  | Runs simple games. Graphics, audio and input work. |
+| Unity 2021.3f (aarch64 mono)                      | unityloader   | Working POC  | Simple demos and benchmarks are working, with low but reasonable performance. Implementation is still incomplete. |
 | Super Hexagon                     | hexagonloader | Not Booting   | Unchanged from Pre-NEO Bogodroid, needs complete rework  |
 | Limbo                             | limboloader   | Loading Screen| Unchanged from Pre-NEO Bogodroid, needs complete rework  |
 | Crazy Taxi Classic                | taxiloader    | Investigated  | Requires better file handling for loading the big OBB files, before it can be attempted.                           |

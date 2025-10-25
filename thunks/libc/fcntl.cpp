@@ -15,15 +15,15 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 
-ABI_ATTR int open_impl(const char *filename, int flags)
+ABI_ATTR int open_impl(const char *filename, int flags, mode_t mode)
 {
     verbose("NATIVE","Opening file %s",filename);
 
-    if (strcmp(filename,"/proc/cpuinfo") == 0)
-    {
-        filename = "../support_files/cpuinfo.txt";
-        verbose("NATIVE","Changing cpuinfo request to fake cpuinfo.txt");
-    }
+    // if (strcmp(filename,"/proc/cpuinfo") == 0)
+    // {
+    //     filename = "../support_files/cpuinfo.txt";
+    //     verbose("NATIVE","Changing cpuinfo request to fake cpuinfo.txt");
+    // }
 
     if (strcmp(filename,"/sys/devices/system/cpu/present") == 0)
     {
@@ -43,7 +43,7 @@ ABI_ATTR int open_impl(const char *filename, int flags)
     //     return -1;
     // }
 
-    int fd = open(filename, flags);
+    int fd = open(filename, flags, mode);
     verbose("NATIVE","Got file descriptor %d",fd);
     return fd;
 }

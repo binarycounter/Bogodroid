@@ -3,4 +3,5 @@ gamefiles/*
 !gamefiles/support_files
 !gamefiles/teapot/
 build/
+build_release/
 libjnivm/build/

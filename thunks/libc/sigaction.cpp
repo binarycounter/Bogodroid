@@ -2,6 +2,7 @@
 #include <string.h>
 #include <cstdio>
 #include "platform.h"
+#include "logging.h"
 
 //All of this is awful
 
@@ -27,21 +28,21 @@ struct bionic_sigaction {
 
 extern "C" ABI_ATTR int sigemptyset_impl(uint64_t *bionic_set)
 {
-    printf("empty set %p\n",bionic_set);
+    verbose("SIGNALS","empty set %p",bionic_set);
     *bionic_set = 0;
     return 0;
 }
 
 extern "C" ABI_ATTR int sigfillset_impl(uint64_t *bionic_set)
 {
-    printf("fill set %p\n",bionic_set);
+    verbose("SIGNALS","fill set %p",bionic_set);
     *bionic_set = 0xffffffffffffffff;
     return 0;
 }
 
 extern "C" ABI_ATTR int sigaction_impl(int signum, const bionic_sigaction *bionic_act, bionic_sigaction *bionic_oldact)
 {
-    printf("sigaction %d %p %p\n",signum,bionic_act,bionic_oldact);
+    verbose("SIGNALS","sigaction %d %p %p",signum,bionic_act,bionic_oldact);
     // return 0;
 
     struct sigaction glibc_act = {0};
@@ -50,8 +51,8 @@ extern "C" ABI_ATTR int sigaction_impl(int signum, const bionic_sigaction *bioni
 
     // Convert Bionic -> GLibc if act is specified
     if (bionic_act) {
-        printf("handler %p\n",bionic_act->bionic_sa_handler);
-        printf("handler address %p\n",bionic_act->bionic_sa_sigaction);
+        verbose("SIGNALS","handler %p",bionic_act->bionic_sa_handler);
+        verbose("SIGNALS","handler address %p",bionic_act->bionic_sa_sigaction);
         glibc_act.sa_flags = bionic_act->sa_flags;
 
         // Ugly hack to get pthread_stop_world.c in il2cpp working
@@ -74,6 +75,7 @@ extern "C" ABI_ATTR int sigaction_impl(int signum, const bionic_sigaction *bioni
         }
         glibc_act.sa_mask = mask;
 
+        #ifdef VERBOSE_LOG
         printf("----------------------\n");
         printf("sigaction struct:\n");
         printf("  sa_handler: %p\n", (void *)glibc_act.sa_handler);
@@ -95,6 +97,7 @@ extern "C" ABI_ATTR int sigaction_impl(int signum, const bionic_sigaction *bioni
         printf("  sa_flags: 0x%x\n", glibc_act.sa_flags);
         printf("  sa_restorer: %p\n", (void *)glibc_act.sa_restorer);
         printf("----------------------\n");
+        #endif 
     }
 
     // Call actual GLibc sigaction
