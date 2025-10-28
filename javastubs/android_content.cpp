@@ -118,7 +118,7 @@ jnivm::android::content::Context::getSystemService(std::shared_ptr<FakeJni::JStr
     if (*service == INPUT_SERVICE)
         return std::make_shared<jnivm::android::hardware::input::InputManager>();
 
-    verbose("JBRIDGE","App requesting unknown system service %s",service.get()->c_str());
+    verbose("JBRIDGE", "App requesting unknown system service %s", service.get()->c_str());
 
     return nullptr;
 }
@@ -150,13 +150,49 @@ jnivm::android::content::Context::getPackageCodePath()
 std::shared_ptr<jnivm::java::io::File>
 jnivm::android::content::Context::getExternalFilesDir(std::shared_ptr<FakeJni::JString> path)
 {
-    return std::make_shared<jnivm::java::io::File>(std::make_shared<FakeJni::JString>(config["paths"]["android_external_files"].value_or<std::string>("./path_not_defined_external")));
+    char* resolved_path = realpath(config["paths"]["android_external_files"].value_or<std::string>("./path_not_defined_external").c_str(), NULL);
+    if (resolved_path == NULL) {
+        return NULL;
+    }
+    size_t len = strlen(resolved_path);
+
+    // Check if it already has a trailing slash
+    if (len > 0 && resolved_path[len - 1] != '/') {
+        // Reallocate to add space for slash and null terminator
+        char* with_slash = (char*)realloc(resolved_path, len + 2);
+        if (with_slash == NULL) {
+            free(resolved_path);
+            return NULL;
+        }
+        with_slash[len] = '/';
+        with_slash[len + 1] = '\0';
+        return std::make_shared<jnivm::java::io::File>(std::make_shared<FakeJni::JString>(with_slash));
+    }
+    return NULL;
 }
 
 std::shared_ptr<jnivm::java::io::File>
 jnivm::android::content::Context::getFilesDir()
 {
-    return std::make_shared<jnivm::java::io::File>(std::make_shared<FakeJni::JString>(config["paths"]["android_files"].value_or<std::string>("./path_not_defined_files")));
+    char* resolved_path = realpath(config["paths"]["android_files"].value_or<std::string>("./path_not_defined").c_str(), NULL);
+    if (resolved_path == NULL) {
+        return NULL;
+    }
+    size_t len = strlen(resolved_path);
+
+    // Check if it already has a trailing slash
+    if (len > 0 && resolved_path[len - 1] != '/') {
+        // Reallocate to add space for slash and null terminator
+        char* with_slash = (char*)realloc(resolved_path, len + 2);
+        if (with_slash == NULL) {
+            free(resolved_path);
+            return NULL;
+        }
+        with_slash[len] = '/';
+        with_slash[len + 1] = '\0';
+        return std::make_shared<jnivm::java::io::File>(std::make_shared<FakeJni::JString>(with_slash));
+    }
+    return NULL;
 }
 
 std::shared_ptr<jnivm::java::io::File>
