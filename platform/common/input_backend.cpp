@@ -3,6 +3,11 @@
 #include "logging.h"
 #include <iostream>
 
+#include "toml++/toml.hpp"
+extern toml::table config;
+
+static bool input_enable_controller = false;
+
 InputBackend& InputBackend::instance()
 {
     static InputBackend backend;
@@ -11,7 +16,9 @@ InputBackend& InputBackend::instance()
 
 InputBackend::InputBackend()
 {
-    if (SDL_Init(SDL_INIT_EVENTS | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER) < 0) {
+    input_enable_controller = config["input"]["controller"].value_or<bool>(false);
+
+    if (SDL_Init(SDL_INIT_EVENTS) < 0) {
         std::cerr << "SDL Init failed: " << SDL_GetError() << std::endl;
         return;
     }
@@ -21,42 +28,52 @@ InputBackend::InputBackend()
     auto mouse = addDevice(INPUT_ID_MOUSE, "Bogodroid Mouse", 0x046D, 0xC077, jnivm::android::view::InputDevice::SOURCE_MOUSE);
     mouse->addMotionRange(jnivm::android::view::MotionEvent::AXIS_X, mouse->source, 0.0f, 640.0f, 0.0f, 1.0f); // Example screen width
     mouse->addMotionRange(jnivm::android::view::MotionEvent::AXIS_Y, mouse->source, 0.0f, 480.0f, 0.0f, 1.0f); // Example screen height
-    // mouse->addMotionRange(jnivm::android::view::MotionEvent::AXIS_VSCROLL, mouse->source, -1.0f, 1.0f, 0.0f, 0.0f);
-    auto xbox = addDevice(INPUT_ID_XBOX, "Microsoft X-Box 360 pad", 0x045E, 0x028E, jnivm::android::view::InputDevice::SOURCE_GAMEPAD | jnivm::android::view::InputDevice::SOURCE_JOYSTICK);
-    xbox->addMotionRange(jnivm::android::view::MotionEvent::AXIS_X, xbox->source, -1.0f, 1.0f, 0.12f, 0.0f);
-    xbox->addMotionRange(jnivm::android::view::MotionEvent::AXIS_Y, xbox->source, -1.0f, 1.0f, 0.12f, 0.0f);
-    xbox->addMotionRange(jnivm::android::view::MotionEvent::AXIS_RZ, xbox->source, -1.0f, 1.0f, 0.12f, 0.0f);
-    xbox->addMotionRange(jnivm::android::view::MotionEvent::AXIS_Z, xbox->source, -1.0f, 1.0f, 0.12f, 0.0f);
-    xbox->addMotionRange(jnivm::android::view::MotionEvent::AXIS_GAS, xbox->source, 0.0f, 1.0f, 0.0f, 0.0f);
-    xbox->addMotionRange(jnivm::android::view::MotionEvent::AXIS_BRAKE, xbox->source, 0.0f, 1.0f, 0.0f, 0.0f);
 
-    // Open game controllers
-    for (int i = 0; i < SDL_NumJoysticks(); ++i) {
-        if (SDL_IsGameController(i)) {
-            SDL_GameControllerOpen(i);
-            verbose("InputBackend", "Opened Game Controller: %s", SDL_GameControllerNameForIndex(i));
+    if (input_enable_controller) {
+        if (SDL_Init(SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER) < 0) {
+            std::cerr << "SDL Joystick Init failed: " << SDL_GetError() << std::endl;
+            return;
         }
+
+        // mouse->addMotionRange(jnivm::android::view::MotionEvent::AXIS_VSCROLL, mouse->source, -1.0f, 1.0f, 0.0f, 0.0f);
+        auto xbox = addDevice(INPUT_ID_XBOX, "Xbox 360 Controller", 0x045E, 0x028E, jnivm::android::view::InputDevice::SOURCE_GAMEPAD | jnivm::android::view::InputDevice::SOURCE_JOYSTICK);
+        xbox->addMotionRange(jnivm::android::view::MotionEvent::AXIS_X, xbox->source, -1.0f, 1.0f, 0.12f, 0.0f);
+        xbox->addMotionRange(jnivm::android::view::MotionEvent::AXIS_Y, xbox->source, -1.0f, 1.0f, 0.12f, 0.0f);
+        xbox->addMotionRange(jnivm::android::view::MotionEvent::AXIS_RZ, xbox->source, -1.0f, 1.0f, 0.12f, 0.0f);
+        xbox->addMotionRange(jnivm::android::view::MotionEvent::AXIS_Z, xbox->source, -1.0f, 1.0f, 0.12f, 0.0f);
+        xbox->addMotionRange(jnivm::android::view::MotionEvent::AXIS_GAS, xbox->source, 0.0f, 1.0f, 0.0f, 0.0f);
+        xbox->addMotionRange(jnivm::android::view::MotionEvent::AXIS_BRAKE, xbox->source, 0.0f, 1.0f, 0.0f, 0.0f);
+
+        // Open game controllers
+        for (int i = 0; i < SDL_NumJoysticks(); ++i) {
+            if (SDL_IsGameController(i)) {
+                SDL_GameControllerOpen(i);
+                verbose("InputBackend", "Opened Game Controller: %s", SDL_GameControllerNameForIndex(i));
+            }
+        }
+
+        mControllerAxisState[jnivm::android::view::MotionEvent::AXIS_X] = 0.0f;
+        mControllerAxisState[jnivm::android::view::MotionEvent::AXIS_Y] = 0.0f;
+        mControllerAxisState[jnivm::android::view::MotionEvent::AXIS_RZ] = 0.0f;
+        mControllerAxisState[jnivm::android::view::MotionEvent::AXIS_Z] = 0.0f;
+        mControllerAxisState[jnivm::android::view::MotionEvent::AXIS_BRAKE] = 0.0f;
+        mControllerAxisState[jnivm::android::view::MotionEvent::AXIS_GAS] = 0.0f;
+        // mControllerAxisState[jnivm::android::view::MotionEvent::AXIS_LTRIGGER] = 0.0f;
+        // mControllerAxisState[jnivm::android::view::MotionEvent::AXIS_RTRIGGER] = 0.0f;
     }
-
-    mControllerAxisState[jnivm::android::view::MotionEvent::AXIS_X] = 0.0f;
-    mControllerAxisState[jnivm::android::view::MotionEvent::AXIS_Y] = 0.0f;
-    mControllerAxisState[jnivm::android::view::MotionEvent::AXIS_RZ] = 0.0f;
-    mControllerAxisState[jnivm::android::view::MotionEvent::AXIS_Z] = 0.0f;
-    mControllerAxisState[jnivm::android::view::MotionEvent::AXIS_BRAKE] = 0.0f;
-    mControllerAxisState[jnivm::android::view::MotionEvent::AXIS_GAS] = 0.0f;
-    // mControllerAxisState[jnivm::android::view::MotionEvent::AXIS_LTRIGGER] = 0.0f;
-    // mControllerAxisState[jnivm::android::view::MotionEvent::AXIS_RTRIGGER] = 0.0f;
-
 }
 
 InputBackend::~InputBackend()
 {
-    // Clean up controllers
-    for (int i = 0; i < SDL_NumJoysticks(); ++i) {
-        if (SDL_IsGameController(i)) {
-            SDL_GameController* controller = SDL_GameControllerFromInstanceID(SDL_JoystickGetDeviceInstanceID(i));
-            if (controller) {
-                SDL_GameControllerClose(controller);
+    if (input_enable_controller) 
+    { 
+        // Clean up controllers
+        for (int i = 0; i < SDL_NumJoysticks(); ++i) {
+            if (SDL_IsGameController(i)) {
+                SDL_GameController* controller = SDL_GameControllerFromInstanceID(SDL_JoystickGetDeviceInstanceID(i));
+                if (controller) {
+                    SDL_GameControllerClose(controller);
+                }
             }
         }
     }
@@ -142,6 +159,8 @@ void InputBackend::runEventLoop()
             }
 
             case SDL_CONTROLLERAXISMOTION: {
+                if (!input_enable_controller)
+                    break;
                 if (!onMotion)
                     break;
 
@@ -187,7 +206,7 @@ void InputBackend::runEventLoop()
 
                 auto dev = devices[INPUT_ID_XBOX];
                 auto motionEvent = std::make_shared<jnivm::android::view::MotionEvent>(
-                    dev, jnivm::android::view::MotionEvent::ACTION_MOVE, 0.0f , 0.0f );
+                    dev, jnivm::android::view::MotionEvent::ACTION_MOVE, 0.0f, 0.0f);
 
                 motionEvent->axisValues = mControllerAxisState;
 
@@ -197,6 +216,8 @@ void InputBackend::runEventLoop()
 
             case SDL_CONTROLLERBUTTONDOWN:
             case SDL_CONTROLLERBUTTONUP: {
+                if (!input_enable_controller)
+                    break;
                 if (!onKey)
                     break;
                 // Controller buttons are sent as KeyEvents.
@@ -257,7 +278,7 @@ constexpr int InputBackend::toAndroidKeycode(SDL_ControllerButtonEvent sdl_butto
 
 constexpr int InputBackend::toAndroidKeycode(SDL_Scancode sdl_scancode)
 {
-switch (sdl_scancode) {
+    switch (sdl_scancode) {
     case SDL_SCANCODE_0:
         return jnivm::android::view::KeyEvent::KEYCODE_0;
     case SDL_SCANCODE_1:
