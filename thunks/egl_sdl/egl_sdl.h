@@ -2,3 +2,4 @@
 #include "glad_egl.h"
 
 void sdl_initialize_gles();
+void* getProc(const char* sym);

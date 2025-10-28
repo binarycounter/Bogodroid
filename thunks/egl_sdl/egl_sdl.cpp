@@ -9,6 +9,7 @@
 #include <chrono>
 #include <inttypes.h>
 #include <memory>
+#include <dlfcn.h>
 
 SDL_Window* sdl_win;
 SDL_GLContext sdl_ctx;
@@ -24,6 +25,22 @@ public:
     static std::shared_ptr<Choreographer> getInstance();
     void signalVSync();
 };
+}
+
+void* getProc(const char* sym)
+{
+    // First try SDL
+    void* proc=SDL_GL_GetProcAddress(sym);
+    if(proc)
+        return proc;
+    
+    // Some platforms don't expose EGL over SDL, so try dynamic linking
+    static void* libEGL_handle=dlopen("libEGL.so", RTLD_NOW);
+    proc=dlsym(libEGL_handle, sym);
+    if(proc)
+       return proc;
+
+    return NULL;
 }
 
 EGLBoolean eglSwapBuffers_impl(EGLDisplay display,
@@ -85,14 +102,21 @@ EGLDisplay eglGetDisplay_impl(NativeDisplayType native_display)
 
     sdl_ctx = SDL_GL_CreateContext(sdl_win);
     if (sdl_ctx == NULL) {
-        fatal_error("Failed to create OpenGL Context: %s\n", SDL_GetError());
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+        sdl_ctx = SDL_GL_CreateContext(sdl_win);
+        if (sdl_ctx == NULL) {
+            fatal_error("Failed to create OpenGL Context: %s\n", SDL_GetError());
+        }
         // return -1;
     }
     SDL_GL_MakeCurrent(sdl_win, sdl_ctx);
 
-    egl_display = ((EGLDisplay (*)())SDL_GL_GetProcAddress("eglGetCurrentDisplay"))();
-    egl_context = ((EGLDisplay (*)())SDL_GL_GetProcAddress("eglGetCurrentContext"))();
-    egl_surface = ((EGLSurface (*)(EGLint))SDL_GL_GetProcAddress("eglGetCurrentSurface"))(EGL_DRAW);
+    //
+
+    egl_display = ((EGLDisplay (*)())getProc("eglGetCurrentDisplay"))();
+    egl_context = ((EGLDisplay (*)())getProc("eglGetCurrentContext"))();
+    egl_surface = ((EGLSurface (*)(EGLint))getProc("eglGetCurrentSurface"))(EGL_DRAW);
 
     load_egl_funcs();
     load_gles2_funcs();
@@ -153,7 +177,7 @@ EGLBoolean eglInitialize_impl(EGLDisplay display, int* major, int* minor)
         eglGetDisplay_impl(NULL);
 
     int temp_major = 0, temp_minor = 0;
-    const char* versionString = ((const char* (*)(EGLDisplay, EGLint))SDL_GL_GetProcAddress("eglQueryString"))(display, EGL_VERSION);
+    const char* versionString = ((const char* (*)(EGLDisplay, EGLint))getProc("eglQueryString"))(display, EGL_VERSION);
     if (!versionString) {
         fatal_error("Failed to retrieve EGL version string.\n");
         return EGL_FALSE;
@@ -190,19 +214,19 @@ EGLBoolean eglChooseConfig_impl(EGLDisplay display, const EGLint* attribList, EG
     }
 
     EGLint configID;
-    if (!((EGLBoolean (*)(EGLDisplay, EGLContext, EGLint, EGLint*))SDL_GL_GetProcAddress("eglQueryContext"))(display, context, EGL_CONFIG_ID, &configID)) {
+    if (!((EGLBoolean (*)(EGLDisplay, EGLContext, EGLint, EGLint*))getProc("eglQueryContext"))(display, context, EGL_CONFIG_ID, &configID)) {
         fatal_error("Failed to query EGL_CONFIG_ID.\n");
         return EGL_FALSE;
     }
 
     EGLint totalConfigs;
-    if (!((EGLBoolean (*)(EGLDisplay, EGLConfig*, EGLint, EGLint*))SDL_GL_GetProcAddress("eglGetConfigs"))(display, NULL, 0, &totalConfigs)) {
+    if (!((EGLBoolean (*)(EGLDisplay, EGLConfig*, EGLint, EGLint*))getProc("eglGetConfigs"))(display, NULL, 0, &totalConfigs)) {
         fatal_error("Failed to get the number of EGLConfigs.\n");
         return EGL_FALSE;
     }
 
     EGLConfig* allConfigs = (EGLConfig*)malloc(totalConfigs * sizeof(EGLConfig));
-    if (!((EGLBoolean (*)(EGLDisplay, EGLConfig*, EGLint, EGLint*))SDL_GL_GetProcAddress("eglGetConfigs"))(display, allConfigs, totalConfigs, &totalConfigs)) {
+    if (!((EGLBoolean (*)(EGLDisplay, EGLConfig*, EGLint, EGLint*))getProc("eglGetConfigs"))(display, allConfigs, totalConfigs, &totalConfigs)) {
         fatal_error("Failed to retrieve EGLConfigs.\n");
         free(allConfigs);
         return EGL_FALSE;
@@ -212,7 +236,7 @@ EGLBoolean eglChooseConfig_impl(EGLDisplay display, const EGLint* attribList, EG
     EGLConfig matchingConfig = NULL;
     for (EGLint i = 0; i < totalConfigs; i++) {
         EGLint id;
-        if (((EGLBoolean (*)(EGLDisplay, EGLConfig, EGLint, EGLint*))SDL_GL_GetProcAddress("eglGetConfigAttrib"))(display, allConfigs[i], EGL_CONFIG_ID, &id) && id == configID) {
+        if (((EGLBoolean (*)(EGLDisplay, EGLConfig, EGLint, EGLint*))getProc("eglGetConfigAttrib"))(display, allConfigs[i], EGL_CONFIG_ID, &id) && id == configID) {
             matchingConfig = allConfigs[i];
             break;
         }
@@ -254,7 +278,7 @@ EGLBoolean eglQuerySurface_impl(EGLDisplay display, EGLSurface surface, EGLint a
         *value = 480;
     return EGL_TRUE;
 #endif
-    return ((EGLBoolean (*)(EGLDisplay, EGLSurface, EGLint, EGLint*))SDL_GL_GetProcAddress("eglQuerySurface"))(display, surface, attribute, value);
+    return ((EGLBoolean (*)(EGLDisplay, EGLSurface, EGLint, EGLint*))getProc("eglQuerySurface"))(display, surface, attribute, value);
 }
 
 EGLContext eglCreateContext_impl(EGLDisplay display,
@@ -286,7 +310,7 @@ EGLBoolean eglMakeCurrent_impl(EGLDisplay display,
     EGLSurface read,
     EGLContext context)
 {
-    static auto cached_eglMakeCurrent = (EGLBoolean (*)(EGLDisplay, EGLSurface, EGLSurface, EGLContext))SDL_GL_GetProcAddress("eglMakeCurrent");
+    static auto cached_eglMakeCurrent = (EGLBoolean (*)(EGLDisplay, EGLSurface, EGLSurface, EGLContext))getProc("eglMakeCurrent");
     verbose("EGL_SDL", "eglMakeCurrent\n");
     return cached_eglMakeCurrent(display, draw, read, context);
 }
@@ -301,14 +325,14 @@ EGLBoolean eglGetConfigAttrib_impl(EGLDisplay display,
     EGLint attribute,
     EGLint* value)
 {
-    return ((EGLBoolean (*)(EGLDisplay, EGLConfig, EGLint, EGLint*))SDL_GL_GetProcAddress("eglGetConfigAttrib"))(display, config, attribute, value);
+    return ((EGLBoolean (*)(EGLDisplay, EGLConfig, EGLint, EGLint*))getProc("eglGetConfigAttrib"))(display, config, attribute, value);
 }
 
 char const* eglQueryString_impl(EGLDisplay display,
     EGLint name)
 {
     verbose("EGL_SDL", "eglQueryString %d\n", name);
-    return ((char const* (*)(EGLDisplay, EGLint))SDL_GL_GetProcAddress("eglQueryString"))(display, name);
+    return ((char const* (*)(EGLDisplay, EGLint))getProc("eglQueryString"))(display, name);
 }
 
 EGLDisplay eglGetCurrentDisplay_impl()

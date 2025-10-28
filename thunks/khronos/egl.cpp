@@ -1,5 +1,6 @@
 #include <SDL2/SDL.h>
 #include "glad_egl.h"
+#include "egl_sdl.h"
 
 #include "platform.h"
 #include "so_util.h"
@@ -16,7 +17,7 @@ DynLibFunction symtable_egl[256] = {
     NULL
 };
 
-#define PTR_RESOLVE(x) resolve_thunked<&glad_##x>(#x, symtable_egl_index, symtable_egl, SDL_GL_GetProcAddress)
+#define PTR_RESOLVE(x) resolve_thunked<&glad_##x>(#x, symtable_egl_index, symtable_egl, getProc)
 ABI_ATTR __eglMustCastToProperFunctionPointerType EGLAPIENTRY eglGetProcAddress_impl (const char *procname)
 {
     //printf("(EGL) Attempting to resolve symbol %s =>",procname);
