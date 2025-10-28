@@ -45,6 +45,7 @@
 #elif defined(__arm__)
 #include "arm32_encodings.h"
 #endif
+#include <cstring>
 
 #define PATCH_SZ 0x10000 // 64 KB-ish arenas
 static so_module* head = NULL;
@@ -299,6 +300,9 @@ int so_load(so_module* mod, const char* filename, uintptr_t load_addr, void* so_
 
     // Register the loaded shared file for future reference, say, during the
     // resolution of dynamic symbol names.
+    mod->path = (char*)malloc(strlen(filename) + 1);
+    strcpy(mod->path, filename);
+
     mod->next = head;
     head = mod;
 
@@ -612,15 +616,27 @@ uintptr_t so_resolve_link(so_module* mod, const char* symbol)
         }
     }
 
-    // oh, look for it on the guest so files I guess
+    // Of module is passed, try to first find it in the bodule
     so_module* curr = head;
     while (curr) {
-        if (curr != mod) {
+        if (curr == mod) {
             uintptr_t link = so_symbol(curr, symbol);
             if (link)
                 return link;
         }
+        curr = curr->next;
+    }
 
+
+    if(mod != NULL && mod != (void*)0xDEAD)
+        return 0;
+
+    //General search
+    curr = head;
+    while (curr) {
+            uintptr_t link = so_symbol(curr, symbol);
+            if (link)
+                return link;
         curr = curr->next;
     }
 

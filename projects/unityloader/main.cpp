@@ -32,6 +32,8 @@ toml::table config;
 #include "input_backend.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_hints.h>
+#include <cstring>
+#include <dirent.h>
 
 thread_local int tls0[2 << 12] = {};
 int foo() { return tls0[0]++; }
@@ -56,7 +58,7 @@ DynLibFunction* so_dynamic_libraries[32] = {
     NULL
 };
 
-so_module* loaded_modules[32] = {
+so_module* loaded_modules[128] = {
     NULL
 };
 
@@ -73,6 +75,21 @@ Baron::Jvm vm;
 void gdb_break_here()
 {
 }
+
+/**
+ * @brief Checks if a string ends with a given suffix.
+ */
+static int ends_with(const char* str, const char* suffix)
+{
+    if (!str || !suffix)
+        return 0;
+    size_t len_str = strlen(str);
+    size_t len_suffix = strlen(suffix);
+    if (len_suffix > len_str)
+        return 0;
+    return strncmp(str + len_str - len_suffix, suffix, len_suffix) == 0;
+}
+
 #pragma GCC pop_options
 
 int main(int argc, char* argv[])
@@ -99,7 +116,6 @@ int main(int argc, char* argv[])
     if (!load_so_from_file(&lcpp, path_lcpp, addr_lcpp)) {
         printf("No libhelp found\n");
     }
-
     loaded_modules[module_count++] = &lcpp;
 
     printf("Loading libmain\n");
@@ -109,7 +125,6 @@ int main(int argc, char* argv[])
     if (!load_so_from_file(&lmain, path_lmain, addr_lmain)) {
         return 1;
     }
-
     loaded_modules[module_count++] = &lmain;
 
     printf("Loading libil2cpp\n");
@@ -162,6 +177,7 @@ int main(int argc, char* argv[])
     if (!load_so_from_file(&lburst, path_lburst, addr_lburst)) {
         printf("No libburst found\n");
     }
+    loaded_modules[module_count++] = &lburst;
 
     printf("Loading libUnityHelp\n");
     so_module lhelpers = {};
@@ -170,10 +186,36 @@ int main(int argc, char* argv[])
     if (!load_so_from_file(&lhelpers, path_lhelpers, addr_lhelpers)) {
         printf("No libhelp found\n");
     }
-
     loaded_modules[module_count++] = &lhelpers;
 
-    loaded_modules[module_count++] = &lburst;
+    const char* directory = "assets/bin/Data/Managed/";
+    DIR* d = opendir(directory);
+    if (!d) {
+        perror(directory);
+        return -1;
+    }
+
+    printf("Loading assemblies from: %s\n", directory);
+    struct dirent* entry;
+    while ((entry = readdir(d)) != NULL) {
+        if (!ends_with(entry->d_name, ".dll.so")) {
+            continue;
+        }
+
+        char path[512];
+        // Assumes the directory path has a trailing slash
+        snprintf(path, sizeof(path), "%s%s", directory, entry->d_name);
+
+        so_module* mod = (so_module*)calloc(1, sizeof(so_module));
+        if (mod && load_so_from_file(mod, path, (uintptr_t)NULL)) {
+            printf("  Loaded: %s\n", entry->d_name);
+            loaded_modules[module_count++] = mod;
+        } else {
+            fprintf(stderr, "  Failed to load: %s\n", path);
+            free(mod); // It is safe to call free() on a NULL pointer
+        }
+    }
+    closedir(d);
 
     printf("calling JNI_OnLoad from libmain.so\n");
     auto mainJNI_OnLoad = (jint (*)(JavaVM* vm, void* reserved))(so_symbol(&lmain, "JNI_OnLoad"));

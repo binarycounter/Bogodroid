@@ -98,6 +98,7 @@ typedef struct so_module {
   char *soname;
   char *shstr;
   char *dynstr;
+  char *path;
 } so_module;
 
 typedef struct {

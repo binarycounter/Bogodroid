@@ -113,12 +113,21 @@ extern "C" ABI_ATTR void* dlopen_impl(const char* filename, int flags)
     if (filename == NULL)
         return NULL;
 
-    // char *fn = strdup(filename);
-    // char *ex = basename(fn);
-    // int ret = strncmp(ex, "libEGL", 6) == 0 ||
-    //           strncmp(ex, "libGL", 5) == 0;
+    char resolved1[PATH_MAX];
+    char resolved2[PATH_MAX];
+    realpath(filename, resolved1);
 
-    // return (ret) ? (void*)0xDEAD : NULL;
+    so_module* head = so_get_head();
+    while(head)
+    {
+        printf("Checking %s\n", head->path);
+        realpath(head->path, resolved2);
+        if (strcmp(resolved1, resolved2) == 0)
+            return head;
+        head = head->next;
+    }
+
+
     return (void*)0xDEAD;
 }
 
@@ -143,7 +152,7 @@ extern "C" ABI_ATTR int dladdr_impl(const void* addr, Dl_info* info)
 
 extern "C" ABI_ATTR void* dlsym_impl(void* handle, const char* name)
 {
-    void* addr = (void*)so_resolve_link(NULL, name);
+    void* addr = (void*)so_resolve_link((so_module*)handle, name);
     return addr;
 }
 
