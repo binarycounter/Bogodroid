@@ -38,6 +38,7 @@ static void (*mono_gchandle_free)(uint32_t) = NULL;
 static void (*mono_gc_collect)(int) = NULL;
 static uint8_t (*mono_gc_is_incremental)() = NULL;
 static void (*mono_gc_wbarrier_set_field)(void*, void*, void*) = NULL;
+// static void (*mono_stop_gc_world)
 
 // Thread functions
 static void* (*mono_thread_current)() = NULL;
@@ -136,6 +137,17 @@ static void* (*mono_string_new_len)(void*, const char*, unsigned int) = NULL;
 static int (*mono_string_length)(void*) = NULL;
 static uint16_t* (*mono_string_chars)(void*) = NULL;
 static void* (*mono_string_new_wrapper)(const char*) = NULL;
+
+// Liveness functions
+static void* (*mono_unity_liveness_allocate_struct)(void*, unsigned int, void*, void*, void*, void*) = NULL;
+static void (*mono_unity_liveness_stop_gc_world)(void*) = NULL;
+static void (*mono_unity_liveness_finalize)(void*) = NULL;
+static void (*mono_unity_liveness_start_gc_world)(void*) = NULL;
+static void (*mono_unity_liveness_free_struct)(void*) = NULL;
+
+// Exception functions
+static void* (*mono_exception_from_name_msg)(void*, const char*, const char*, const char*) = NULL;
+static void (*mono_raise_exception)(void*) = NULL;
 
 void monobridge_init(so_module* mod)
 {
@@ -265,6 +277,18 @@ void monobridge_init(so_module* mod)
     mono_string_length = (int (*)(void*))so_symbol(mod, "mono_string_length");
     mono_string_chars = (uint16_t* (*)(void*))so_symbol(mod, "mono_string_chars");
     mono_string_new_wrapper = (void* (*)(const char*))so_symbol(mod, "mono_string_new_wrapper");
+
+    // Liveness functions
+    mono_unity_liveness_allocate_struct = (void* (*)(void*, unsigned int, void*, void*, void*, void*))so_symbol(mod, "mono_unity_liveness_allocate_struct");
+    mono_unity_liveness_stop_gc_world = (void (*)(void*))so_symbol(mod, "mono_unity_liveness_stop_gc_world");
+    mono_unity_liveness_finalize = (void (*)(void*))so_symbol(mod, "mono_unity_liveness_finalize");
+    mono_unity_liveness_start_gc_world = (void (*)(void*))so_symbol(mod, "mono_unity_liveness_start_gc_world");
+    mono_unity_liveness_free_struct = (void (*)(void*))so_symbol(mod, "mono_unity_liveness_free_struct");
+
+    // Exception functions
+    mono_exception_from_name_msg = (void* (*)(void*, const char*, const char*, const char*))so_symbol(mod, "mono_exception_from_name_msg");
+    mono_raise_exception = (void (*)(void*))so_symbol(mod, "mono_raise_exception");
+
 
     mono_icall_init();
     mono_set_dirs("assets/bin/Data/Managed/", "assets/bin/Data/Managed");
@@ -754,16 +778,16 @@ void il2cpp_domain_get_assemblies_impl()
     exit(-1);
 }
 
-void il2cpp_raise_exception_impl()
+void il2cpp_raise_exception_impl(void* exception)
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_raise_exception");
-    exit(-1);
+    verbose("Monobridge", "Bridged call: il2cpp_raise_exception");
+    return mono_raise_exception(exception);
 }
 
-void il2cpp_exception_from_name_msg_impl()
+void* il2cpp_exception_from_name_msg_impl(void* image, const char* name_space, const char* name, const char* message)
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_exception_from_name_msg");
-    exit(-1);
+    verbose("Monobridge", "Bridged call: il2cpp_exception_from_name_msg image=%p name_space=%s name=%s message=%s", image, name_space, name, message);
+    return mono_exception_from_name_msg(image, name_space, name, message);
 }
 
 void il2cpp_get_exception_argument_null_impl()
@@ -986,14 +1010,12 @@ void il2cpp_gc_foreach_heap_impl()
 
 void il2cpp_stop_gc_world_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_stop_gc_world");
-    exit(-1);
+    verbose("Monobridge", "Stubbed call: il2cpp_stop_gc_world");
 }
 
 void il2cpp_start_gc_world_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_start_gc_world");
-    exit(-1);
+    verbose("Monobridge", "Stubbed call: il2cpp_start_gc_world");
 }
 
 void il2cpp_gc_alloc_fixed_impl()
@@ -1068,34 +1090,30 @@ void il2cpp_allocation_granularity_impl()
     exit(-1);
 }
 
-void il2cpp_unity_liveness_allocate_struct_impl()
+void* il2cpp_unity_liveness_allocate_struct_impl(void* filter, int max_object_count, void* register_callback, void* userdata, void* reallocate_callback)
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_unity_liveness_allocate_struct");
-    exit(-1);
+    verbose("Monobridge", "Bridged call: il2cpp_unity_liveness_allocate_struct");
+    return NULL; //mono_unity_liveness_allocate_struct(filter, (unsigned int) max_object_count, register_callback, userdata,)
 }
 
 void il2cpp_unity_liveness_calculation_from_root_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_unity_liveness_calculation_from_root");
-    exit(-1);
+    verbose("Monobridge", "Stubbed call: il2cpp_unity_liveness_calculation_from_root");
 }
 
 void il2cpp_unity_liveness_calculation_from_statics_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_unity_liveness_calculation_from_statics");
-    exit(-1);
+    verbose("Monobridge", "Stubbed call: il2cpp_unity_liveness_calculation_from_statics");
 }
 
 void il2cpp_unity_liveness_finalize_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_unity_liveness_finalize");
-    exit(-1);
+    verbose("Monobridge", "Stubbed call: il2cpp_unity_liveness_finalize");
 }
 
 void il2cpp_unity_liveness_free_struct_impl()
 {
-    verbose("Monobridge", "Unimplemented call: il2cpp_unity_liveness_free_struct");
-    exit(-1);
+    verbose("Monobridge", "Stubbed call: il2cpp_unity_liveness_free_struct");
 }
 
 void* il2cpp_method_get_return_type_impl(void* method)

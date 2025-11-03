@@ -276,8 +276,10 @@ int main(int argc, char* argv[])
     auto ret2 = unityNRecreateGfxState.invoke(frame3.getJniEnv(), unityClass, 0, surface);
 
     auto unityNRestartACtivityIndicator = unityClass->getMethod("()V", "nativeRestartActivityIndicator");
+    if (unityNRestartACtivityIndicator) {
     printf("calling nativeRestartActivityIndicator from libunity.so\n");
     unityNRestartACtivityIndicator.invoke(frame3.getJniEnv(), unityClass);
+    }
 
     auto unityNSendSurfaceChangedEvent = unityClass->getMethod("()V", "nativeSendSurfaceChangedEvent");
     printf("calling nativeSendSurfaceChangedEvent from libunity.so\n");

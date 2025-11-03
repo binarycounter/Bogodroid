@@ -99,7 +99,10 @@ jnivm::android::content::Context::getApplicationInfo()
 
 std::shared_ptr<FakeJni::JObject>
 jnivm::android::content::Context::getSystemService(std::shared_ptr<FakeJni::JString> service)
-{
+{   
+    if (service == nullptr)
+        return nullptr;
+
     if (*service == LOCATION_SERVICE)
         return nullptr;
 
