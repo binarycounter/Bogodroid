@@ -1,5 +1,6 @@
 #include "baron/baron.h"
 #include "android.h"
+#include "playgames.h"
 #include "javac.h"
 #include "unity.h"
 #include "fakefmod.h"
@@ -10,6 +11,7 @@ void InitJNIBinding(FakeJni::Jvm *vm)
 
     InitJNIJavaClasses(vm);
     InitJNIAndroidClasses(vm);
+    InitJNIPlayGamesClasses(vm);
 
     // vm->registerClass<jnivm::java::util::NoSuchElementException>();
     // vm->registerClass<jnivm::com::unity3d::player::NativeLoader>();
