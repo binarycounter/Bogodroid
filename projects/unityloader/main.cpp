@@ -40,6 +40,16 @@ int foo() { return tls0[0]++; }
 
 using namespace FakeJni;
 
+// bool il2cpp_gc_is_incremental_stub()
+// {
+//     return false;
+// }
+// #include "thunk_gen.h"
+// DynLibFunction symtable_il2cppfake[] = {
+//     NO_THUNK("il2cpp_gc_is_incremental",(uintptr_t)&il2cpp_gc_is_incremental_stub),
+//     NULL
+// };
+
 extern DynLibFunction symtable_monobridge[];
 extern DynLibFunction symtable_libc[];
 extern DynLibFunction symtable_ndk[];
@@ -51,6 +61,7 @@ DynLibFunction* so_static_patches[32] = {
 };
 
 DynLibFunction* so_dynamic_libraries[32] = {
+    //symtable_il2cppfake,
     symtable_libc,
     symtable_ndk,
     symtable_egl_sdl,
@@ -108,6 +119,9 @@ int main(int argc, char* argv[])
     InitJNIBinding(&vm);
 
     int module_count = 0;
+
+    // There is a weird incompatibility with Unity's incremental GC. Luckily there's a commandline parameter to overwrite it.
+    putenv("GC_DISABLE_INCREMENTAL=1");
 
     printf("Loading libc++\n");
     so_module lcpp = {};
@@ -277,8 +291,8 @@ int main(int argc, char* argv[])
 
     auto unityNRestartACtivityIndicator = unityClass->getMethod("()V", "nativeRestartActivityIndicator");
     if (unityNRestartACtivityIndicator) {
-    printf("calling nativeRestartActivityIndicator from libunity.so\n");
-    unityNRestartACtivityIndicator.invoke(frame3.getJniEnv(), unityClass);
+        printf("calling nativeRestartActivityIndicator from libunity.so\n");
+        unityNRestartACtivityIndicator.invoke(frame3.getJniEnv(), unityClass);
     }
 
     auto unityNSendSurfaceChangedEvent = unityClass->getMethod("()V", "nativeSendSurfaceChangedEvent");
@@ -304,13 +318,13 @@ int main(int argc, char* argv[])
     while (1) {
         // printf(".");
         fflush(stdout);
-        auto start = std::chrono::steady_clock::now();
+        // auto start = std::chrono::steady_clock::now();
         auto ret4 = unityNRender.invoke(frame3.getJniEnv(), unityClass);
-        auto end = std::chrono::steady_clock::now();
-        auto elapsed = end - start;
-        if (elapsed < frame_duration) {
-            std::this_thread::sleep_for(frame_duration - elapsed);
-        }
+        // auto end = std::chrono::steady_clock::now();
+        // auto elapsed = end - start;
+        // if (elapsed < frame_duration) {
+        //     std::this_thread::sleep_for(frame_duration - elapsed);
+        // }
     }
 
     printf("Exit.\n");
