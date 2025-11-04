@@ -15,6 +15,12 @@ void HookObjectExtensions(FakeJni::Jvm* vm);
 namespace jnivm {
 namespace java {
     namespace lang {
+        namespace reflect {
+            class Constructor : public FakeJni::JObject {
+                public:
+                   DEFINE_CLASS_NAME("java/lang/reflect/Constructor")
+            };
+        }
 
         class Long : public FakeJni::JObject {
         public:

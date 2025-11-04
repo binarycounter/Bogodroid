@@ -265,6 +265,7 @@ int main(int argc, char* argv[])
     unityInitJni.invoke(frame2.getJniEnv(), unityClass, activity);
 
     auto unityActivity = std::make_shared<jnivm::com::unity3d::player::UnityPlayerActivity>();
+    jnivm::com::unity3d::player::UnityPlayer::currentActivity = unityActivity;
     auto& backend = InputBackend::instance();
 
     backend.setKeyCallback([unityActivity](std::shared_ptr<jnivm::android::view::KeyEvent> event) {

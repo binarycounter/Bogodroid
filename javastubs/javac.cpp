@@ -295,6 +295,9 @@ std::shared_ptr<FakeJni::JString> jnivm::java::util::Scanner::nextLine()
 
 // Descriptors
 
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::java::lang::reflect::Constructor) { FakeJni::Constructor<Constructor> {} },
+    END_NATIVE_DESCRIPTOR
+
 BEGIN_NATIVE_DESCRIPTOR(jnivm::java::lang::Long) { FakeJni::Constructor<Long, jlong> {} },
     { FakeJni::Function<&Long::longValue> {}, "longValue", FakeJni::JMethodID::PUBLIC },
     END_NATIVE_DESCRIPTOR
@@ -378,6 +381,7 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::java::lang::Long) { FakeJni::Constructor<Long, jl
     void InitJNIJavaClasses(FakeJni::Jvm* vm)
 {
     verbose("JBRIDGE", "Initializing Java JNI Classes");
+    vm->registerClass<jnivm::java::lang::reflect::Constructor>();
     vm->registerClass<jnivm::java::lang::Long>();
     vm->registerClass<jnivm::java::lang::Boolean>();
     vm->registerClass<jnivm::java::lang::ClassLoader>();
@@ -488,6 +492,12 @@ void HookClassExtensions(FakeJni::Jvm* vm)
     classClass->Hook(&frame.getJniEnv(), "forName", [vm](std::shared_ptr<FakeJni::JString> name, bool b, std::shared_ptr<jnivm::java::lang::ClassLoader> loader) {
         verbose("JBRIDGE", "Class forName %s", name.get()->c_str());
         return vm->findClass(name.get()->c_str());
+    });
+
+    // Class.getName
+    classClass->HookInstanceFunction(&frame.getJniEnv(), "getName", [](jnivm::ENV* env, jnivm::Object* self) -> std::shared_ptr<FakeJni::JString> {
+        verbose("JBRIDGE", "getName for Class %s", self->getClass().getName().c_str());
+        return std::make_shared<FakeJni::JString>(self->getClass().getName());
     });
 }
 
