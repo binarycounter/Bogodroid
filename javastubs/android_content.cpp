@@ -49,11 +49,25 @@ bool jnivm::android::content::SharedPreferences::contains(std::shared_ptr<FakeJn
 
 int jnivm::android::content::SharedPreferences::getInt(std::shared_ptr<FakeJni::JString> key, int def)
 {
+    verbose("JBRIDGE", "getInt(%s, %d)", key.get()->c_str(), def);
+    return def;
+}
+
+float jnivm::android::content::SharedPreferences::getFloat(std::shared_ptr<FakeJni::JString> key, float def)
+{
+    verbose("JBRIDGE", "getFloat(%s, %f)", key.get()->c_str(), def);
     return def;
 }
 
 std::shared_ptr<FakeJni::JString> jnivm::android::content::SharedPreferences::getString(std::shared_ptr<FakeJni::JString> key, std::shared_ptr<FakeJni::JString> def)
 {
+    if (key != nullptr) {
+        if (def != nullptr) {
+            verbose("JBRIDGE", "getString(%s, %s)", key.get()->c_str(), def.get()->c_str());
+        } else {
+            verbose("JBRIDGE", "getString(%s, null)", key.get()->c_str());
+        }
+    }
     return def;
 }
 
@@ -75,11 +89,13 @@ void jnivm::android::content::SharedPreferencesEditor::apply()
 
 std::shared_ptr<jnivm::android::content::SharedPreferencesEditor> jnivm::android::content::SharedPreferencesEditor::putInt(std::shared_ptr<FakeJni::JString> key, int val)
 {
+    verbose("JBRIDGE", "putInt(%s, %d)", key.get()->c_str(), val);
     return std::shared_ptr<SharedPreferencesEditor>(this);
 }
 
 std::shared_ptr<jnivm::android::content::SharedPreferencesEditor> jnivm::android::content::SharedPreferencesEditor::putString(std::shared_ptr<FakeJni::JString> key, std::shared_ptr<FakeJni::JString> val)
 {
+    verbose("JBRIDGE", "putString(%s, %s)", key.get()->c_str(), val.get()->c_str());
     return std::shared_ptr<SharedPreferencesEditor>(this);
 }
 
@@ -293,6 +309,7 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::pm::ActivityInfo) { FakeJni::Co
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::SharedPreferences) { FakeJni::Constructor<SharedPreferences> {} },
     { FakeJni::Function<&SharedPreferences::contains> {}, "contains", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&SharedPreferences::getInt> {}, "getInt", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&SharedPreferences::getFloat> {}, "getFloat", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&SharedPreferences::getString> {}, "getString", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&SharedPreferences::getAll> {}, "getAll", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&SharedPreferences::edit> {}, "edit", FakeJni::JMethodID::PUBLIC },

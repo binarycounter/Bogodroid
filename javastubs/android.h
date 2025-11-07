@@ -695,6 +695,7 @@ namespace android {
             DEFINE_CLASS_NAME("android/content/SharedPreferences")
             bool contains(std::shared_ptr<FakeJni::JString> key);
             int getInt(std::shared_ptr<FakeJni::JString> key, int def);
+            float getFloat(std::shared_ptr<FakeJni::JString> key, float def);
             std::shared_ptr<FakeJni::JString> getString(std::shared_ptr<FakeJni::JString> key, std::shared_ptr<FakeJni::JString> def);
             std::shared_ptr<jnivm::java::util::Map> getAll();
             std::shared_ptr<jnivm::android::content::SharedPreferencesEditor> edit();
