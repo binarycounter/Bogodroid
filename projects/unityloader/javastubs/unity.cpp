@@ -99,6 +99,8 @@ std::shared_ptr<jnivm::java::lang::reflect::Field> jnivm::com::unity3d::player::
 
 std::shared_ptr<FakeJni::JString> jnivm::com::unity3d::player::ReflectionHelper::getFieldSignature(std::shared_ptr<jnivm::java::lang::reflect::Field> field)
 {
+    if(field == nullptr)
+        return nullptr;
     return std::make_shared<FakeJni::JString>(field->type);
 }
 
@@ -108,7 +110,6 @@ std::shared_ptr<jnivm::Object> jnivm::com::unity3d::player::ReflectionHelper::ne
     return nullptr;
 }
 
-// static std::shared_ptr<jnivm::Object> createInvocationError(long nativeHandle, bool toggle);
 std::shared_ptr<jnivm::Object> jnivm::com::unity3d::player::ReflectionHelper::createInvocationError(long nativeHandle, bool toggle)
 {
     printf("[UNITYJNI] createInvocationError(%ld, %d)\n", nativeHandle, toggle);
