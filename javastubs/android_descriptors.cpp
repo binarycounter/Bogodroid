@@ -66,6 +66,7 @@ void InitJNIAndroidClasses(FakeJni::Jvm* vm)
     vm->registerClass<jnivm::android::content::SharedPreferencesEditor>();
     vm->registerClass<jnivm::android::content::Context>();
     vm->registerClass<jnivm::android::content::Intent>();
+    vm->registerClass<jnivm::android::content::ContentResolver>();
 
     // Content.pm
     vm->registerClass<jnivm::android::content::pm::ActivityInfo>();
@@ -80,4 +81,8 @@ void InitJNIAndroidClasses(FakeJni::Jvm* vm)
     // App
     vm->registerClass<jnivm::android::app::Activity>();
     vm->registerClass<jnivm::android::app::NativeActivity>();
+
+    // Provider
+    vm->registerClass<jnivm::android::provider::Settings>();
+    vm->registerClass<jnivm::android::provider::Settings::Secure>();
 }

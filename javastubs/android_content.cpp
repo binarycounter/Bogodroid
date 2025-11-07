@@ -115,7 +115,7 @@ jnivm::android::content::Context::getApplicationInfo()
 
 std::shared_ptr<FakeJni::JObject>
 jnivm::android::content::Context::getSystemService(std::shared_ptr<FakeJni::JString> service)
-{   
+{
     if (service == nullptr)
         return nullptr;
 
@@ -255,6 +255,11 @@ std::shared_ptr<jnivm::android::view::Window> jnivm::android::content::Context::
     return std::make_shared<jnivm::android::view::Window>();
 }
 
+std::shared_ptr<jnivm::android::content::ContentResolver> jnivm::android::content::Context::getContentResolver()
+{
+    return std::make_shared<jnivm::android::content::ContentResolver>();
+}
+
 ///// Intent
 
 std::shared_ptr<jnivm::android::os::Bundle>
@@ -315,6 +320,9 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::pm::ActivityInfo) { FakeJni::Co
     { FakeJni::Function<&SharedPreferences::edit> {}, "edit", FakeJni::JMethodID::PUBLIC },
     END_NATIVE_DESCRIPTOR
 
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::ContentResolver) { FakeJni::Constructor<ContentResolver> {} },
+    END_NATIVE_DESCRIPTOR
+
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::Context) { FakeJni::Constructor<Context> {} },
     { FakeJni::Field<&Context::LOCATION_SERVICE> {}, "LOCATION_SERVICE", FakeJni::JFieldID::STATIC },
     { FakeJni::Field<&Context::DISPLAY_SERVICE> {}, "DISPLAY_SERVICE", FakeJni::JFieldID::STATIC },
@@ -339,6 +347,7 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::pm::ActivityInfo) { FakeJni::Co
     { FakeJni::Function<&Context::checkCallingOrSelfPermission> {}, "checkCallingOrSelfPermission", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&Context::getResources> {}, "getResources", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&Context::getWindow> {}, "getWindow", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Context::getContentResolver> {}, "getContentResolver", FakeJni::JMethodID::PUBLIC },
     END_NATIVE_DESCRIPTOR
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::Intent) { FakeJni::Constructor<Intent> {} },

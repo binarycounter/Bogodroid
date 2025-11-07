@@ -79,6 +79,21 @@ std::shared_ptr<jnivm::android::view::View> jnivm::android::app::Activity::findV
     return std::make_shared<jnivm::android::view::SurfaceView>(); // Sure, lol
 }
 
+///// Settings$Secure
+
+std::shared_ptr<FakeJni::JString> jnivm::android::provider::Settings::Secure::getString(std::shared_ptr<jnivm::android::content::ContentResolver> resolver, std::shared_ptr<FakeJni::JString> key)
+{
+    if(key == nullptr)
+        return nullptr;
+
+    if(key.get()->asStdString() == ANDROID_ID)
+        return std::make_shared<FakeJni::JString>("B06015BADC0DE00F");
+
+    verbose("JBRIDGE","Secure.getString() called with unknown key: %s", key.get()->c_str());
+    return nullptr;
+}
+
+
 ///// Misc Descriptors
 
 BEGIN_NATIVE_DESCRIPTOR(jnivm::android::util::DisplayMetrics) { FakeJni::Constructor<DisplayMetrics> {} },
@@ -115,4 +130,12 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::util::DisplayMetrics) { FakeJni::Constru
     END_NATIVE_DESCRIPTOR
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::app::NativeActivity) { FakeJni::Constructor<NativeActivity> {} },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::provider::Settings) { FakeJni::Constructor<Settings> {} },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::provider::Settings::Secure) { FakeJni::Constructor<Secure> {} },
+    { FakeJni::Field<&Secure::ANDROID_ID> {}, "ANDROID_ID", FakeJni::JFieldID::STATIC },
+    { FakeJni::Function<&Secure::getString> {}, "getString", FakeJni::JMethodID::STATIC },
     END_NATIVE_DESCRIPTOR

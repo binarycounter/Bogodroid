@@ -470,7 +470,7 @@ namespace android {
         class BuildVersion : public FakeJni::JObject {
         public:
             DEFINE_CLASS_NAME("android/os/Build$VERSION");
-            inline static int SDK_INT = 24;
+            inline static int SDK_INT = 26;
             inline static FakeJni::JString RELEASE = (FakeJni::JString) "Oreo";
             inline static FakeJni::JString INCREMENTAL = (FakeJni::JString) "Bogodroid";
         };
@@ -701,6 +701,11 @@ namespace android {
             std::shared_ptr<jnivm::android::content::SharedPreferencesEditor> edit();
         };
 
+        class ContentResolver : public FakeJni::JObject {
+        public:
+            DEFINE_CLASS_NAME("android/content/ContentResolver")
+        };
+
         class Context : public FakeJni::JObject {
         public:
             DEFINE_CLASS_NAME("android/content/Context")
@@ -729,6 +734,7 @@ namespace android {
             int checkCallingOrSelfPermission(std::shared_ptr<FakeJni::JString> permission);
             std::shared_ptr<jnivm::android::content::res::Resources> getResources();
             std::shared_ptr<jnivm::android::view::Window> getWindow();
+            std::shared_ptr<ContentResolver> getContentResolver();
         };
 
         class Intent : public FakeJni::JObject {
@@ -763,7 +769,20 @@ namespace android {
         };
     }
 
+    namespace provider {
+        class Settings : public FakeJni::JObject {
+        public:
+            DEFINE_CLASS_NAME("android/provider/Settings")
+            class Secure : public FakeJni::JObject {
+            public:
+                DEFINE_CLASS_NAME("android/provider/Settings$Secure")
+                inline static FakeJni::JString ANDROID_ID = (FakeJni::JString) "android_id"; // B06015BADC0DE00F
+                static std::shared_ptr<FakeJni::JString> getString(std::shared_ptr<jnivm::android::content::ContentResolver> resolver, std::shared_ptr<FakeJni::JString> key);
+            };
+        };
+    }
 }
+
 }
 
 namespace jnivm::android::view {
