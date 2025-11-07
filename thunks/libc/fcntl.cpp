@@ -15,6 +15,89 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 
+char* clean_jar_path(const char* path) {
+    if (!path) return NULL;
+
+    const char* needles[] = {"jar:file:/!", "jar:file://!"};
+    size_t num_needles = sizeof(needles) / sizeof(needles[0]);
+
+    const char* src = path;
+    int prefix_at_start = 0;
+
+    // Check if jar prefix is at the start
+    for (size_t i = 0; i < num_needles; ++i) {
+        size_t needle_len = strlen(needles[i]);
+        if (strncmp(path, needles[i], needle_len) == 0) {
+            prefix_at_start = 1;
+            break;
+        }
+    }
+
+    // Get current working directory if needed
+    char cwd[PATH_MAX];
+    if (prefix_at_start) {
+        if (getcwd(cwd, sizeof(cwd)) == NULL) {
+            return NULL;
+        }
+    }
+
+    size_t len = strlen(path);
+    size_t cwd_len = prefix_at_start ? strlen(cwd) : 0;
+    char* clean_path = (char*)malloc(len + cwd_len + 2);  // +2 for potential "." and null
+    if (!clean_path) return NULL;
+
+    char* dst = clean_path;
+
+    // Prepend CWD if jar prefix was at start
+    if (prefix_at_start) {
+        strcpy(dst, cwd);
+        dst += cwd_len;
+    }
+
+    // Copy path while removing jar prefixes
+    while (*src) {
+        int matched = 0;
+        for (size_t i = 0; i < num_needles; ++i) {
+            size_t needle_len = strlen(needles[i]);
+            if (strncmp(src, needles[i], needle_len) == 0) {
+                src += needle_len; // skip just the jar prefix
+                matched = 1;
+                break;
+            }
+        }
+        if (!matched) {
+            *dst++ = *src++;
+        }
+    }
+    *dst = '\0';
+
+    // If path starts with "/", check existence
+    if (clean_path[0] == '/') {
+        struct stat st;
+        // Try original path
+        if (stat(clean_path, &st) == 0) {
+            // Path exists as-is, use it
+            return clean_path;
+        }
+        
+        // Try with "." prefix
+        char* dot_path = (char*)malloc(strlen(clean_path) + 2);
+        if (dot_path) {
+            dot_path[0] = '.';
+            strcpy(dot_path + 1, clean_path);
+            
+            if (stat(dot_path, &st) == 0) {
+                // Dot version exists, use it
+                free(clean_path);
+                return dot_path;
+            }
+            free(dot_path);
+        }
+        // Neither exists, return original clean_path
+    }
+
+    return clean_path;
+}
 ABI_ATTR int open_impl(const char *filename, int flags, mode_t mode)
 {
     verbose("NATIVE","Opening file %s",filename);
@@ -42,8 +125,9 @@ ABI_ATTR int open_impl(const char *filename, int flags, mode_t mode)
     //     verbose("NATIVE","No maps for you >:)");
     //     return -1;
     // }
-
-    int fd = open(filename, flags, mode);
+    
+    char* clean_path = clean_jar_path(filename);
+    int fd = open(clean_path, flags, mode);
     verbose("NATIVE","Got file descriptor %d",fd);
     return fd;
 }
@@ -85,37 +169,6 @@ ABI_ATTR int close_impl(int fd)
     return close(fd);
 }
 
-char* clean_jar_path(const char* path) {
-    if (!path) return NULL;
-
-    size_t len = strlen(path);
-    char* clean_path = (char*)malloc(len + 1);
-    if (!clean_path) return NULL;
-
-    const char* needles[] = {"jar:file:/!", "jar:file://!"};
-    size_t num_needles = sizeof(needles) / sizeof(needles[0]);
-
-    const char* src = path;
-    char* dst = clean_path;
-
-    while (*src) {
-        int matched = 0;
-        for (size_t i = 0; i < num_needles; ++i) {
-            size_t needle_len = strlen(needles[i]);
-            if (strncmp(src, needles[i], needle_len) == 0) {
-                src += needle_len; // skip the substring
-                matched = 1;
-                break;
-            }
-        }
-        if (!matched) {
-            *dst++ = *src++;
-        }
-    }
-    *dst = '\0';
-    return clean_path;
-}
-
 ABI_ATTR DIR* opendir_impl(const char* path) {
     char* clean_path = clean_jar_path(path);
     if (!clean_path) return NULL;
@@ -126,11 +179,36 @@ ABI_ATTR DIR* opendir_impl(const char* path) {
 
 // fstatat_impl
 ABI_ATTR int fstatat_impl(int dirfd, const char* path, struct stat* buf, int flags) {
+    verbose("NATIVE","fstatat(%d, %s, flags=%d)", dirfd, path, flags);
     char* clean_path = clean_jar_path(path);
     if (!clean_path) {
         return -1;
     }
     int ret = fstatat(dirfd, clean_path, buf, flags);
+    free(clean_path);
+    return ret;
+}
+
+// stat
+ABI_ATTR int stat_impl(const char* path, struct stat* buf) {
+    verbose("NATIVE", "stat(%s)", path);
+    char* clean_path = clean_jar_path(path);
+    if (!clean_path) {
+        return -1;
+    }
+    int ret = stat(clean_path, buf);
+    free(clean_path);
+    return ret;
+}
+
+// lstat
+ABI_ATTR int lstat_impl(const char* path, struct stat* buf) {
+    verbose("NATIVE","lstat(%s)", path);
+    char* clean_path = clean_jar_path(path);
+    if (!clean_path) {
+        return -1;
+    }
+    int ret = lstat(clean_path, buf);
     free(clean_path);
     return ret;
 }

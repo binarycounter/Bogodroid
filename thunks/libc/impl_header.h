@@ -220,6 +220,8 @@ extern "C" ABI_ATTR int __open_2_impl(const char *, int);
 extern "C" ABI_ATTR void __assert_impl(const char *expression, const char *file, int line);
 extern ABI_ATTR DIR* opendir_impl(const char *);
 extern ABI_ATTR int fstatat_impl(int dirfd, const char* path, struct stat* buf, int flags);
+extern ABI_ATTR int lstat_impl(const char* path, struct stat* buf);
+extern ABI_ATTR int stat_impl(const char* path, struct stat* buf);
 extern ABI_ATTR int scandirat_impl(int, const char *, struct bionic_dirent ***, int (*)(const struct bionic_dirent *), int (*)(const struct bionic_dirent **, const struct bionic_dirent **));
 extern ABI_ATTR int scandir_impl(const char *, struct bionic_dirent ***, int (*)(const struct bionic_dirent *), int (*)(const struct bionic_dirent **, const struct bionic_dirent **));
 
