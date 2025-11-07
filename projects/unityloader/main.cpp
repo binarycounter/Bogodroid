@@ -61,7 +61,7 @@ DynLibFunction* so_static_patches[32] = {
 };
 
 DynLibFunction* so_dynamic_libraries[32] = {
-    //symtable_il2cppfake,
+    // symtable_il2cppfake,
     symtable_libc,
     symtable_ndk,
     symtable_egl_sdl,
@@ -231,9 +231,11 @@ int main(int argc, char* argv[])
     }
     closedir(d);
 
-    printf("calling JNI_OnLoad from libmain.so\n");
     auto mainJNI_OnLoad = (jint (*)(JavaVM* vm, void* reserved))(so_symbol(&lmain, "JNI_OnLoad"));
-    mainJNI_OnLoad(&vm, nullptr);
+    if (mainJNI_OnLoad) {
+        printf("calling JNI_OnLoad from libmain.so\n");
+        mainJNI_OnLoad(&vm, nullptr);
+    }
 
     JClass* nativeLoaderClass = vm.findClass("com/unity3d/player/NativeLoader").get();
     LocalFrame frame(vm);
@@ -246,15 +248,19 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    printf("calling JNI_OnLoad from libil2cpp.so\n");
     auto il2cppJNI_OnLoad = (jint (*)(JavaVM* vm, void* reserved))(so_symbol(&lil2cpp, "JNI_OnLoad"));
-    std::cout << &il2cppJNI_OnLoad << std::endl;
-    il2cppJNI_OnLoad(&vm, nullptr);
+    if (il2cppJNI_OnLoad) {
+        printf("calling JNI_OnLoad from libil2cpp.so\n");
+        std::cout << &il2cppJNI_OnLoad << std::endl;
+        il2cppJNI_OnLoad(&vm, nullptr);
+    }
 
-    printf("calling JNI_OnLoad from libunity.so\n");
     auto unityJNI_OnLoad = (jint (*)(JavaVM* vm, void* reserved))(so_symbol(&lunity, "JNI_OnLoad"));
-    std::cout << &unityJNI_OnLoad << std::endl;
-    unityJNI_OnLoad(&vm, nullptr);
+    if (unityJNI_OnLoad) {
+        printf("calling JNI_OnLoad from libunity.so\n");
+        std::cout << &unityJNI_OnLoad << std::endl;
+        unityJNI_OnLoad(&vm, nullptr);
+    }
 
     JClass* unityClass = vm.findClass("com/unity3d/player/UnityPlayer").get();
 
