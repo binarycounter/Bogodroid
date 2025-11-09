@@ -200,7 +200,7 @@ float jnivm::android::view::MotionEvent::getAxisValue(int axis, int pointerIndex
 
 int jnivm::android::view::MotionEvent::getToolType(int pointerIndex)
 {
-    return 0;
+    return 3; 
 }
 
 float jnivm::android::view::MotionEvent::getX(int pointerIndex)
@@ -218,6 +218,21 @@ long jnivm::android::view::MotionEvent::getEventTime()
     return this->timestamp;
 }
 
+int jnivm::android::view::MotionEvent::getButtonState()
+{
+    return this->buttonState;
+}
+
+int jnivm::android::view::MotionEvent::getAction()
+{
+    return this->action;
+}
+
+int jnivm::android::view::MotionEvent::getActionMasked()
+{
+    return this->action & 0xFF;
+}
+
 std::shared_ptr<FakeJni::JString> jnivm::android::view::MotionEvent::axisToString(int axis)
 {
     return std::make_shared<FakeJni::JString>("An Axis");
@@ -230,6 +245,7 @@ std::shared_ptr<jnivm::android::view::MotionEvent> jnivm::android::view::MotionE
     // Create a new MotionEvent by copying the data from the other one.
     auto newEvent = std::make_shared<MotionEvent>(other->device, other->action, other->x, other->y);
     newEvent->axisValues = other->axisValues;
+    newEvent->buttonState = other->buttonState;
     return newEvent;
     return other;
 }
@@ -491,6 +507,9 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::Display) { FakeJni::Constructor<Di
     { FakeJni::Function<&MotionEvent::getHistorySize> {}, "getHistorySize", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&MotionEvent::getAxisValue> {}, "getAxisValue", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&MotionEvent::getToolType> {}, "getToolType", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getButtonState> {}, "getButtonState", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getAction> {}, "getAction", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getActionMasked> {}, "getActionMasked", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&MotionEvent::getX> {}, "getX", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&MotionEvent::getY> {}, "getY", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&MotionEvent::axisToString> {}, "axisToString", FakeJni::JMethodID::STATIC },

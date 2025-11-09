@@ -7,6 +7,9 @@
 extern toml::table config;
 
 static bool input_enable_controller = false;
+static bool input_mouse_touch_mode = false;
+static bool input_mouse_accurate_mode = false;
+static int buttonState;
 
 InputBackend& InputBackend::instance()
 {
@@ -17,6 +20,8 @@ InputBackend& InputBackend::instance()
 InputBackend::InputBackend()
 {
     input_enable_controller = config["input"]["controller"].value_or<bool>(false);
+    input_mouse_touch_mode = config["input"]["touch_mode"].value_or<bool>(false);
+    input_mouse_accurate_mode = config["input"]["accurate_mode"].value_or<bool>(false);
 
     if (SDL_Init(SDL_INIT_EVENTS) < 0) {
         std::cerr << "SDL Init failed: " << SDL_GetError() << std::endl;
@@ -25,7 +30,7 @@ InputBackend::InputBackend()
 
     // Add default devices
     addDevice(INPUT_ID_KEYBOARD, "Bogodroid Keyboard", 0x046d, 0xc316, jnivm::android::view::InputDevice::SOURCE_KEYBOARD);
-    auto mouse = addDevice(INPUT_ID_MOUSE, "Bogodroid Mouse", 0x046D, 0xC077, jnivm::android::view::InputDevice::SOURCE_MOUSE);
+    auto mouse = addDevice(INPUT_ID_MOUSE, "Bogodroid Mouse", 0x046D, 0xC077, input_mouse_touch_mode ? jnivm::android::view::InputDevice::SOURCE_TOUCHSCREEN : jnivm::android::view::InputDevice::SOURCE_MOUSE);
     mouse->addMotionRange(jnivm::android::view::MotionEvent::AXIS_X, mouse->source, 0.0f, 640.0f, 0.0f, 1.0f); // Example screen width
     mouse->addMotionRange(jnivm::android::view::MotionEvent::AXIS_Y, mouse->source, 0.0f, 480.0f, 0.0f, 1.0f); // Example screen height
 
@@ -65,8 +70,7 @@ InputBackend::InputBackend()
 
 InputBackend::~InputBackend()
 {
-    if (input_enable_controller) 
-    { 
+    if (input_enable_controller) {
         // Clean up controllers
         for (int i = 0; i < SDL_NumJoysticks(); ++i) {
             if (SDL_IsGameController(i)) {
@@ -139,21 +143,118 @@ void InputBackend::runEventLoop()
             case SDL_MOUSEMOTION: {
                 if (!onMotion)
                     break;
+
+                // In touch screen emulation move events are only generated when a button is pressed.
+                if (input_mouse_touch_mode && !buttonState)
+                    return;
+
                 // Mouse motion is a generic motion event.
                 auto motionEvent = std::make_shared<jnivm::android::view::MotionEvent>(devices[INPUT_ID_MOUSE],
-                    jnivm::android::view::MotionEvent::ACTION_MOVE,
+                    buttonState == 0 ? jnivm::android::view::MotionEvent::ACTION_HOVER_MOVE : jnivm::android::view::MotionEvent::ACTION_MOVE,
                     (float)e.motion.x, (float)e.motion.y);
+                motionEvent->buttonState = buttonState;
                 onMotion(motionEvent);
                 break;
             }
 
-            case SDL_MOUSEBUTTONDOWN:
+            case SDL_MOUSEBUTTONDOWN: {
+                if (!onMotion)
+                    break;
+
+                int previousButtonState = buttonState; // Store previous state for comparison
+
+                // Update button state based on which button was pressed
+                if (e.button.button == SDL_BUTTON_LEFT)
+                    buttonState |= jnivm::android::view::MotionEvent::BUTTON_PRIMARY;
+                if (e.button.button == SDL_BUTTON_RIGHT)
+                    buttonState |= jnivm::android::view::MotionEvent::BUTTON_SECONDARY;
+                if (e.button.button == SDL_BUTTON_MIDDLE)
+                    buttonState |= jnivm::android::view::MotionEvent::BUTTON_TERTIARY;
+
+                // Create the main motion event
+                auto motionEvent = std::make_shared<jnivm::android::view::MotionEvent>(
+                    devices[INPUT_ID_MOUSE],
+                    jnivm::android::view::MotionEvent::ACTION_DOWN,
+                    (float)e.button.x, (float)e.button.y);
+
+                if (input_mouse_touch_mode) {
+                    if(previousButtonState != 0)
+                        break; // Don't send another event if another button is already pressed down
+                    motionEvent->buttonState = jnivm::android::view::MotionEvent::BUTTON_PRIMARY;
+                } else
+                    motionEvent->buttonState = buttonState;
+
+                // In non-touch mode, send an additional button press event
+                if (!input_mouse_touch_mode && input_mouse_accurate_mode) {
+                    auto motionEvent2 = std::make_shared<jnivm::android::view::MotionEvent>(
+                        devices[INPUT_ID_MOUSE],
+                        jnivm::android::view::MotionEvent::ACTION_BUTTON_PRESS,
+                        (float)e.button.x, (float)e.button.y);
+                    motionEvent2->buttonState = buttonState;
+                    onMotion(motionEvent2);
+
+                    if(previousButtonState == 0) // Additional HOVER_EXIT event is sent when the first button is pressed
+                    {
+                        auto motionEvent3 = std::make_shared<jnivm::android::view::MotionEvent>(
+                            devices[INPUT_ID_MOUSE],
+                            jnivm::android::view::MotionEvent::ACTION_HOVER_EXIT,
+                            (float)e.button.x, (float)e.button.y);
+                            motionEvent3->buttonState = buttonState;
+                            onMotion(motionEvent3);
+                    }
+                }
+
+                onMotion(motionEvent);
+                break;
+            }
+
             case SDL_MOUSEBUTTONUP: {
                 if (!onMotion)
                     break;
-                int action = (e.type == SDL_MOUSEBUTTONDOWN) ? jnivm::android::view::MotionEvent::ACTION_DOWN : jnivm::android::view::MotionEvent::ACTION_UP;
-                auto motionEvent = std::make_shared<jnivm::android::view::MotionEvent>(devices[INPUT_ID_MOUSE],
-                    action, (float)e.button.x, (float)e.button.y);
+
+                // Update button state based on which button was released
+                if (e.button.button == SDL_BUTTON_LEFT)
+                    buttonState &= ~jnivm::android::view::MotionEvent::BUTTON_PRIMARY;
+                if (e.button.button == SDL_BUTTON_RIGHT)
+                    buttonState &= ~jnivm::android::view::MotionEvent::BUTTON_SECONDARY;
+                if (e.button.button == SDL_BUTTON_MIDDLE)
+                    buttonState &= ~jnivm::android::view::MotionEvent::BUTTON_TERTIARY;
+
+                // Create the main motion event
+                auto motionEvent = std::make_shared<jnivm::android::view::MotionEvent>(
+                    devices[INPUT_ID_MOUSE],
+                    jnivm::android::view::MotionEvent::ACTION_UP,
+                    (float)e.button.x, (float)e.button.y);
+
+                if (input_mouse_touch_mode)
+                {
+                    if(buttonState != 0)
+                        break; // Don't send another event if another button is still pressed down
+                    motionEvent->buttonState = 0;
+                }
+                else
+                    motionEvent->buttonState = buttonState;
+
+                // In non-touch mode, send an additional button release event
+                if (!input_mouse_touch_mode && input_mouse_accurate_mode) {
+                    auto motionEvent2 = std::make_shared<jnivm::android::view::MotionEvent>(
+                        devices[INPUT_ID_MOUSE],
+                        jnivm::android::view::MotionEvent::ACTION_BUTTON_RELEASE,
+                        (float)e.button.x, (float)e.button.y);
+                    motionEvent2->buttonState = buttonState;
+                    onMotion(motionEvent2);
+
+                    if(buttonState == 0) // Additional HOVER_ENTER event is sent when the last button is released
+                    {
+                        auto motionEvent3 = std::make_shared<jnivm::android::view::MotionEvent>(
+                            devices[INPUT_ID_MOUSE],
+                            jnivm::android::view::MotionEvent::ACTION_HOVER_ENTER,
+                            (float)e.button.x, (float)e.button.y);
+                            motionEvent3->buttonState = buttonState;
+                            onMotion(motionEvent3);
+                    }
+                }
+
                 onMotion(motionEvent);
                 break;
             }
@@ -233,7 +334,7 @@ void InputBackend::runEventLoop()
                 break;
             }
         }
-        SDL_Delay(1); // Be a good citizen
+        SDL_Delay(4); // Be a good citizen
     }
 }
 

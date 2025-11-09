@@ -123,6 +123,7 @@ namespace android {
             static inline int SOURCE_GAMEPAD = 0x00000401;
             static inline int SOURCE_JOYSTICK = 0x01000010;
             static inline int SOURCE_MOUSE = 0x00002002;
+            static inline int SOURCE_TOUCHSCREEN = 0x00001002;
 
             int id = 0;
             int vendor = 0x045e; // Microsoft
@@ -377,9 +378,20 @@ namespace android {
             static inline int ACTION_DOWN = 0;
             static inline int ACTION_UP = 1;
             static inline int ACTION_MOVE = 2;
+            static inline int ACTION_HOVER_MOVE = 7;
+            static inline int ACTION_HOVER_ENTER = 9;
+            static inline int ACTION_HOVER_EXIT = 10;
+            static inline int ACTION_BUTTON_PRESS = 11;
+            static inline int ACTION_BUTTON_RELEASE = 12;
+
+            // Mouse buttons
+            static inline int BUTTON_PRIMARY = 1;
+            static inline int BUTTON_SECONDARY = 2;
+            static inline int BUTTON_TERTIARY = 4; // Middle
 
             int action;
             float x, y;
+            int buttonState = 0;
 
             std::unordered_map<int, float> axisValues;
 
@@ -394,7 +406,10 @@ namespace android {
             long getEventTime();
             int getPointerCount();
             int getHistorySize();
+            int getButtonState();
             int getToolType(int pointerIndex);
+            int getAction();
+            int getActionMasked();
             float getAxisValue(int axis, int pointerIndex);
             float getX(int pointerIndex);
             float getY(int pointerIndex);
