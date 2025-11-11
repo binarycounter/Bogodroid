@@ -1,158 +1,144 @@
-#include <dlfcn.h>
-#include <filesystem>
+#include "globals.h"
+#include <cstdlib>
+#include <execinfo.h>
 #include <iostream>
-#include <baron/baron.h>
-#include <fstream>
-#include <fcntl.h>
-#include <stdlib.h>
-#include "so_util.h"
-#include "symtables.h"
-#include <csignal>
-#include <unistd.h>
+
+#include "toml++/toml.hpp"
+toml::table config;
+#include "config.h"
+
+#include "io_util.h"
 #include "javastubs/binding.h"
+#include "platform.h"
+#include "so_util.h"
+#include <baron/baron.h>
+#include <dlfcn.h>
+#include <fcntl.h>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <stdlib.h>
+#include <unistd.h>
+
+#include "anative_activity.h"
+#include "ndk.h"
+
+#include "debug_utils.h"
+#include "egl_sdl.h"
+#include "glad.h"
+#include "glad_egl.h"
+#include "gles2.h"
+#include "input_backend.h"
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_hints.h>
+
+thread_local int tls0[2 << 12] = {};
+int foo() { return tls0[0]++; }
 
 using namespace FakeJni;
 
-DynLibFunction *so_static_patches[] = {
-    NULL};
+extern DynLibFunction symtable_libc[];
+extern DynLibFunction symtable_ndk[];
+extern DynLibFunction symtable_gles2[];
+extern DynLibFunction symtable_egl_sdl[];
 
-DynLibFunction *so_dynamic_libraries[] = {
-    symtable_pthread,
-    symtable_stdio,
-    symtable_misc,
-    symtable_fcntl,
-    symtable_ctype,
-    symtable_math,
-    // symtable_openal,
-    NULL};
-
-so_module *loaded_modules[3] = {
-  NULL
+DynLibFunction* so_static_patches[32] = {
+    NULL,
 };
 
-int loaded_modules_count=1;
+DynLibFunction* so_dynamic_libraries[32] = {
+    symtable_libc,
+    symtable_ndk,
+    symtable_egl_sdl,
+    symtable_gles2,
+    NULL
+};
 
-bool load_so_from_file(so_module *mod, const char *filename, uintptr_t addr)
+so_module* loaded_modules[32] = {
+    NULL
+};
+
+extern SDL_Window* sdl_win;
+extern SDL_GLContext sdl_ctx;
+extern EGLDisplay egl_display;
+extern EGLContext egl_context;
+extern EGLSurface egl_surface;
+
+Baron::Jvm vm;
+
+#pragma GCC push_options
+#pragma GCC optimize("O0")
+void gdb_break_here()
 {
-  std::ifstream file(filename, std::ios::binary);
-  if (!file.is_open())
-  {
-    std::cerr << "Error opening file: " << filename << std::endl;
-    return false;
-  }
-  // Determine the file size
-  file.seekg(0, std::ios::end);
-  std::streampos fileSize = file.tellg();
-  file.seekg(0, std::ios::beg);
-  char *buffer = new char[fileSize];
-  file.read(buffer, fileSize);
-  file.close();
-  so_load(mod, "", addr, buffer, fileSize);
-  return true;
 }
+#pragma GCC pop_options
 
-int main(int argc, char *argv[])
+int main(int argc, char* argv[])
 {
-  if (chdir(argv[1]) != 0)
-  {
-    std::cerr << "Could not change directory to " << argv[1] << std::endl;
-    return 1;
-  }
-  else
-  {
-     std::cout << "Changed working directory to " << argv[1] << std::endl;
-  }
+    print_backtrace_on_segfault(); // Registers a signal handler to print backtrace on segfaults
+    exit_on_signals(); // Exits when CTRL-C is presset (or SIGINT or SIGTERM is received)
 
-  Baron::Jvm vm;
-  InitJNIBinding(&vm);
+    if (argc < 2) {
+        fatal_error("Usage: %s <config file>\n", argv[0]);
+        return -1;
+    }
 
-  printf("Loading libcpp\n");
-  so_module lcpp = {};
-  uintptr_t addr_lcpp = 0x60000000;
-  const char *path_lcpp = "lib/armeabi-v7a/libc++_shared.so";
-  if (!load_so_from_file(&lcpp, path_lcpp, addr_lcpp))
-  {
-    return 1;
-  }
+    // Init config, GLES pointers, JNI VN and bindings
+    init_config(argv[1]);
+    sdl_initialize_gles();
+    InitJNIBinding(&vm);
 
-  printf("Loading libopenframeworks\n");
-  so_module lof = {};
-  uintptr_t addr_lof = 0x50000000;
-  const char *path_lof = "lib/armeabi-v7a/libopenFrameworksAndroid.so";
-  if (!load_so_from_file(&lof, path_lof, addr_lof))
-  {
-    return 1;
-  }
+    printf("Loading libc++\n");
+    so_module lcpp = {};
+    uintptr_t addr_lcpp = 0x4000000000;
+    const char* path_lcpp = "lib/arm64-v8a/libc++_shared.so";
+    if (!load_so_from_file(&lcpp, path_lcpp, addr_lcpp)) {
+        return 1;
+    }
+    loaded_modules[0] = &lcpp;
 
-  printf("Loading liboboe\n");
-  so_module loboe = {};
-  uintptr_t addr_loboe = 0x70000000;
-  const char *path_loboe = "lib/armeabi-v7a/liboboe.so";
-  if (!load_so_from_file(&loboe, path_loboe, addr_loboe))
-  {
-    return 1;
-  }
+    printf("Loading oboe\n");
+    so_module loboe = {};
+    uintptr_t addr_loboe = 0x5000000000;
+    const char* path_loboe = "lib/arm64-v8a/liboboe.so";
+    if (!load_so_from_file(&loboe, path_loboe, addr_loboe)) {
+        return 1;
+    }
 
-  printf("Loading libhexagon\n");
-  so_module lhexagon = {};
-  uintptr_t addr_lhexagon = 0x40000000;
-  const char *path_lhexagon = "lib/armeabi-v7a/libsuperhexagon.so";
-  if (!load_so_from_file(&lhexagon, path_lhexagon, addr_lhexagon))
-  {
-    return 1;
-  }
+    loaded_modules[1] = &loboe;
 
-  loaded_modules[0]=&lhexagon;
+    printf("Loading openframeworks\n");
+    so_module lopenfw = {};
+    uintptr_t addr_lopenfw = 0x6000000000;
+    const char* path_lopenfw = "lib/arm64-v8a/libopenFrameworksAndroid.so";
+    if (!load_so_from_file(&lopenfw, path_lopenfw, addr_lopenfw)) {
+        return 1;
+    }
 
+    loaded_modules[2] = &lopenfw;
 
-  printf("calling JNI_OnLoad from libOpenFrameworks\n");
-  auto ofJNI_OnLoad = (jint(*)(JavaVM * vm, void *reserved))(so_symbol(&lof, "JNI_OnLoad"));
-  printf("%p\n",ofJNI_OnLoad);
-  ofJNI_OnLoad(&vm, nullptr);
+    printf("Loading libsuperhexagon\n");
+    so_module lhexagon = {};
+    uintptr_t addr_lhexagon = 0x7000000000;
+    const char* path_lhexagon = "lib/arm64-v8a/libsuperhexagon.so";
+    if (!load_so_from_file(&lhexagon, path_lhexagon, addr_lhexagon)) {
+        return 1;
+    }
 
-  vm.printStatistics();
+    loaded_modules[3] = &lhexagon;
 
-  // JClass *nativeLoaderClass = vm.findClass("com/unity3d/player/NativeLoader").get();
-  // LocalFrame frame(vm);
-  // auto mainLoad = nativeLoaderClass->getMethod("(Ljava/lang/String;)Z", "load");
+    printf("calling JNI_OnLoad from libopenframeworks\n");
+    auto openfwJNI_OnLoad = (jint (*)(JavaVM* vm, void* reserved))(so_symbol(&lopenfw, "JNI_OnLoad"));
+    auto openfwJNI_OnLoadResult = openfwJNI_OnLoad(&vm, nullptr);
 
-  // printf("calling load from libmain.so\n");
-  // jvalue ret = mainLoad.invoke(frame.getJniEnv(), nativeLoaderClass, (JString) "lib");
-  // if (!ret.z)
-  // {
-  //   printf("libmain.so:load returned false, game could not be loaded\n");
-  //   return 1;
-  // }
+    auto assetManager = std::make_shared<jnivm::android::content::res::AssetManager>();
+    auto openfwSet_AssetManager  = (jint (*)(JNIEnv* vm, void* reserved, jnivm::android::content::res::AssetManager* assetManager))(so_symbol(&lopenfw, "Java_cc_openframeworks_OFAndroid_setAssetManager"));
+    LocalFrame frame(vm);
+    openfwSet_AssetManager(&frame.getJniEnv(), nullptr, assetManager.get());
+    
+    auto hexagon_onCreate = (void (*)(void))so_symbol(&lhexagon, "Java_cc_openframeworks_OFAndroid_onCreate");
+    hexagon_onCreate();
 
-  // printf("calling JNI_OnLoad from libunity.so\n");
-  // auto unityJNI_OnLoad = (jint(*)(JavaVM * vm, void *reserved))(so_symbol(&lunity, "JNI_OnLoad"));
-  // std::cout << &unityJNI_OnLoad << std::endl;
-  // unityJNI_OnLoad(&vm, nullptr);
-
-  // printf("calling JNI_OnLoad from libmono.so\n");
-  // auto monoJNI_OnLoad = (jint(*)(JavaVM * vm, void *reserved))(so_symbol(&lmono, "JNI_OnLoad"));
-  // std::cout << &monoJNI_OnLoad << std::endl;
-  // monoJNI_OnLoad(&vm, nullptr);
-
-  // LocalFrame frame2(vm);
-
-  // JClass *unityClass = vm.findClass("com/unity3d/player/UnityPlayer").get();
-  
-
-  // auto unityInitJni = unityClass->getMethod("(Landroid/content/Context;)V", "initJni");
-  // printf("calling initJni from libunity.so\n");
-  // auto activity = std::make_shared<jnivm::android::app::Activity>();
-  // unityInitJni.invoke(frame2.getJniEnv(), unityClass, activity);
-
-  // // vm.printStatistics();
-  // //return 0;
-
-  // auto unityNRender = unityClass->getMethod("()Z", "nativeRender");
-  // printf("calling nativeRender from libunity.so\n");
-  // auto ret2 = unityNRender.invoke(frame2.getJniEnv(), unityClass);
-
-  // // get vm statistics including registrations, acquistions and more
-  // //
-  printf("Exit.\n");
-  return 0;
+    printf("Exit.\n");
+    return 0;
 }

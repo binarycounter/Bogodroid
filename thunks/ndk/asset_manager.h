@@ -26,6 +26,9 @@ typedef struct AAssetDir AAssetDir;
 // AAssetManager functions
 AAssetManager* AAssetManager_create(const char* path);
 void AAssetManager_destroy(AAssetManager* mgr);
+AAssetManager* AAssetManager_fromJava(void* env, void* manager); // Can't import libjnivm headers here, but we're not using the data passed in anyway, so just void* it....
+
+
 
 // AAsset functions
 AAsset* AAssetManager_open(AAssetManager* mgr, const char* filename, int mode);

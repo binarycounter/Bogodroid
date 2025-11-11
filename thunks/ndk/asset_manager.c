@@ -58,6 +58,11 @@ void AAssetManager_destroy(AAssetManager* mgr) {
     free(mgr);
 }
 
+AAssetManager* AAssetManager_fromJava(void* env, void* obj) {
+    return AAssetManager_create("assets");
+}
+
+
 AAsset* AAssetManager_open(AAssetManager* mgr, const char* filename, int mode) {
     char* full_path = get_full_path(mgr, filename);
     struct stat st;
