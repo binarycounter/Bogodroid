@@ -606,6 +606,18 @@ void so_relocate_all(so_module* mod)
 
 uintptr_t so_resolve_link(so_module* mod, const char* symbol)
 {
+    if (symbol != NULL && strlen(symbol) >= 3 && symbol[0] == 'g' && symbol[1] == 'l' && symbol[2] != 'a') {
+        size_t new_len = strlen("glad_") + strlen(symbol) + 1;
+        char* glad_symbol = (char*)malloc(new_len);
+        if (glad_symbol != NULL) {
+            strcpy(glad_symbol, "glad_");
+            strcat(glad_symbol, symbol);
+            uintptr_t new_addr = so_resolve_link(nullptr, glad_symbol);
+            if(new_addr)
+                return new_addr;
+        }
+    }
+
     // Look through the provided host functionality first
     for (int i = 0; so_dynamic_libraries[i] != NULL; i++) {
         DynLibFunction* funcs = so_dynamic_libraries[i];
@@ -616,7 +628,7 @@ uintptr_t so_resolve_link(so_module* mod, const char* symbol)
         }
     }
 
-    // Of module is passed, try to first find it in the bodule
+    // If module is passed, try to first find it in the bodule
     so_module* curr = head;
     while (curr) {
         if (curr == mod) {
@@ -628,8 +640,8 @@ uintptr_t so_resolve_link(so_module* mod, const char* symbol)
     }
 
 
-    if(mod != NULL && mod != (void*)0xDEAD)
-        return 0;
+    // if(mod != NULL && mod != (void*)0xDEAD)
+    //     return 0;
 
     //General search
     curr = head;

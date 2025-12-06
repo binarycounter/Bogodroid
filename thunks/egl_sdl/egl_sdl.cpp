@@ -402,7 +402,7 @@ void sdl_initialize_gles()
         fatal_error("Failed to create OpenGL Context: %s\n", SDL_GetError());
     }
 
-    SDL_GL_DeleteContext(sdl_ctx);
-    SDL_DestroyWindow(sdl_win);
-    SDL_Quit();
+    // SDL_GL_DeleteContext(sdl_ctx);
+    // SDL_DestroyWindow(sdl_win);
+    // SDL_Quit();
 }
