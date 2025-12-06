@@ -86,6 +86,7 @@ int main(int argc, char* argv[])
     // Init config, GLES pointers, JNI VN and bindings
     init_config(argv[1]);
     sdl_initialize_gles();
+    load_gles2_funcs();
     InitJNIBinding(&vm);
 
     printf("Loading libc++\n");
@@ -135,6 +136,11 @@ int main(int argc, char* argv[])
     auto openfwSet_AssetManager  = (jint (*)(JNIEnv* vm, void* reserved, jnivm::android::content::res::AssetManager* assetManager))(so_symbol(&lopenfw, "Java_cc_openframeworks_OFAndroid_setAssetManager"));
     LocalFrame frame(vm);
     openfwSet_AssetManager(&frame.getJniEnv(), nullptr, assetManager.get());
+
+    auto openfw_onResume = (void (*)(void))so_symbol(&lopenfw, "Java_cc_openframeworks_OFAndroid_onResume");
+    openfw_onResume();
+
+    gdb_break_here();
     
     auto hexagon_onCreate = (void (*)(void))so_symbol(&lhexagon, "Java_cc_openframeworks_OFAndroid_onCreate");
     hexagon_onCreate();
