@@ -150,7 +150,7 @@ void jnivm::java::lang::Thread::join()
 
 long jnivm::java::lang::System::nanoTime()
 {
-    return time_point_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now()).time_since_epoch().count();
+    return time_point_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now()).time_since_epoch().count();
 }
 
 ///// FakeMethod
