@@ -43,7 +43,7 @@ std::shared_ptr<jnivm::com::unity3d::player::PlayAssetDeliveryUnityWrapper> jniv
 
 bool jnivm::com::unity3d::player::PlayAssetDeliveryUnityWrapper::playCoreApiMissing()
 {
-    printf("[UNITYJNI] We don't have Google Play Core APIs, don't even try. \n");
+    verbose("PlayAssetDeliveryUnityWrapper", "We don't have Google Play Core APIs, don't even try. \n");
     return true;
 }
 
@@ -65,17 +65,49 @@ std::shared_ptr<FakeJni::JString> jnivm::com::unity3d::player::UnityPlayer::getL
 
 std::shared_ptr<jnivm::java::lang::reflect::Constructor> jnivm::com::unity3d::player::ReflectionHelper::getConstructorID(std::shared_ptr<jnivm::java::lang::Class> clazz, std::shared_ptr<FakeJni::JString> signature)
 {
-    printf("[UNITYJNI] getConstructorID(%s, %s) \n", clazz->getName().c_str(), signature.get()->c_str());
+    verbose("UnityReflection", "getConstructorID(%s, %s) \n", clazz->getName().c_str(), signature.get()->c_str());
     return nullptr;
 }
 
 std::shared_ptr<jnivm::java::lang::reflect::Method> jnivm::com::unity3d::player::ReflectionHelper::getMethodID(std::shared_ptr<jnivm::java::lang::Class> clazz, std::shared_ptr<FakeJni::JString> methodName, std::shared_ptr<FakeJni::JString> signature, bool isStatic)
 {
+    if(clazz == nullptr)
+        return nullptr;
+
     const char* name = methodName.get()->c_str();
     const char* sig;
 
+    // Method 1: Search for matching methods in class by name only (bail out if there is ambiguity due to duplicates)
+
+    std::shared_ptr<Method> foundMethod=nullptr;
+    bool duplicate=false;
+    for(std::shared_ptr<Method> method : clazz.get()->methods)
+    {
+        if(strcmp(method->name.c_str(), name) == 0)
+        {
+            if(foundMethod != nullptr)
+                duplicate=true;
+            
+            foundMethod=method;
+        }
+    }
+
+    if(foundMethod != nullptr && !duplicate)
+    {
+        auto method = std::shared_ptr<Method>(
+        (Method*)clazz->getMethod(foundMethod->signature.c_str(), name),
+        [](Method*) { } // No-op deleter
+        );
+        verbose("UnityReflection", "getMethodID(type 1, %s, %s, %s, %d) = 0x%p \n", clazz->getName().c_str(), name, foundMethod->signature.c_str(), isStatic, method.get());
+        return method;
+    }
+
+    // Method 2: Hardcoded fixes for the signature inaccuracies, then use getMethod
+
     if (strcmp("initialize", name) == 0 && strcmp(clazz->getName().c_str(), "com/google/android/gms/games/PlayGamesSdk") == 0)
         sig = "(Landroid/content/Context;)V";
+    else if (strcmp("getGamesSignInClient", name) == 0)
+        sig = "(Landroid/app/Activity;)Lcom/google/android/gms/games/GamesSignInClient;";
     else if (strcmp("create", name) == 0 && strcmp(clazz->getName().c_str(), "com/google/android/play/core/review/ReviewManagerFactory") == 0)
         sig = "(Landroid/content/Context;)Lcom/google/android/play/core/review/ReviewManager;";
     else if (strcmp("getClass", name) == 0)
@@ -87,7 +119,7 @@ std::shared_ptr<jnivm::java::lang::reflect::Method> jnivm::com::unity3d::player:
         (Method*)clazz->getMethod(sig, name),
         [](Method*) { } // No-op deleter
     );
-    printf("[UNITYJNI] getMethodID(%s, %s, %s, %d) = 0x%p \n", clazz->getName().c_str(), name, sig, isStatic, method.get());
+    verbose("UnityReflection", "getMethodID(type 2, %s, %s, %s, %d) = 0x%p \n", clazz->getName().c_str(), name, sig, isStatic, method.get());
     return method;
 }
 std::shared_ptr<jnivm::java::lang::reflect::Field> jnivm::com::unity3d::player::ReflectionHelper::getFieldID(std::shared_ptr<jnivm::java::lang::Class> clazz, std::shared_ptr<FakeJni::JString> fieldName, std::shared_ptr<FakeJni::JString> signature, bool isStatic)
@@ -102,12 +134,12 @@ std::shared_ptr<jnivm::java::lang::reflect::Field> jnivm::com::unity3d::player::
 
     for (auto field : clazz->fields) {
         if (field->name == name && field->type == sig) {
-            printf("[UNITYJNI] getFieldID(%s, %s, %s, %d) = %p \n", clazz->getName().c_str(), fieldName.get()->c_str(), sig, isStatic, field);
+            verbose("UnityReflection", "getFieldID(%s, %s, %s, %d) = %p \n", clazz->getName().c_str(), fieldName.get()->c_str(), sig, isStatic, field);
             return field;
         }
     }
 
-    printf("[UNITYJNI] getFieldID(%s, %s, %s, %d) = null \n", clazz->getName().c_str(), fieldName.get()->c_str(), sig, isStatic);
+    verbose("UnityReflection", "getFieldID(%s, %s, %s, %d) = null \n", clazz->getName().c_str(), fieldName.get()->c_str(), sig, isStatic);
     return nullptr;
 }
 
@@ -120,13 +152,13 @@ std::shared_ptr<FakeJni::JString> jnivm::com::unity3d::player::ReflectionHelper:
 
 std::shared_ptr<jnivm::Object> jnivm::com::unity3d::player::ReflectionHelper::newProxyInstance(std::shared_ptr<UnityPlayer> player, long nativeHandle, std::shared_ptr<jnivm::Class> interface)
 {
-    printf("[UNITYJNI] newProxyInstance(%p, %ld, %s) \n", player.get(), nativeHandle, interface.get()->getName().c_str());
+    verbose("UnityReflection", "newProxyInstance(%p, %ld, %s) \n", player.get(), nativeHandle, interface.get()->getName().c_str());
     return nullptr;
 }
 
 std::shared_ptr<jnivm::Object> jnivm::com::unity3d::player::ReflectionHelper::createInvocationError(long nativeHandle, bool toggle)
 {
-    printf("[UNITYJNI] createInvocationError(%ld, %d)\n", nativeHandle, toggle);
+    verbose("UnityReflection", "createInvocationError(%ld, %d)\n", nativeHandle, toggle);
     return std::make_shared<jnivm::com::unity3d::player::ReflectionHelper::InvocationError>(nativeHandle, toggle);
 }
 
