@@ -44,16 +44,6 @@ void InitJNIBinding(FakeJni::Jvm* vm)
     FakeJni::LocalFrame frame(*vm);
     auto classClass = vm->findClass("java/lang/Class");
 
-    // Some Unity specific thing. Should really be in JNIBridge, is cast to Class for some reason... Just return false.
-    classClass->HookInstanceFunction(&frame.getJniEnv(), "initializeGoogleAr", [](jnivm::ENV* env, jnivm::Object* self) {
-        return false;
-    });
-
-    // No idea why this is in Class either....
-    classClass->HookInstanceFunction(&frame.getJniEnv(), "getLaunchURL", [](jnivm::ENV* env, jnivm::Object* self) {
-        return std::make_shared<FakeJni::JString>("");
-    });
-
     // libjnivm does not have an implementation of Field.getDeclaringClass, and adding one is not trivial. So we hardcode a couple of classes here. Bad hack, but eh.
     auto fieldClass = vm->findClass("java/lang/reflect/Field");
     fieldClass->HookInstanceFunction(&frame.getJniEnv(), "getDeclaringClass", [](jnivm::ENV* env, jnivm::Object* self) -> std::shared_ptr<jnivm::java::lang::Class> {

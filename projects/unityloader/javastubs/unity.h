@@ -23,7 +23,12 @@ namespace com {
             class UnityPlayer : public FakeJni::JObject {
             public:
                 DEFINE_CLASS_NAME("com/unity3d/player/UnityPlayer")
+
+                bool initializeGoogleAr();
+                std::shared_ptr<FakeJni::JString> getLaunchURL();
+
                 static std::shared_ptr<jnivm::com::unity3d::player::UnityPlayerActivity> currentActivity;
+    
             };
 
             class ReflectionHelper : public FakeJni::JObject {

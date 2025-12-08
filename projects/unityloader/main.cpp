@@ -86,7 +86,7 @@ Baron::Jvm vm;
 void gdb_break_here()
 {
 }
-
+#pragma GCC pop_options
 /**
  * @brief Checks if a string ends with a given suffix.
  */
@@ -101,7 +101,7 @@ static int ends_with(const char* str, const char* suffix)
     return strncmp(str + len_str - len_suffix, suffix, len_suffix) == 0;
 }
 
-#pragma GCC pop_options
+
 
 int main(int argc, char* argv[])
 {
@@ -263,14 +263,11 @@ int main(int argc, char* argv[])
     }
 
     JClass* unityClass = vm.findClass("com/unity3d/player/UnityPlayer").get();
-
-    auto unityInitJni = unityClass->getMethod("(Landroid/content/Context;)V", "initJni");
-    printf("calling initJni from libunity.so\n");
-    auto activity = std::make_shared<jnivm::android::app::Activity>();
-    LocalFrame frame2(vm);
-    unityInitJni.invoke(frame2.getJniEnv(), unityClass, activity);
+    
 
     auto unityActivity = std::make_shared<jnivm::com::unity3d::player::UnityPlayerActivity>();
+    auto unityPlayer = std::make_shared<jnivm::com::unity3d::player::UnityPlayer>();
+    auto unityPlayerObj = std::dynamic_pointer_cast<jnivm::Object>(unityPlayer);
     jnivm::com::unity3d::player::UnityPlayer::currentActivity = unityActivity;
     auto& backend = InputBackend::instance();
 
@@ -281,6 +278,12 @@ int main(int argc, char* argv[])
     backend.setMotionCallback([unityActivity](std::shared_ptr<jnivm::android::view::MotionEvent> event) {
         unityActivity->injectEvent(event);
     });
+
+    auto unityInitJni = unityClass->getMethod("(Landroid/content/Context;)V", "initJni");
+    printf("calling initJni from libunity.so\n");
+    auto activity = std::make_shared<jnivm::android::app::Activity>();
+    LocalFrame frame2(vm);
+    unityInitJni.invoke(frame2.getJniEnv(), unityPlayerObj.get(), activity);
 
     // In another thread, start the event loop
     std::thread([&backend]() {
@@ -294,29 +297,31 @@ int main(int argc, char* argv[])
     printf("calling nativeRecreateGfxState from libunity.so\n");
     auto surface = std::make_shared<jnivm::android::view::Surface>();
     LocalFrame frame3(vm);
-    auto ret2 = unityNRecreateGfxState.invoke(frame3.getJniEnv(), unityClass, 0, surface);
+    auto ret2 = unityNRecreateGfxState.invoke(frame3.getJniEnv(), unityPlayerObj.get(), 0, surface);
 
     auto unityNRestartACtivityIndicator = unityClass->getMethod("()V", "nativeRestartActivityIndicator");
     if (unityNRestartACtivityIndicator) {
         printf("calling nativeRestartActivityIndicator from libunity.so\n");
-        unityNRestartACtivityIndicator.invoke(frame3.getJniEnv(), unityClass);
+        unityNRestartACtivityIndicator.invoke(frame3.getJniEnv(), unityPlayerObj.get());
     }
 
     auto unityNSendSurfaceChangedEvent = unityClass->getMethod("()V", "nativeSendSurfaceChangedEvent");
     printf("calling nativeSendSurfaceChangedEvent from libunity.so\n");
-    unityNSendSurfaceChangedEvent.invoke(frame3.getJniEnv(), unityClass);
+    unityNSendSurfaceChangedEvent.invoke(frame3.getJniEnv(), unityPlayerObj.get());
+
+    gdb_break_here();
 
     auto unityNResume = unityClass->getMethod("()V", "nativeResume");
     printf("calling nativeResume from libunity.so\n");
-    unityNResume.invoke(frame3.getJniEnv(), unityClass);
+    unityNResume.invoke(frame3.getJniEnv(), unityPlayerObj.get());
 
     auto unityNFocusChanged = unityClass->getMethod("(Z)V", "nativeFocusChanged");
     printf("calling nativeFocusChanged from libunity.so\n");
-    unityNFocusChanged.invoke(frame3.getJniEnv(), unityClass, true);
+    unityNFocusChanged.invoke(frame3.getJniEnv(), unityPlayerObj.get(), true);
 
     auto unityNRender = unityClass->getMethod("()Z", "nativeRender");
     printf("calling nativeRender from libunity.so\n");
-    auto ret3 = unityNRender.invoke(frame3.getJniEnv(), unityClass);
+    auto ret3 = unityNRender.invoke(frame3.getJniEnv(), unityPlayerObj.get());
 
     printf("NativeRender returned %d, Entering loop...\n", ret3.z);
 
@@ -326,7 +331,7 @@ int main(int argc, char* argv[])
         // printf(".");
         fflush(stdout);
         // auto start = std::chrono::steady_clock::now();
-        auto ret4 = unityNRender.invoke(frame3.getJniEnv(), unityClass);
+        auto ret4 = unityNRender.invoke(frame3.getJniEnv(), unityPlayerObj.get());
         // auto end = std::chrono::steady_clock::now();
         // auto elapsed = end - start;
         // if (elapsed < frame_duration) {
