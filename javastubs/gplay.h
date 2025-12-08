@@ -24,6 +24,37 @@ namespace com {
                             static std::shared_ptr<ReviewManager> create(std::shared_ptr<jnivm::android::content::Context> context);
                         };
                     }
+                    namespace tasks {
+                        class OnCompleteListener : public FakeJni::JObject {
+                        public:
+                            DEFINE_CLASS_NAME("com/google/android/play/core/tasks/OnCompleteListener")
+                        };
+
+                        class OnSuccessListener : public FakeJni::JObject {
+                        public:
+                            DEFINE_CLASS_NAME("com/google/android/play/core/tasks/OnSuccessListener")
+                        };
+
+                        class OnFailureListener : public FakeJni::JObject {
+                        public:
+                            DEFINE_CLASS_NAME("com/google/android/play/core/tasks/OnFailureListener")
+                        };
+
+                        class Task : public FakeJni::JObject {
+                        public:
+                            DEFINE_CLASS_NAME("com/google/android/play/core/tasks/Task")
+                            Task(std::shared_ptr<FakeJni::JObject> result);
+                            std::shared_ptr<FakeJni::JObject> result = nullptr;
+                            std::shared_ptr<OnCompleteListener> onCompleteListener = nullptr;
+                            std::shared_ptr<OnSuccessListener> onSuccessListener = nullptr;
+                            std::shared_ptr<OnFailureListener> onFailureListener = nullptr;
+
+                            std::shared_ptr<Task> addOnCompleteListener(std::shared_ptr<OnCompleteListener> listener);
+                            std::shared_ptr<Task> addOnSuccessListener(std::shared_ptr<OnSuccessListener> listener);
+                            std::shared_ptr<Task> addOnFailureListener(std::shared_ptr<OnFailureListener> listener);
+                        };
+
+                    }
                 }
             }
 
@@ -39,9 +70,15 @@ namespace com {
                         DEFINE_CLASS_NAME("com/google/android/gms/games/EventsClient")
                     };
 
+                    class AuthenticationResult : public FakeJni::JObject {
+                    public:
+                        DEFINE_CLASS_NAME("com/google/android/gms/auth/api/signin/AuthenticationResult")
+                    };
+
                     class GamesSignInClient : public FakeJni::JObject {
                     public:
                         DEFINE_CLASS_NAME("com/google/android/gms/games/GamesSignInClient")
+                        std::shared_ptr<jnivm::com::google::android::play::core::tasks::Task> isAuthenticated();
                     };
 
                     class LeaderboardsClient : public FakeJni::JObject {

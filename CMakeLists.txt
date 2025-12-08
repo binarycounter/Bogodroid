@@ -42,6 +42,7 @@ add_executable(${CMAKE_PROJECT_NAME}
     javastubs/android_misc.cpp
     javastubs/android_descriptors.cpp
     javastubs/javac.cpp
+    javastubs/gplay.cpp
     platform/common/toml_include.cpp
     platform/common/debug_utils.cpp
     platform/common/config.cpp
