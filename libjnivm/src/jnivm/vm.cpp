@@ -533,6 +533,7 @@ void VM::initialize() {
 	env->GetClass<Object>("java/lang/Object");
 	env->GetClass<Class>("java/lang/Class");
 	env->GetClass<String>("java/lang/String");
+	env->GetClass<CharSequence>("java/lang/CharSequence");
 	env->GetClass<ByteBuffer>("java/nio/ByteBuffer");
 	env->GetClass<Throwable>("java/lang/Throwable");
 	env->GetClass<Method>("java/lang/reflect/Method");
