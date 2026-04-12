@@ -27,6 +27,53 @@ else()
     set(JNIVM_ENABLE_TRACE OFF CACHE BOOL "Enable tracing in libjnivm")
 endif()
 
+option(USE_LLD "Use lld linker" OFF)
+
+if(USE_LLD)
+    find_program(LLD_LINKER lld)
+    if(LLD_LINKER)
+        add_link_options(-fuse-ld=lld)
+        message(STATUS "Using lld linker: ${LLD_LINKER}")
+    endif()
+endif()
+
+option(USE_MOLD "Use mold linker" ON)
+if(USE_MOLD)
+    find_program(MOLD_EXECUTABLE mold)
+    if(MOLD_EXECUTABLE)
+        set(_use_mold_hack OFF)
+        if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+            if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 10)
+                set(_use_mold_hack ON)
+            endif()
+        endif()
+        if(_use_mold_hack)
+            set(MOLD_LINKER_DIR "${CMAKE_BINARY_DIR}/mold-linker")
+            file(MAKE_DIRECTORY "${MOLD_LINKER_DIR}")
+            execute_process(
+                COMMAND ${CMAKE_COMMAND} -E create_symlink
+                        ${MOLD_EXECUTABLE}
+                        ${MOLD_LINKER_DIR}/ld
+                RESULT_VARIABLE _mold_symlink_result
+            )
+            if(NOT _mold_symlink_result EQUAL 0)
+                message(FATAL_ERROR "Failed to create mold linker symlink")
+            endif()
+            add_link_options(-B${MOLD_LINKER_DIR})
+            message(STATUS
+                "Using mold linker via ld symlink (GCC ${CMAKE_CXX_COMPILER_VERSION})"
+            )
+        else()
+            add_link_options(-fuse-ld=mold)
+            message(STATUS
+                "Using mold linker via -fuse-ld=mold (${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION})"
+            )
+        endif()
+    else()
+        message(WARNING "USE_MOLD enabled, but mold not found")
+    endif()
+endif()
+
 # Add the libjnivm directory as a subproject
 add_subdirectory(libjnivm ${CMAKE_CURRENT_BINARY_DIR}/libjnivm_build)
 
@@ -109,7 +156,6 @@ endif()
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     message(STATUS "Debug build detected: Enabling JNI_DEBUG and VERBOSE_LOG")
     target_compile_definitions(${CMAKE_PROJECT_NAME} PUBLIC 
-        JNI_DEBUG
         VERBOSE_LOG
     )
 endif()
@@ -145,4 +191,5 @@ set_source_files_properties(
 target_precompile_headers(${CMAKE_PROJECT_NAME} PRIVATE
     <baron/baron.h>
     <javac.h>
+    <android.h>
 )
