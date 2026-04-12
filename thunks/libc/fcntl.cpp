@@ -14,6 +14,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#include <cerrno>
 
 char* clean_jar_path(const char* path) {
     if (!path) return NULL;
@@ -152,7 +153,7 @@ ABI_ATTR
 
 ABI_ATTR ssize_t write_impl(int fd, void *buf, size_t count)
 {
-    verbose("NATIVE","writing %zu bytes to file %d",count,fd);
+    // verbose("NATIVE","writing %zu bytes to file %d",count,fd);
     // int i;
     // for (i = 0; i < count; i++)
     // {
@@ -243,5 +244,44 @@ ABI_ATTR int lstat_impl(const char* path, struct stat* buf) {
 // }
 
 
+/* flock() operation flags */
+#ifndef LOCK_SH
+#define LOCK_SH 1    /* shared lock */
+#endif
+#ifndef LOCK_EX
+#define LOCK_EX 2    /* exclusive lock */
+#endif
+#ifndef LOCK_UN
+#define LOCK_UN 8    /* unlock */
+#endif
+#ifndef LOCK_NB
+#define LOCK_NB 4    /* non-blocking */
+#endif
 
+ABI_ATTR int flock_impl(int fd, int operation) {
+    struct flock fl = {0};
+
+    fl.l_whence = SEEK_SET;
+    fl.l_start  = 0;
+    fl.l_len    = 0;   /* whole file */
+
+    switch (operation & (LOCK_SH | LOCK_EX | LOCK_UN)) {
+        case LOCK_SH:
+            fl.l_type = F_RDLCK;
+            break;
+        case LOCK_EX:
+            fl.l_type = F_WRLCK;
+            break;
+        case LOCK_UN:
+            fl.l_type = F_UNLCK;
+            break;
+        default:
+            errno = EINVAL;
+            return -1;
+    }
+
+    int cmd = (operation & LOCK_NB) ? F_SETLK : F_SETLKW;
+
+    return fcntl(fd, cmd, &fl);
+}
 

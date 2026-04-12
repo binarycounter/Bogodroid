@@ -269,6 +269,7 @@ ABI_ATTR int open_impl(const char *filename, int flags, mode_t mode);
 ABI_ATTR ssize_t read_impl(int fd, void *buf, size_t count);
 ABI_ATTR ssize_t write_impl(int fd, void *buf, size_t count);
 ABI_ATTR int close_impl(int fd);
+ABI_ATTR int flock_impl(int fd, int operation);
 
 ABI_ATTR int prctl_impl(int op, int arg1, int arg2, int arg3);
 extern "C" ABI_ATTR int dl_iterate_phdr_impl(void);

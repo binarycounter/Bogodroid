@@ -831,6 +831,7 @@ NO_THUNK("lstat64",(uintptr_t)&lstat_impl),
 NO_THUNK("read", (uintptr_t)&read_impl),
 NO_THUNK("write", (uintptr_t)&write_impl),
 NO_THUNK("close", (uintptr_t)&close_impl),
+NO_THUNK("flock", (uintptr_t)&flock_impl),
 
 NO_THUNK("prctl", (uintptr_t)&prctl_impl),
 
