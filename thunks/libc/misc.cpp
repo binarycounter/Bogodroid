@@ -152,7 +152,9 @@ extern "C" ABI_ATTR int dladdr_impl(const void* addr, Dl_info* info)
 
 extern "C" ABI_ATTR void* dlsym_impl(void* handle, const char* name)
 {
+
     void* addr = (void*)so_resolve_link((so_module*)handle, name);
+    printf("dlsym(%p, %s) = 0x%p\n", handle, name, addr);
     return addr;
 }
 
@@ -480,4 +482,178 @@ extern "C" ABI_ATTR int dl_iterate_phdr_impl(
 extern "C" ABI_ATTR void __assert_impl(const char *expression, const char *file, int line) {
     fprintf(stderr, "Guest assertion failed: %s, file %s, line %d\n", expression, file, line);
     abort();
+}
+
+extern ABI_ATTR long sysconf_impl(int name)
+{
+switch (name) {
+    case 0x0000: return sysconf(_SC_ARG_MAX);
+    case 0x0001: return sysconf(_SC_BC_BASE_MAX);
+    case 0x0002: return sysconf(_SC_BC_DIM_MAX);
+    case 0x0003: return sysconf(_SC_BC_SCALE_MAX);
+    case 0x0004: return sysconf(_SC_BC_STRING_MAX);
+    case 0x0005: return sysconf(_SC_CHILD_MAX);
+    case 0x0006: return sysconf(_SC_CLK_TCK);
+    case 0x0007: return sysconf(_SC_COLL_WEIGHTS_MAX);
+    case 0x0008: return sysconf(_SC_EXPR_NEST_MAX);
+    case 0x0009: return sysconf(_SC_LINE_MAX);
+    case 0x000a: return sysconf(_SC_NGROUPS_MAX);
+    case 0x000b: return sysconf(_SC_OPEN_MAX);
+    case 0x000c: return sysconf(_SC_PASS_MAX);
+    case 0x000d: return sysconf(_SC_2_C_BIND);
+    case 0x000e: return sysconf(_SC_2_C_DEV);
+    case 0x000f: return sysconf(_SC_2_C_VERSION);
+    case 0x0010: return sysconf(_SC_2_CHAR_TERM);
+    case 0x0011: return sysconf(_SC_2_FORT_DEV);
+    case 0x0012: return sysconf(_SC_2_FORT_RUN);
+    case 0x0013: return sysconf(_SC_2_LOCALEDEF);
+    case 0x0014: return sysconf(_SC_2_SW_DEV);
+    case 0x0015: return sysconf(_SC_2_UPE);
+    case 0x0016: return sysconf(_SC_2_VERSION);
+    case 0x0017: return sysconf(_SC_JOB_CONTROL);
+    case 0x0018: return sysconf(_SC_SAVED_IDS);
+    case 0x0019: return sysconf(_SC_VERSION);
+    case 0x001a: return sysconf(_SC_RE_DUP_MAX);
+    case 0x001b: return sysconf(_SC_STREAM_MAX);
+    case 0x001c: return sysconf(_SC_TZNAME_MAX);
+    case 0x001d: return sysconf(_SC_XOPEN_CRYPT);
+    case 0x001e: return sysconf(_SC_XOPEN_ENH_I18N);
+    case 0x001f: return sysconf(_SC_XOPEN_SHM);
+    case 0x0020: return sysconf(_SC_XOPEN_VERSION);
+    case 0x0021: return sysconf(_SC_XOPEN_XCU_VERSION);
+    case 0x0022: return sysconf(_SC_XOPEN_REALTIME);
+    case 0x0023: return sysconf(_SC_XOPEN_REALTIME_THREADS);
+    case 0x0024: return sysconf(_SC_XOPEN_LEGACY);
+    case 0x0025: return sysconf(_SC_ATEXIT_MAX);
+    case 0x0026: return sysconf(_SC_IOV_MAX);
+    case 0x0027: return sysconf(_SC_PAGESIZE);
+    case 0x0028: return sysconf(_SC_PAGE_SIZE);
+    case 0x0029: return sysconf(_SC_XOPEN_UNIX);
+    case 0x002a: return sysconf(_SC_XBS5_ILP32_OFF32);
+    case 0x002b: return sysconf(_SC_XBS5_ILP32_OFFBIG);
+    case 0x002c: return sysconf(_SC_XBS5_LP64_OFF64);
+    case 0x002d: return sysconf(_SC_XBS5_LPBIG_OFFBIG);
+    case 0x002e: return sysconf(_SC_AIO_LISTIO_MAX);
+    case 0x002f: return sysconf(_SC_AIO_MAX);
+    case 0x0030: return sysconf(_SC_AIO_PRIO_DELTA_MAX);
+    case 0x0031: return sysconf(_SC_DELAYTIMER_MAX);
+    case 0x0032: return sysconf(_SC_MQ_OPEN_MAX);
+    case 0x0033: return sysconf(_SC_MQ_PRIO_MAX);
+    case 0x0034: return sysconf(_SC_RTSIG_MAX);
+    case 0x0035: return sysconf(_SC_SEM_NSEMS_MAX);
+    case 0x0036: return sysconf(_SC_SEM_VALUE_MAX);
+    case 0x0037: return sysconf(_SC_SIGQUEUE_MAX);
+    case 0x0038: return sysconf(_SC_TIMER_MAX);
+    case 0x0039: return sysconf(_SC_ASYNCHRONOUS_IO);
+    case 0x003a: return sysconf(_SC_FSYNC);
+    case 0x003b: return sysconf(_SC_MAPPED_FILES);
+    case 0x003c: return sysconf(_SC_MEMLOCK);
+    case 0x003d: return sysconf(_SC_MEMLOCK_RANGE);
+    case 0x003e: return sysconf(_SC_MEMORY_PROTECTION);
+    case 0x003f: return sysconf(_SC_MESSAGE_PASSING);
+    case 0x0040: return sysconf(_SC_PRIORITIZED_IO);
+    case 0x0041: return sysconf(_SC_PRIORITY_SCHEDULING);
+    case 0x0042: return sysconf(_SC_REALTIME_SIGNALS);
+    case 0x0043: return sysconf(_SC_SEMAPHORES);
+    case 0x0044: return sysconf(_SC_SHARED_MEMORY_OBJECTS);
+    case 0x0045: return sysconf(_SC_SYNCHRONIZED_IO);
+    case 0x0046: return sysconf(_SC_TIMERS);
+    case 0x0047: return sysconf(_SC_GETGR_R_SIZE_MAX);
+    case 0x0048: return sysconf(_SC_GETPW_R_SIZE_MAX);
+    case 0x0049: return sysconf(_SC_LOGIN_NAME_MAX);
+    case 0x004a: return sysconf(_SC_THREAD_DESTRUCTOR_ITERATIONS);
+    case 0x004b: return sysconf(_SC_THREAD_KEYS_MAX);
+    case 0x004c: return sysconf(_SC_THREAD_STACK_MIN);
+    case 0x004d: return sysconf(_SC_THREAD_THREADS_MAX);
+    case 0x004e: return sysconf(_SC_TTY_NAME_MAX);
+    case 0x004f: return sysconf(_SC_THREADS);
+    case 0x0050: return sysconf(_SC_THREAD_ATTR_STACKADDR);
+    case 0x0051: return sysconf(_SC_THREAD_ATTR_STACKSIZE);
+    case 0x0052: return sysconf(_SC_THREAD_PRIORITY_SCHEDULING);
+    case 0x0053: return sysconf(_SC_THREAD_PRIO_INHERIT);
+    case 0x0054: return sysconf(_SC_THREAD_PRIO_PROTECT);
+    case 0x0055: return sysconf(_SC_THREAD_SAFE_FUNCTIONS);
+    case 0x0060: return sysconf(_SC_NPROCESSORS_CONF);
+    case 0x0061: return sysconf(_SC_NPROCESSORS_ONLN);
+    case 0x0062: return sysconf(_SC_PHYS_PAGES);
+    case 0x0063: return sysconf(_SC_AVPHYS_PAGES);
+    case 0x0064: return sysconf(_SC_MONOTONIC_CLOCK);
+    case 0x0065: return sysconf(_SC_2_PBS);
+    case 0x0066: return sysconf(_SC_2_PBS_ACCOUNTING);
+    case 0x0067: return sysconf(_SC_2_PBS_CHECKPOINT);
+    case 0x0068: return sysconf(_SC_2_PBS_LOCATE);
+    case 0x0069: return sysconf(_SC_2_PBS_MESSAGE);
+    case 0x006a: return sysconf(_SC_2_PBS_TRACK);
+    case 0x006b: return sysconf(_SC_ADVISORY_INFO);
+    case 0x006c: return sysconf(_SC_BARRIERS);
+    case 0x006d: return sysconf(_SC_CLOCK_SELECTION);
+    case 0x006e: return sysconf(_SC_CPUTIME);
+    case 0x006f: return sysconf(_SC_HOST_NAME_MAX);
+    case 0x0070: return sysconf(_SC_IPV6);
+    case 0x0071: return sysconf(_SC_RAW_SOCKETS);
+    case 0x0072: return sysconf(_SC_READER_WRITER_LOCKS);
+    case 0x0073: return sysconf(_SC_REGEXP);
+    case 0x0074: return sysconf(_SC_SHELL);
+    case 0x0075: return sysconf(_SC_SPAWN);
+    case 0x0076: return sysconf(_SC_SPIN_LOCKS);
+    case 0x0077: return sysconf(_SC_SPORADIC_SERVER);
+    case 0x0078: return sysconf(_SC_SS_REPL_MAX);
+    case 0x0079: return sysconf(_SC_SYMLOOP_MAX);
+    case 0x007a: return sysconf(_SC_THREAD_CPUTIME);
+    case 0x007b: return sysconf(_SC_THREAD_PROCESS_SHARED);
+    case 0x007c: return sysconf(_SC_THREAD_ROBUST_PRIO_INHERIT);
+    case 0x007d: return sysconf(_SC_THREAD_ROBUST_PRIO_PROTECT);
+    case 0x007e: return sysconf(_SC_THREAD_SPORADIC_SERVER);
+    case 0x007f: return sysconf(_SC_TIMEOUTS);
+    case 0x0080: return sysconf(_SC_TRACE);
+    case 0x0081: return sysconf(_SC_TRACE_EVENT_FILTER);
+    case 0x0082: return sysconf(_SC_TRACE_EVENT_NAME_MAX);
+    case 0x0083: return sysconf(_SC_TRACE_INHERIT);
+    case 0x0084: return sysconf(_SC_TRACE_LOG);
+    case 0x0085: return sysconf(_SC_TRACE_NAME_MAX);
+    case 0x0086: return sysconf(_SC_TRACE_SYS_MAX);
+    case 0x0087: return sysconf(_SC_TRACE_USER_EVENT_MAX);
+    case 0x0088: return sysconf(_SC_TYPED_MEMORY_OBJECTS);
+    case 0x0089: return sysconf(_SC_V7_ILP32_OFF32);
+    case 0x008a: return sysconf(_SC_V7_ILP32_OFFBIG);
+    case 0x008b: return sysconf(_SC_V7_LP64_OFF64);
+    case 0x008c: return sysconf(_SC_V7_LPBIG_OFFBIG);
+    case 0x008d: return sysconf(_SC_XOPEN_STREAMS);
+    //case 0x008e: return sysconf(_SC_XOPEN_UUCP); TODO: Not supported on Linux
+    case 0x008f: return sysconf(_SC_LEVEL1_ICACHE_SIZE);
+    case 0x0090: return sysconf(_SC_LEVEL1_ICACHE_ASSOC);
+    case 0x0091: return sysconf(_SC_LEVEL1_ICACHE_LINESIZE);
+    case 0x0092: return sysconf(_SC_LEVEL1_DCACHE_SIZE);
+    case 0x0093: return sysconf(_SC_LEVEL1_DCACHE_ASSOC);
+    case 0x0094: return sysconf(_SC_LEVEL1_DCACHE_LINESIZE);
+    case 0x0095: return sysconf(_SC_LEVEL2_CACHE_SIZE);
+    case 0x0096: return sysconf(_SC_LEVEL2_CACHE_ASSOC);
+    case 0x0097: return sysconf(_SC_LEVEL2_CACHE_LINESIZE);
+    case 0x0098: return sysconf(_SC_LEVEL3_CACHE_SIZE);
+    case 0x0099: return sysconf(_SC_LEVEL3_CACHE_ASSOC);
+    case 0x009a: return sysconf(_SC_LEVEL3_CACHE_LINESIZE);
+    case 0x009b: return sysconf(_SC_LEVEL4_CACHE_SIZE);
+    case 0x009c: return sysconf(_SC_LEVEL4_CACHE_ASSOC);
+    case 0x009d: return sysconf(_SC_LEVEL4_CACHE_LINESIZE);
+    //case 0x009e: return sysconf(_SC_NSIG); TODO: Not supported on Linux
+    default: {
+        long result = sysconf(name);
+        printf("sysconf(%d) returned %ld\n", name, result);
+        return result;
+    }
+}
+}
+
+extern ABI_ATTR int strerror_r_impl(int errnum, char *buf, size_t buflen)
+{
+    char* ret = strerror_r(errnum, buf, buflen);
+    if(ret == 0)
+        return -1;
+    else
+       return errnum;
+}
+ #include <fnmatch.h>
+ABI_ATTR int fnmatch_impl(const char *pattern, const char *string, int flags)
+{
+    return fnmatch(pattern, string, flags);
 }

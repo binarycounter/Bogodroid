@@ -273,3 +273,7 @@ ABI_ATTR int flock_impl(int fd, int operation);
 
 ABI_ATTR int prctl_impl(int op, int arg1, int arg2, int arg3);
 extern "C" ABI_ATTR int dl_iterate_phdr_impl(void);
+
+extern ABI_ATTR long sysconf_impl(int name);
+ABI_ATTR int strerror_r_impl(int errnum, char *buf, size_t buflen);
+ABI_ATTR int fnmatch_impl(const char *pattern, const char *string, int flags);
