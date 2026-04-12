@@ -145,7 +145,7 @@ target_compile_definitions(${CMAKE_PROJECT_NAME} PUBLIC
 
 # IL2CPP tracelogging for Unityloader
 option(IL2CPP_TRACE "Unityloader: Enables il2cpp trace logging - requires il2cpp" OFF)
-if(IL2CPP_TRACE && PROJ STREQUAL "unityloader")
+if(IL2CPP_TRACE AND PROJ STREQUAL "unityloader")
     target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC 
         ${PROJ_SOURCE_DIR}/il2cpp/libil2cpp
     )
@@ -189,7 +189,7 @@ set_source_files_properties(
 
 # Precompiled headers for faster compilation of template-heavy code
 target_precompile_headers(${CMAKE_PROJECT_NAME} PRIVATE
-    <baron/baron.h>
-    <javac.h>
-    <android.h>
+    $<$<COMPILE_LANGUAGE:CXX>:<baron/baron.h>>
+    $<$<COMPILE_LANGUAGE:CXX>:<javac.h>>
+    $<$<COMPILE_LANGUAGE:CXX>:<android.h>>
 )

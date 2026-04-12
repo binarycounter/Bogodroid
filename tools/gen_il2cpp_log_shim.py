@@ -2,7 +2,7 @@
 import os, re, sys
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-API_HEADER = os.path.join(SCRIPT_DIR, '..', 'projects', 'unityloader', 'il2cpp', 'libil2cpp', 'il2cpp-api-functions.h')
+API_HEADER = os.path.join(SCRIPT_DIR, '..', 'il2cpp', 'libil2cpp', 'il2cpp-api-functions.h')
 OUT_CPP = os.path.join(SCRIPT_DIR, '..', 'projects', 'unityloader', 'monocompat', 'il2cpp_log_shim.cpp')
 OUT_H = os.path.join(SCRIPT_DIR, '..', 'projects', 'unityloader', 'monocompat', 'il2cpp_log_shim.h')
 

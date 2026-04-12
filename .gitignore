@@ -6,5 +6,5 @@ build/
 build_release/
 build_cross/
 libjnivm/build/
-projects/unityloader/il2cpp/
+il2cpp/
 projects/unityloader/monocompat/il2cpp_log_shim.cpp
