@@ -6,6 +6,8 @@
 #include <cstring>
 #include <stdlib.h>
 
+#define verbose(tag, format, ...)
+
 typedef enum {
     IL2CPP_UNHANDLED_POLICY_LEGACY,
     IL2CPP_UNHANDLED_POLICY_CURRENT
@@ -140,6 +142,8 @@ static void* (*mono_string_new_wrapper)(const char*) = NULL;
 
 // Liveness functions
 static void* (*mono_unity_liveness_allocate_struct)(void*, unsigned int, void*, void*, void*, void*) = NULL;
+static void (*mono_unity_liveness_calculation_from_root)(void*, void*) = NULL;
+static void (*mono_unity_liveness_calculation_from_statics)(void*) = NULL;
 static void (*mono_unity_liveness_stop_gc_world)(void*) = NULL;
 static void (*mono_unity_liveness_finalize)(void*) = NULL;
 static void (*mono_unity_liveness_start_gc_world)(void*) = NULL;
@@ -280,6 +284,8 @@ void monobridge_init(so_module* mod)
 
     // Liveness functions
     mono_unity_liveness_allocate_struct = (void* (*)(void*, unsigned int, void*, void*, void*, void*))so_symbol(mod, "mono_unity_liveness_allocate_struct");
+    mono_unity_liveness_calculation_from_root = (void (*)(void*, void*))so_symbol(mod, "mono_unity_liveness_calculation_from_root");
+    mono_unity_liveness_calculation_from_statics = (void (*)(void*))so_symbol(mod, "mono_unity_liveness_calculation_from_statics");
     mono_unity_liveness_stop_gc_world = (void (*)(void*))so_symbol(mod, "mono_unity_liveness_stop_gc_world");
     mono_unity_liveness_finalize = (void (*)(void*))so_symbol(mod, "mono_unity_liveness_finalize");
     mono_unity_liveness_start_gc_world = (void (*)(void*))so_symbol(mod, "mono_unity_liveness_start_gc_world");
@@ -301,6 +307,7 @@ void* il2cpp_init_impl(const char* domain)
     verbose("Monobridge", "Bridged call: il2cpp_init %s", domain);
     if (cached_domain == NULL)
         cached_domain = mono_jit_init(domain);
+    verbose("Monobridge", "  -> il2cpp_init = %p", cached_domain);
     return cached_domain;
 }
 
@@ -1093,27 +1100,37 @@ void il2cpp_allocation_granularity_impl()
 void* il2cpp_unity_liveness_allocate_struct_impl(void* filter, int max_object_count, void* register_callback, void* userdata, void* reallocate_callback)
 {
     verbose("Monobridge", "Bridged call: il2cpp_unity_liveness_allocate_struct");
-    return NULL; //mono_unity_liveness_allocate_struct(filter, (unsigned int) max_object_count, register_callback, userdata,)
+    // IL2CPP API has 5 params (filter, max_count, callback, userdata, reallocate).
+    // Mono API has 6 params (filter, max_count, callback, userdata, onWorldStopCB, onWorldStartCB).
+    // The 5th param (reallocate) is only used by mono if arrays need to grow during traversal.
+    // With adequate max_object_count, growth won't happen. On ARM64, the 6th register (x5)
+    // holds a safe residual value since mono only stores the pointer and never calls it
+    // unless array growth triggers during traversal.
+    return mono_unity_liveness_allocate_struct(filter, max_object_count, register_callback, userdata, reallocate_callback, NULL);
 }
 
-void il2cpp_unity_liveness_calculation_from_root_impl()
+void il2cpp_unity_liveness_calculation_from_root_impl(void* root, void* state)
 {
-    verbose("Monobridge", "Stubbed call: il2cpp_unity_liveness_calculation_from_root");
+    verbose("Monobridge", "Bridged call: il2cpp_unity_liveness_calculation_from_root");
+    mono_unity_liveness_calculation_from_root(root, state);
 }
 
-void il2cpp_unity_liveness_calculation_from_statics_impl()
+void il2cpp_unity_liveness_calculation_from_statics_impl(void* state)
 {
-    verbose("Monobridge", "Stubbed call: il2cpp_unity_liveness_calculation_from_statics");
+    verbose("Monobridge", "Bridged call: il2cpp_unity_liveness_calculation_from_statics");
+    mono_unity_liveness_calculation_from_statics(state);
 }
 
-void il2cpp_unity_liveness_finalize_impl()
+void il2cpp_unity_liveness_finalize_impl(void* state)
 {
-    verbose("Monobridge", "Stubbed call: il2cpp_unity_liveness_finalize");
+    verbose("Monobridge", "Bridged call: il2cpp_unity_liveness_finalize");
+    mono_unity_liveness_finalize(state);
 }
 
-void il2cpp_unity_liveness_free_struct_impl()
+void il2cpp_unity_liveness_free_struct_impl(void* state)
 {
-    verbose("Monobridge", "Stubbed call: il2cpp_unity_liveness_free_struct");
+    verbose("Monobridge", "Bridged call: il2cpp_unity_liveness_free_struct");
+    mono_unity_liveness_free_struct(state);
 }
 
 void* il2cpp_method_get_return_type_impl(void* method)
@@ -1778,7 +1795,17 @@ void il2cpp_unity_set_android_network_up_state_func_impl()
     verbose("Monobridge", "Stubbed call: il2cpp_unity_set_android_network_up_state_func");
 }
 
+
+// NOT SURE WHAT THESE ARE YET
+
+void il2cpp_class_is_inited_impl()
+{
+    printf("Monobridge Unimplemented call: il2cpp_class_is_inited");
+    exit(-1);
+}
+
 DynLibFunction symtable_monobridge[] = {
+    NO_THUNK("il2cpp_class_is_inited", (uintptr_t)&il2cpp_class_is_inited_impl),
     NO_THUNK("il2cpp_init", (uintptr_t)&il2cpp_init_impl),
     NO_THUNK("il2cpp_init_utf16", (uintptr_t)&il2cpp_init_utf16_impl),
     NO_THUNK("il2cpp_shutdown", (uintptr_t)&il2cpp_shutdown_impl),
