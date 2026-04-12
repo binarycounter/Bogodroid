@@ -5,3 +5,5 @@ gamefiles/*
 build/
 build_release/
 libjnivm/build/
+projects/unityloader/il2cpp/
+projects/unityloader/monocompat/il2cpp_log_shim.cpp

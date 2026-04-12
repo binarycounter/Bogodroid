@@ -10,6 +10,7 @@ toml::table config;
 #include "io_util.h"
 #include "javastubs/binding.h"
 #include "monocompat/monobridge.h"
+#include "monocompat/il2cpp_log_shim.h"
 #include "platform.h"
 #include "so_util.h"
 #include <baron/baron.h>
@@ -51,6 +52,7 @@ using namespace FakeJni;
 // };
 
 extern DynLibFunction symtable_monobridge[];
+extern DynLibFunction symtable_il2cpp_log[];
 extern DynLibFunction symtable_libc[];
 extern DynLibFunction symtable_ndk[];
 extern DynLibFunction symtable_gles2[];
@@ -174,6 +176,11 @@ int main(int argc, char* argv[])
         monobridge_init(&lil2cpp);
     }
     loaded_modules[module_count++] = &lil2cpp;
+
+#ifdef IL2CPP_TRACE
+    if(config["debug"]["log_il2cpp"].value_or<bool>(false))
+        il2cpp_log_shim_init(&lil2cpp, symtable_monobridge);
+#endif
 
     printf("Loading libunity\n");
     so_module lunity = {};

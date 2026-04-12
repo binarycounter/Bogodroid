@@ -118,8 +118,12 @@ cmake .. -DCMAKE_BUILD_TYPE=Release -DPROJ=hexagonloader
 
 See `tools/unity_traces` for a trace of a minimal Unity game starting up
 
+# IL2CPP Trace Logging your Game
 
-
+1. Locate your copy of il2cpp from your Unity Editor in `Data/il2cpp`
+2. Copy this folder to `projects/unityloader/`
+3. Run `cd tools/ && python3 gen_il2cpp_log_shim.py`
+4. Configure your build with `-DIL2CPP_TRACE=1`
 
 
 # Ports in Progress

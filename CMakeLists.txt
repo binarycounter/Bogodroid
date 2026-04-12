@@ -96,6 +96,15 @@ target_compile_definitions(${CMAKE_PROJECT_NAME} PUBLIC
     EnableJNIVMGC
 )
 
+# IL2CPP tracelogging for Unityloader
+option(IL2CPP_TRACE "Unityloader: Enables il2cpp trace logging - requires il2cpp" OFF)
+if(IL2CPP_TRACE && PROJ STREQUAL "unityloader")
+    target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC 
+        ${PROJ_SOURCE_DIR}/il2cpp/libil2cpp
+    )
+    target_compile_definitions(my_target PRIVATE IL2CPP_TRACE=1)
+endif()
+
 # Add extra debug definitions ONLY for Debug builds
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     message(STATUS "Debug build detected: Enabling JNI_DEBUG and VERBOSE_LOG")
