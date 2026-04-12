@@ -70,6 +70,14 @@ bool HasBaseClass(JNIEnv *env, Class* cl, Class* c2) {
 	return false;
 }
 jboolean IsAssignableFrom(JNIEnv *env, jclass c1, jclass c2) {
+	//Debugging TODO: Figure out why String is not assignable to Object. String missing baseclass? Bug?
+	auto&& clazz1 = JNITypes<std::shared_ptr<jnivm::Class>>::JNICast(ENV::FromJNIEnv(env), c1);
+	auto&& clazz2 = JNITypes<std::shared_ptr<jnivm::Class>>::JNICast(ENV::FromJNIEnv(env), c2);
+	if(strcmp(clazz1.get()->getName().c_str(), "java/lang/String") == 0 && strcmp(clazz2.get()->getName().c_str(), "java/lang/Object") == 0)
+	{
+		printf("[JNIVM] Override: String is assignable to Object. (Silly hack)\n");
+		return true; 
+	}
 	return HasBaseClass(env, JNITypes<std::shared_ptr<jnivm::Class>>::JNICast(ENV::FromJNIEnv(env), c1).get(), JNITypes<std::shared_ptr<jnivm::Class>>::JNICast(ENV::FromJNIEnv(env), c2).get());
 };
 jobject ToReflectedField(JNIEnv * env, jclass c, jfieldID fid, jboolean isStatic) {
