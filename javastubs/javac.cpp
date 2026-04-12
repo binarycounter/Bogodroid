@@ -78,6 +78,44 @@ jnivm::java::io::InputStream::InputStream(std::shared_ptr<FakeJni::JString> file
     this->file = file;
 }
 
+int jnivm::java::io::InputStream::read(
+    std::shared_ptr<FakeJni::JByteArray> buffer,
+    int offset,
+    int length)
+{
+    if (!file || !file->is_open()) {
+        // Java: If the first byte cannot be read for any reason other than EOF ⇒ throw IOException
+        return -1;
+    }
+
+    if (!buffer) {
+        // Java would throw NullPointerException; your framework may differ
+        return -1;
+    }
+
+    if (offset < 0 || length < 0 || offset + length > buffer->getSize()) {
+        // Java: IndexOutOfBoundsException
+        return -1;
+    }
+
+    if (length == 0) {
+        return 0;
+    }
+
+    char* dest = reinterpret_cast<char*>(buffer->getArray() + offset);
+
+    // Read from current file position
+    file->read(dest, length);
+    std::streamsize count = file->gcount();
+
+    if (count == 0) {
+        // If at EOF before reading any bytes
+        return -1;
+    }
+
+    return static_cast<int>(count);
+}
+
 ///// File
 
 jnivm::java::io::File::File(std::shared_ptr<FakeJni::JString> path)
@@ -89,6 +127,13 @@ std::shared_ptr<FakeJni::JString> jnivm::java::io::File::getPath()
 {
     return path;
 }
+
+std::shared_ptr<FakeJni::JString> jnivm::java::io::File::toString()
+{
+    return getPath();
+}
+
+
 
 ///// Thread
 #include <chrono>
@@ -315,9 +360,11 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::java::lang::Long) { FakeJni::Constructor<Long, jl
     { FakeJni::Function<&StringBuilder::toString> {}, "toString", FakeJni::JMethodID::PUBLIC },
     END_NATIVE_DESCRIPTOR
     BEGIN_NATIVE_DESCRIPTOR(jnivm::java::io::InputStream) { FakeJni::Constructor<InputStream, std::shared_ptr<FakeJni::JString>> {} },
+    { FakeJni::Function<&InputStream::read> {}, "read", FakeJni::JMethodID::PUBLIC },
     END_NATIVE_DESCRIPTOR
     BEGIN_NATIVE_DESCRIPTOR(jnivm::java::io::File) { FakeJni::Constructor<File, std::shared_ptr<FakeJni::JString>> {} },
     { FakeJni::Function<&File::getPath> {}, "getPath", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&File::toString> {}, "toString", FakeJni::JMethodID::PUBLIC },
     END_NATIVE_DESCRIPTOR
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::java::util::Map) { FakeJni::Constructor<Map> {} },

@@ -74,7 +74,6 @@ namespace java {
             std::shared_ptr<FakeJni::JString> toString();
         };
 
-        // Interface, no implementation
         class Runnable : public virtual FakeJni::JObject {
         public:
             DEFINE_CLASS_NAME("java/lang/Runnable")
@@ -158,6 +157,7 @@ namespace java {
             DEFINE_CLASS_NAME("java/io/InputStream")
             std::ifstream* file;
             InputStream(std::shared_ptr<FakeJni::JString> filename);
+            int read(std::shared_ptr<FakeJni::JByteArray> buffer, int offset, int length);
         };
 
         class File : public FakeJni::JObject {
@@ -166,6 +166,7 @@ namespace java {
             std::shared_ptr<FakeJni::JString> path;
             File(std::shared_ptr<FakeJni::JString> path);
             std::shared_ptr<FakeJni::JString> getPath();
+            std::shared_ptr<FakeJni::JString> toString();
         };
     }
 
