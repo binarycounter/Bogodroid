@@ -554,3 +554,75 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::Display) { FakeJni::Constructor<Di
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::ContextThemeWrapper) { FakeJni::Constructor<ContextThemeWrapper> {} },
     { FakeJni::Function<&ContextThemeWrapper::getResources> {}, "getResources", FakeJni::JMethodID::PUBLIC },
     END_NATIVE_DESCRIPTOR
+
+///// AlertDialog$Builder
+
+jnivm::android::app::AlertDialogBuilder::AlertDialogBuilder(std::shared_ptr<jnivm::android::content::Context> context)
+{
+}
+
+std::shared_ptr<jnivm::android::app::AlertDialogBuilder> jnivm::android::app::AlertDialogBuilder::setTitle(std::shared_ptr<jnivm::CharSequence> title)
+{
+    if (auto str = title->toString()) {
+        warning("AlertDialog title: %s\n", str->c_str());
+    }
+    return std::static_pointer_cast<jnivm::android::app::AlertDialogBuilder>(shared_from_this());
+}
+
+std::shared_ptr<jnivm::android::app::AlertDialogBuilder> jnivm::android::app::AlertDialogBuilder::setMessage(std::shared_ptr<jnivm::CharSequence> message)
+{
+    if (auto str = message->toString()) {
+        warning("AlertDialog message: %s\n", str->c_str());
+    }
+    return std::static_pointer_cast<jnivm::android::app::AlertDialogBuilder>(shared_from_this());
+}
+
+std::shared_ptr<jnivm::android::app::AlertDialogBuilder> jnivm::android::app::AlertDialogBuilder::setPositiveButton(std::shared_ptr<jnivm::CharSequence> text, std::shared_ptr<jnivm::android::app::DialogInterfaceOnClickListener> listener)
+{
+    return std::static_pointer_cast<jnivm::android::app::AlertDialogBuilder>(shared_from_this());
+}
+
+std::shared_ptr<jnivm::android::app::AlertDialogBuilder> jnivm::android::app::AlertDialogBuilder::setNegativeButton(std::shared_ptr<jnivm::CharSequence> text, std::shared_ptr<jnivm::android::app::DialogInterfaceOnClickListener> listener)
+{
+    return std::static_pointer_cast<jnivm::android::app::AlertDialogBuilder>(shared_from_this());
+}
+
+std::shared_ptr<jnivm::android::app::AlertDialogBuilder> jnivm::android::app::AlertDialogBuilder::setOnCancelListener(std::shared_ptr<jnivm::android::app::DialogInterfaceOnCancelListener> listener)
+{
+    return std::static_pointer_cast<jnivm::android::app::AlertDialogBuilder>(shared_from_this());
+}
+
+std::shared_ptr<jnivm::android::app::AlertDialogBuilder> jnivm::android::app::AlertDialogBuilder::setView(std::shared_ptr<jnivm::android::view::View> view)
+{
+    return std::static_pointer_cast<jnivm::android::app::AlertDialogBuilder>(shared_from_this());
+}
+
+std::shared_ptr<jnivm::android::app::AlertDialog> jnivm::android::app::AlertDialogBuilder::show()
+{
+    return std::make_shared<jnivm::android::app::AlertDialog>();
+}
+
+BEGIN_NATIVE_DESCRIPTOR(jnivm::android::app::DialogInterface)
+    { FakeJni::Constructor<DialogInterface> {} },
+END_NATIVE_DESCRIPTOR
+
+BEGIN_NATIVE_DESCRIPTOR(jnivm::android::app::DialogInterfaceOnClickListener)
+END_NATIVE_DESCRIPTOR
+
+BEGIN_NATIVE_DESCRIPTOR(jnivm::android::app::DialogInterfaceOnCancelListener)
+END_NATIVE_DESCRIPTOR
+
+BEGIN_NATIVE_DESCRIPTOR(jnivm::android::app::AlertDialog)
+    { FakeJni::Constructor<AlertDialog> {} },
+END_NATIVE_DESCRIPTOR
+
+BEGIN_NATIVE_DESCRIPTOR(jnivm::android::app::AlertDialogBuilder)
+    { FakeJni::Constructor<AlertDialogBuilder, std::shared_ptr<jnivm::android::content::Context>> {} },
+    { FakeJni::Function<&AlertDialogBuilder::setTitle> {}, "setTitle", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&AlertDialogBuilder::setMessage> {}, "setMessage", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&AlertDialogBuilder::setPositiveButton> {}, "setPositiveButton", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&AlertDialogBuilder::setNegativeButton> {}, "setNegativeButton", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&AlertDialogBuilder::setOnCancelListener> {}, "setOnCancelListener", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&AlertDialogBuilder::setView> {}, "setView", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&AlertDialogBuilder::show> {}, "show", FakeJni::JMethodID::PUBLIC },
+END_NATIVE_DESCRIPTOR

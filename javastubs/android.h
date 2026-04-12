@@ -782,6 +782,40 @@ namespace android {
         public:
             DEFINE_CLASS_NAME("android/app/NativeActivity")
         };
+
+        class DialogInterface : public virtual FakeJni::JObject {
+        public:
+            DEFINE_CLASS_NAME("android/content/DialogInterface")
+        };
+
+        class DialogInterfaceOnClickListener : public virtual FakeJni::JObject {
+        public:
+            DEFINE_CLASS_NAME("android/content/DialogInterface$OnClickListener")
+        };
+
+        class DialogInterfaceOnCancelListener : public virtual FakeJni::JObject {
+        public:
+            DEFINE_CLASS_NAME("android/content/DialogInterface$OnCancelListener")
+        };
+
+        class AlertDialog : public jnivm::android::app::DialogInterface {
+        public:
+            DEFINE_CLASS_NAME("android/app/AlertDialog", jnivm::android::app::DialogInterface)
+        };
+
+        
+        class AlertDialogBuilder : public FakeJni::JObject {
+        public:
+            DEFINE_CLASS_NAME("android/app/AlertDialog$Builder")
+            AlertDialogBuilder(std::shared_ptr<jnivm::android::content::Context> context);
+            std::shared_ptr<AlertDialogBuilder> setTitle(std::shared_ptr<jnivm::CharSequence> title);
+            std::shared_ptr<AlertDialogBuilder> setMessage(std::shared_ptr<jnivm::CharSequence> message);
+            std::shared_ptr<AlertDialogBuilder> setPositiveButton(std::shared_ptr<jnivm::CharSequence> text, std::shared_ptr<jnivm::android::app::DialogInterfaceOnClickListener> listener);
+            std::shared_ptr<AlertDialogBuilder> setNegativeButton(std::shared_ptr<jnivm::CharSequence> text, std::shared_ptr<jnivm::android::app::DialogInterfaceOnClickListener> listener);
+            std::shared_ptr<AlertDialogBuilder> setOnCancelListener(std::shared_ptr<jnivm::android::app::DialogInterfaceOnCancelListener> listener);
+            std::shared_ptr<AlertDialogBuilder> setView(std::shared_ptr<jnivm::android::view::View> view);
+            std::shared_ptr<jnivm::android::app::AlertDialog> show();
+        };
     }
 
     namespace provider {

@@ -81,6 +81,11 @@ void InitJNIAndroidClasses(FakeJni::Jvm* vm)
     // App
     vm->registerClass<jnivm::android::app::Activity>();
     vm->registerClass<jnivm::android::app::NativeActivity>();
+    vm->registerClass<jnivm::android::app::DialogInterface>();
+    vm->registerClass<jnivm::android::app::DialogInterfaceOnClickListener>();
+    vm->registerClass<jnivm::android::app::DialogInterfaceOnCancelListener>();
+    vm->registerClass<jnivm::android::app::AlertDialog>();
+    vm->registerClass<jnivm::android::app::AlertDialogBuilder>();
 
     // Provider
     vm->registerClass<jnivm::android::provider::Settings>();
