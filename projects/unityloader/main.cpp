@@ -120,6 +120,14 @@ int main(int argc, char* argv[])
     // sdl_initialize_gles();
     InitJNIBinding(&vm);
 
+    JClass* unityClass = vm.findClass("com/unity3d/player/UnityPlayer").get();
+
+    auto unityActivity = std::make_shared<jnivm::com::unity3d::player::UnityPlayerActivity>();
+    auto unityPlayer = std::make_shared<jnivm::com::unity3d::player::UnityPlayer>();
+    auto unityPlayerObj = std::dynamic_pointer_cast<jnivm::Object>(unityPlayer);
+    jnivm::com::unity3d::player::UnityPlayer::currentActivity = unityActivity;
+    auto& backend = InputBackend::instance();
+
     int module_count = 0;
 
     // There is a weird incompatibility with Unity's incremental GC. Luckily there's a commandline parameter to overwrite it.
@@ -197,8 +205,8 @@ int main(int argc, char* argv[])
     const char* path_lburst = "lib/arm64-v8a/lib_burst_generated.so";
     if (!load_so_from_file(&lburst, path_lburst, addr_lburst)) {
         printf("No libburst found\n");
-    }
-    loaded_modules[module_count++] = &lburst;
+    } else
+        loaded_modules[module_count++] = &lburst;
 
     printf("Loading libUnityHelp\n");
     so_module lhelpers = {};
@@ -268,15 +276,6 @@ int main(int argc, char* argv[])
         std::cout << &unityJNI_OnLoad << std::endl;
         unityJNI_OnLoad(&vm, nullptr);
     }
-
-    JClass* unityClass = vm.findClass("com/unity3d/player/UnityPlayer").get();
-    
-
-    auto unityActivity = std::make_shared<jnivm::com::unity3d::player::UnityPlayerActivity>();
-    auto unityPlayer = std::make_shared<jnivm::com::unity3d::player::UnityPlayer>();
-    auto unityPlayerObj = std::dynamic_pointer_cast<jnivm::Object>(unityPlayer);
-    jnivm::com::unity3d::player::UnityPlayer::currentActivity = unityActivity;
-    auto& backend = InputBackend::instance();
 
     backend.setKeyCallback([unityActivity](std::shared_ptr<jnivm::android::view::KeyEvent> event) {
         unityActivity->injectEvent(event);

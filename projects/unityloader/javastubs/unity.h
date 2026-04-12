@@ -16,7 +16,7 @@ namespace com {
 
             class UnityPlayerActivity : public jnivm::android::app::Activity {
             public:
-                DEFINE_CLASS_NAME("com/unity3d/player/UnityPlayerActivity")
+                DEFINE_CLASS_NAME("com/unity3d/player/UnityPlayerActivity", jnivm::android::app::Activity)
                 bool injectEvent(std::shared_ptr<android::view::InputEvent> event);
             };
 
@@ -27,7 +27,7 @@ namespace com {
                 bool initializeGoogleAr();
                 std::shared_ptr<FakeJni::JString> getLaunchURL();
 
-                static std::shared_ptr<jnivm::com::unity3d::player::UnityPlayerActivity> currentActivity;
+                static std::shared_ptr<jnivm::android::app::Activity> currentActivity;
     
             };
 

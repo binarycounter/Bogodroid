@@ -4,7 +4,7 @@
 #include "logging.h"
 
 ///// UnityPlayer
-std::shared_ptr<jnivm::com::unity3d::player::UnityPlayerActivity> jnivm::com::unity3d::player::UnityPlayer::currentActivity = nullptr;
+std::shared_ptr<jnivm::android::app::Activity> jnivm::com::unity3d::player::UnityPlayer::currentActivity = nullptr;
 
 bool jnivm::com::unity3d::player::UnityPlayerActivity::injectEvent(std::shared_ptr<android::view::InputEvent> event)
 {
