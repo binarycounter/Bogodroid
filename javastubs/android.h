@@ -635,6 +635,8 @@ namespace android {
             DEFINE_CLASS_NAME("android/os/Environment")
             inline static FakeJni::JString MEDIA_MOUNTED = (FakeJni::JString) "MEDIA_MOUNTED";
             static std::shared_ptr<FakeJni::JString> getExternalStorageState();
+            static std::shared_ptr<jnivm::java::io::File> getExternalStorageDirectory();
+            static bool isExternalStorageManager();
         };
 
         class PowerManager : public FakeJni::JObject {
@@ -688,6 +690,7 @@ namespace android {
             public:
                 DEFINE_CLASS_NAME("android/content/res/AssetManager")
                 std::shared_ptr<jnivm::java::io::InputStream> open(std::shared_ptr<FakeJni::JString> file);
+                std::shared_ptr<jnivm::Array<FakeJni::JString>> list(std::shared_ptr<FakeJni::JString> path);
             };
 
             class Resources : public FakeJni::JObject {
@@ -744,6 +747,7 @@ namespace android {
             std::shared_ptr<jnivm::java::io::File> getExternalCacheDir();
             std::shared_ptr<jnivm::java::io::File> getCacheDir();
             std::shared_ptr<jnivm::java::io::File> getExternalFilesDir(std::shared_ptr<FakeJni::JString> path);
+            static std::shared_ptr<jnivm::java::io::File> getExternalFilesDirInternal();
             std::shared_ptr<jnivm::java::io::File> getObbDir();
             std::shared_ptr<jnivm::Array<jnivm::java::io::File>> getObbDirs();
             int checkCallingOrSelfPermission(std::shared_ptr<FakeJni::JString> permission);
@@ -762,7 +766,7 @@ namespace android {
     namespace app {
         class Activity : public jnivm::android::content::Context {
         public:
-            DEFINE_CLASS_NAME("android/app/Activity")
+            DEFINE_CLASS_NAME("android/app/Activity", jnivm::android::content::Context)
             void runOnUiThread(std::shared_ptr<jnivm::java::lang::Runnable> runnable);
             std::shared_ptr<jnivm::android::content::Intent> getIntent();
             int getRequestedOrientation();

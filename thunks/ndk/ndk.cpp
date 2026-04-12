@@ -164,6 +164,7 @@ NO_THUNK("AAssetManager_fromJava", (uintptr_t)&AAssetManager_fromJava),
 NO_THUNK("AAsset_getBuffer",(uintptr_t)&AAsset_getBuffer),
 NO_THUNK("AAsset_getLength",(uintptr_t)&AAsset_getLength),
 NO_THUNK("AAsset_close",(uintptr_t)&AAsset_close),
+NO_THUNK("AAsset_read", (uintptr_t)&AAsset_read),
     {NULL, (uintptr_t)NULL}};
 
 

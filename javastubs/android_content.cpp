@@ -8,6 +8,7 @@ extern toml::table config;
 #include <fstream>
 #include <inttypes.h>
 #include <pthread.h>
+#include <filesystem>
 
 ///// PackageManager
 
@@ -31,6 +32,46 @@ jnivm::android::content::res::AssetManager::open(std::shared_ptr<FakeJni::JStrin
     verbose("JBRIDGE", "AssetManager opening file %s", filename.get()->c_str());
     return std::make_shared<jnivm::java::io::InputStream>(std::make_shared<FakeJni::JString>(std::string("assets/").append(filename.get()->c_str())));
 }
+
+std::shared_ptr<jnivm::Array<FakeJni::JString>>
+jnivm::android::content::res::AssetManager::list(std::shared_ptr<FakeJni::JString> path)
+{
+    const std::string relPath = path ? path->c_str() : "";
+    verbose("JBRIDGE", "AssetManager listing files in '%s'", relPath.c_str());
+
+    // Construct the actual filesystem path
+    std::filesystem::path p = std::filesystem::path("assets") / relPath;
+
+    try {
+        if (!std::filesystem::exists(p) || !std::filesystem::is_directory(p)) {
+            return std::make_shared<jnivm::Array<jnivm::java::lang::String>>(0);
+        }
+
+        std::vector<std::string> entries;
+
+        for (const auto& entry : std::filesystem::directory_iterator(p)) {
+            // ANDROID SPEC: Only return the child name; no prefix
+            std::string name = entry.path().filename().string();
+            entries.push_back(name);
+
+            verbose("JBRIDGE", "AssetManager found entry '%s'", name.c_str());
+        }
+
+        // Convert vector<string> to JNI-style Array<JString>
+        auto result = std::make_shared<jnivm::Array<jnivm::java::lang::String>>(entries.size());
+
+        for (size_t i = 0; i < entries.size(); i++) {
+            (*result)[i] = std::make_shared<jnivm::java::lang::String>(entries[i]);
+        }
+
+        return result;
+    }
+    catch (const std::filesystem::filesystem_error& e) {
+        verbose("JBRIDGE", "Error listing files in '%s': %s", relPath.c_str(), e.what());
+        std::make_shared<jnivm::Array<jnivm::java::lang::String>>(0);
+    }
+}
+
 
 ///// Resources
 
@@ -169,6 +210,12 @@ jnivm::android::content::Context::getPackageCodePath()
 std::shared_ptr<jnivm::java::io::File>
 jnivm::android::content::Context::getExternalFilesDir(std::shared_ptr<FakeJni::JString> path)
 {
+    return getExternalFilesDirInternal();
+}
+
+std::shared_ptr<jnivm::java::io::File>
+jnivm::android::content::Context::getExternalFilesDirInternal()
+{
     char* resolved_path = realpath(config["paths"]["android_external_files"].value_or<std::string>("./path_not_defined_external").c_str(), NULL);
     if (resolved_path == NULL) {
         return NULL;
@@ -299,6 +346,7 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::pm::ActivityInfo) { FakeJni::Co
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::res::AssetManager) { FakeJni::Constructor<AssetManager> {} },
     { FakeJni::Function<&AssetManager::open> {}, "open", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&AssetManager::list> {}, "list", FakeJni::JMethodID::PUBLIC },
     END_NATIVE_DESCRIPTOR
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::res::Resources) { FakeJni::Constructor<Resources> {} },

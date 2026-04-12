@@ -390,6 +390,16 @@ jnivm::android::os::Environment::getExternalStorageState()
     return std::make_shared<FakeJni::JString>("MEDIA_REMOVED");
 }
 
+std::shared_ptr<jnivm::java::io::File> jnivm::android::os::Environment::getExternalStorageDirectory()
+{
+    return jnivm::android::content::Context::getExternalFilesDirInternal();
+}
+
+bool jnivm::android::os::Environment::isExternalStorageManager()
+{
+    return true;
+}
+
 ///// PowerManager
 
 bool jnivm::android::os::PowerManager::isSustainedPerformanceModeSupported()
@@ -458,6 +468,8 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::os::Build) { FakeJni::Constructor<Build>
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::os::Environment) { FakeJni::Constructor<Environment> {} },
     { FakeJni::Field<&Environment::MEDIA_MOUNTED> {}, "MEDIA_MOUNTED", FakeJni::JFieldID::STATIC },
     { FakeJni::Function<&Environment::getExternalStorageState> {}, "getExternalStorageState", FakeJni::JMethodID::STATIC },
+    { FakeJni::Function<&Environment::getExternalStorageDirectory> {}, "getExternalStorageDirectory", FakeJni::JMethodID::STATIC },
+    { FakeJni::Function<&Environment::isExternalStorageManager> {}, "isExternalStorageManager", FakeJni::JMethodID::STATIC },
     END_NATIVE_DESCRIPTOR
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::os::PowerManager) { FakeJni::Constructor<PowerManager> {} },
