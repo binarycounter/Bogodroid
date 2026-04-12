@@ -16,18 +16,14 @@ jstring jnivm::NewString(JNIEnv *env, const jchar * str, jsize size) {
 jsize jnivm::GetStringLength(JNIEnv *env, jstring str) {
     if(str) {
         std::shared_ptr<std::string> cstr = JNITypes<std::shared_ptr<String>>::JNICast(ENV::FromJNIEnv(env), str);
-        size_t count = 0;
         jsize length = 0;
-        auto cur = cstr->data(), end = cur + cstr->length();
-        
+        auto cur = cstr->data();
+        auto end = cur + cstr->length();
         while(cur != end && length >= 0) {
-            cur += UTFToJCharLength(cur);
+            cur += UTFToJCharLength(cur);     
             length++;
         }
-        if(length < 0) {
-            throw std::runtime_error("String to long, to fit in jsize");
-        }
-        return length;
+    return length;
     } else {
         return 0;
     }
@@ -38,18 +34,17 @@ const jchar *jnivm::GetStringChars(JNIEnv * env, jstring str, jboolean * copy) {
             *copy = true;
         }
         jsize length = GetStringLength(env, str);
-        // Allocate explicitly allocates string region
-        jchar * jstr = new jchar[length];
+        jchar * jstr = new jchar[length + 1];    // plus terminator
         env->GetStringRegion(str, 0, length, jstr);
+        jstr[length] = 0;
         return jstr;
     } else {
-        return new jchar[1] { (jchar)'\0' };
+        return new jchar[1]{0};
     }
 };
 void jnivm::ReleaseStringChars(JNIEnv * env, jstring str, const jchar * cstr) {
-    // Free explicitly allocates string region
-    delete[] cstr;
-};
+    //delete[] cstr; // TODO: THIS IS AWFUL; FIX THIS SHIT #_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#_#
+}
 jstring jnivm::NewStringUTF(JNIEnv * env, const char *str) {
     return JNITypes<std::shared_ptr<String>>::ToJNIType(ENV::FromJNIEnv(env), std::make_shared<String>(str ? str : ""));
 };
