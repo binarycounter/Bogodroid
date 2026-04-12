@@ -63,7 +63,6 @@ DynLibFunction* so_static_patches[32] = {
 };
 
 DynLibFunction* so_dynamic_libraries[32] = {
-    // symtable_il2cppfake,
     symtable_libc,
     symtable_ndk,
     symtable_egl_sdl,
@@ -80,6 +79,8 @@ extern SDL_GLContext sdl_ctx;
 extern EGLDisplay egl_display;
 extern EGLContext egl_context;
 extern EGLSurface egl_surface;
+
+bool llcompat = true;
 
 Baron::Jvm vm;
 
@@ -141,6 +142,86 @@ int main(int argc, char* argv[])
         printf("No libhelp found\n");
     }
     loaded_modules[module_count++] = &lcpp;
+
+    so_module lbootstrap = {};
+    uintptr_t addr_lbootstrap = 0x4200000000;
+    const char* path_lbootstrap = "lib/arm64-v8a/libBootstrap.so";
+
+    so_module ldobby = {};
+    uintptr_t addr_ldobby = 0x4250000000;
+    const char* path_ldobby = "lib/arm64-v8a/libdobby.so";
+    if (llcompat) {
+        printf("LemonLoader Compat active, loading libBootstrap.so and libdobby.so\n");
+        if (!load_so_from_file(&ldobby, path_ldobby, addr_ldobby)) {
+            printf("No libdobby found\n");
+        }
+        loaded_modules[module_count++] = &ldobby;
+
+        if (!load_so_from_file(&lbootstrap, path_lbootstrap, addr_lbootstrap)) {
+            printf("No libbootstrap found\n");
+        }
+        loaded_modules[module_count++] = &lbootstrap;
+
+        so_module* mod = (so_module*)calloc(1, sizeof(so_module));
+        if (mod && load_so_from_file(mod, "lib/arm64-v8a/libcrypto.so", 0x4251000000)) {
+            printf("  Loaded: libcrypto.so\n");
+            loaded_modules[module_count++] = mod;
+        }
+
+        mod = (so_module*)calloc(1, sizeof(so_module));
+        if (mod && load_so_from_file(mod, "lib/arm64-v8a/libssl.so", 0x4252000000)) {
+            printf("  Loaded: libssl.so\n");
+            loaded_modules[module_count++] = mod;
+        }
+
+        mod = (so_module*)calloc(1, sizeof(so_module));
+        if (mod && load_so_from_file(mod, "assets/dotnet/host/fxr/8.0.6/libhostfxr.so", 0x4253000000)) {
+            printf("  Loaded: libhostfxr.so\n");
+            loaded_modules[module_count++] = mod;
+        }
+
+        mod = (so_module*)calloc(1, sizeof(so_module));
+        if (mod && load_so_from_file(mod, "assets/dotnet/shared/Microsoft.NETCore.App/8.0.6/libhostpolicy.so", 0x4254000000)) {
+            printf("  Loaded: libhostpolicy.so\n");
+            loaded_modules[module_count++] = mod;
+        }
+
+        mod = (so_module*)calloc(1, sizeof(so_module));
+        if (mod && load_so_from_file(mod, "assets/dotnet/shared/Microsoft.NETCore.App/8.0.6/libcoreclr.so", 0x4255000000)) {
+            printf("  Loaded: libcoreclr.so\n");
+            loaded_modules[module_count++] = mod;
+        }
+
+        mod = (so_module*)calloc(1, sizeof(so_module));
+        if (mod && load_so_from_file(mod, "assets/dotnet/shared/Microsoft.NETCore.App/8.0.6/libSystem.Native.so", 0x4256000000)) {
+            printf("  Loaded: libSystem.Native.so\n");
+            loaded_modules[module_count++] = mod;
+        }
+
+        mod = (so_module*)calloc(1, sizeof(so_module));
+        if (mod && load_so_from_file(mod, "assets/dotnet/shared/Microsoft.NETCore.App/8.0.6/libSystem.Globalization.Native.so", 0x4257000000)) {
+            printf("  Loaded: libSystem.Globalization.Native.so\n");
+            loaded_modules[module_count++] = mod;
+        }
+
+        mod = (so_module*)calloc(1, sizeof(so_module));
+        if (mod && load_so_from_file(mod, "assets/dotnet/shared/Microsoft.NETCore.App/8.0.6/libSystem.IO.Compression.Native.so", 0x4258000000)) {
+            printf("  Loaded: libSystem.IO.Compression.Native.so\n");
+            loaded_modules[module_count++] = mod;
+        }
+
+        mod = (so_module*)calloc(1, sizeof(so_module));
+        if (mod && load_so_from_file(mod, "assets/dotnet/shared/Microsoft.NETCore.App/8.0.6/libSystem.Security.Cryptography.Native.OpenSsl.so", 0x4259000000)) {
+            printf("  Loaded: libSystem.Security.Cryptography.Native.OpenSsl.so\n");
+            loaded_modules[module_count++] = mod;
+        }
+
+        auto lemonBootJNI_OnLoad = (jint (*)(JavaVM* vm, void* reserved))(so_symbol(&lbootstrap, "JNI_OnLoad"));
+        if (lemonBootJNI_OnLoad) {
+            printf("calling JNI_OnLoad from libBootstrap.so\n");
+            lemonBootJNI_OnLoad(&vm, nullptr);
+        }
+    }
 
     printf("Loading libmain\n");
     so_module lmain = {};
