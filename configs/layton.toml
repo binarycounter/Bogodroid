@@ -1,0 +1,26 @@
+[paths]
+
+game_files="../gamefiles/layton/"
+support_files="../gamefiles/support_files/"
+
+android_package_code="/fakepath_package_code"
+android_external_files="/fakepath_external_files"
+android_files="/fakepath_files"
+android_obb_dirs=["/fakepath_obb"]
+android_source_dirs=["/fakepath_source"]
+android_cache="cache/"
+
+
+[package]
+
+packageName="com.Level5.LT1R"
+versionName="1.0.8"
+mainIntentBundle = {}
+
+
+[device]
+
+displayWidth=960
+displayHeight=544
+displayRotation=0
+
