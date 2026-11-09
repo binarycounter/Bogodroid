@@ -193,6 +193,11 @@ void jnivm::java::lang::Thread::join()
 
 ///// System
 
+void jnivm::java::lang::System::exit(int code)
+{
+    request_quit("System.exit", true);
+}
+
 long jnivm::java::lang::System::nanoTime()
 {
     return time_point_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now()).time_since_epoch().count();
@@ -407,6 +412,7 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::java::lang::Long) { FakeJni::Constructor<Long, jl
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::java::lang::System) { FakeJni::Constructor<System> {} },
     { FakeJni::Function<&System::nanoTime> {}, "nanoTime", FakeJni::JMethodID::STATIC },
+    { FakeJni::Function<&System::exit> {}, "exit", FakeJni::JMethodID::STATIC },
     END_NATIVE_DESCRIPTOR
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::java::lang::Thread) { FakeJni::Constructor<Thread, std::shared_ptr<FakeJni::JString>> {} },
@@ -538,7 +544,11 @@ void HookClassExtensions(FakeJni::Jvm* vm)
     // Class.forName (static)
     classClass->Hook(&frame.getJniEnv(), "forName", [vm](std::shared_ptr<FakeJni::JString> name, bool b, std::shared_ptr<jnivm::java::lang::ClassLoader> loader) {
         verbose("JBRIDGE", "Class forName %s", name.get()->c_str());
-        return vm->findClass(name.get()->c_str());
+        // Class.forName takes dotted names (android.content.Context), but classes are registered with slashes.
+        std::string jniName = name.get()->c_str();
+        for (auto& ch : jniName)
+            if (ch == '.') ch = '/';
+        return vm->findClass(jniName.c_str());
     });
 
     // Class.getName

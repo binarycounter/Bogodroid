@@ -94,6 +94,7 @@ add_executable(${CMAKE_PROJECT_NAME}
     platform/common/debug_utils.cpp
     platform/common/config.cpp
     platform/common/input_backend.cpp
+    platform/common/display_info.cpp
 
     loader/so_util.cpp
     loader/so_util_arm64.cpp
@@ -120,6 +121,7 @@ add_executable(${CMAKE_PROJECT_NAME}
     thunks/khronos/gles2.cpp
 
     thunks/egl_sdl/egl_sdl.cpp
+    thunks/egl_sdl/splash.cpp
 )
 
 target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC 
@@ -170,6 +172,7 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
     dl
     pthread
     bsd
+    z
 )
 
 set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
@@ -183,6 +186,7 @@ set_source_files_properties(
     thunks/ndk/asset_manager.c
     loader/so_util.cpp
     thunks/egl_sdl/egl_sdl.cpp
+    thunks/egl_sdl/splash.cpp
     ${LIBC_THUNK_FILES}
     PROPERTIES SKIP_PRECOMPILE_HEADERS TRUE
 )

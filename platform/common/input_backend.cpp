@@ -1,6 +1,9 @@
 #include "input_backend.h"
 #include "android.h"
 #include "logging.h"
+#include "display_info.h"
+#include <algorithm>
+#include <chrono>
 #include <iostream>
 
 #include "toml++/toml.hpp"
@@ -9,6 +12,17 @@ extern toml::table config;
 static bool input_enable_controller = false;
 static bool input_mouse_touch_mode = false;
 static bool input_mouse_accurate_mode = false;
+// Controller layout. SDL reports the physical Xbox-style layout (A = bottom button). With swap_ab/swap_xy (the
+// default, matching handhelds with Nintendo-style labels) A<->B and X<->Y are exchanged before reaching Android.
+static bool input_swap_ab = true;
+static bool input_swap_xy = true;
+// What the controller's Back/Select button sends: 0 = KEYCODE_BUTTON_SELECT, 1 = KEYCODE_BACK, 2 = both.
+static int input_back_mode = 0;
+// Also send KEYCODE_BACK when the keyboard's Escape is pressed (Android's Back key doubles as Escape in Unity).
+static bool input_escape_as_back = false;
+// Real touchscreen support: SDL finger events become Android multi-touch MotionEvents.
+// [input] touch = true/false/"auto" (default auto: on when SDL finds a touch device).
+static bool input_touch_enabled = false;
 static int buttonState;
 
 InputBackend& InputBackend::instance()
@@ -22,6 +36,18 @@ InputBackend::InputBackend()
     input_enable_controller = config["input"]["controller"].value_or<bool>(false);
     input_mouse_touch_mode = config["input"]["touch_mode"].value_or<bool>(false);
     input_mouse_accurate_mode = config["input"]["accurate_mode"].value_or<bool>(false);
+    input_swap_ab = config["input"]["swap_ab"].value_or<bool>(true);
+    input_swap_xy = config["input"]["swap_xy"].value_or<bool>(true);
+    std::string backBtn = config["input"]["back_button"].value_or<std::string>("select");
+    input_back_mode = (backBtn == "back") ? 1 : (backBtn == "both") ? 2 : 0;
+    input_escape_as_back = config["input"]["escape_as_back"].value_or<bool>(false);
+    if (auto forced = config["input"]["touch"].value<bool>()) {
+        input_touch_enabled = *forced;
+    } else {
+        // "auto" (or unset): enabled only when the hardware has a touchscreen. SDL lists touch devices once the
+        // video subsystem is up.
+        input_touch_enabled = SDL_InitSubSystem(SDL_INIT_VIDEO) == 0 && SDL_GetNumTouchDevices() > 0;
+    }
 
     if (SDL_Init(SDL_INIT_EVENTS) < 0) {
         std::cerr << "SDL Init failed: " << SDL_GetError() << std::endl;
@@ -31,8 +57,19 @@ InputBackend::InputBackend()
     // Add default devices
     addDevice(INPUT_ID_KEYBOARD, "Bogodroid Keyboard", 0x046d, 0xc316, jnivm::android::view::InputDevice::SOURCE_KEYBOARD);
     auto mouse = addDevice(INPUT_ID_MOUSE, "Bogodroid Mouse", 0x046D, 0xC077, input_mouse_touch_mode ? jnivm::android::view::InputDevice::SOURCE_TOUCHSCREEN : jnivm::android::view::InputDevice::SOURCE_MOUSE);
-    mouse->addMotionRange(jnivm::android::view::MotionEvent::AXIS_X, mouse->source, 0.0f, 640.0f, 0.0f, 1.0f); // Example screen width
-    mouse->addMotionRange(jnivm::android::view::MotionEvent::AXIS_Y, mouse->source, 0.0f, 480.0f, 0.0f, 1.0f); // Example screen height
+    mouse->addMotionRange(jnivm::android::view::MotionEvent::AXIS_X, mouse->source, 0.0f, (float)display_get_width(), 0.0f, 1.0f);
+    mouse->addMotionRange(jnivm::android::view::MotionEvent::AXIS_Y, mouse->source, 0.0f, (float)display_get_height(), 0.0f, 1.0f);
+    mouse->addMotionRange(jnivm::android::view::MotionEvent::AXIS_VSCROLL, mouse->source, -1.0f, 1.0f, 0.0f, 0.0f);
+    mouse->addMotionRange(jnivm::android::view::MotionEvent::AXIS_HSCROLL, mouse->source, -1.0f, 1.0f, 0.0f, 0.0f);
+
+    if (input_touch_enabled) {
+        auto touch = addDevice(INPUT_ID_TOUCH, "Bogodroid Touchscreen", 0x0001, 0x0001, jnivm::android::view::InputDevice::SOURCE_TOUCHSCREEN);
+        touch->addMotionRange(jnivm::android::view::MotionEvent::AXIS_X, touch->source, 0.0f, (float)display_get_width(), 0.0f, 0.0f);
+        touch->addMotionRange(jnivm::android::view::MotionEvent::AXIS_Y, touch->source, 0.0f, (float)display_get_height(), 0.0f, 0.0f);
+        touch->addMotionRange(jnivm::android::view::MotionEvent::AXIS_PRESSURE, touch->source, 0.0f, 1.0f, 0.0f, 0.0f);
+        touch->addMotionRange(jnivm::android::view::MotionEvent::AXIS_SIZE, touch->source, 0.0f, 1.0f, 0.0f, 0.0f);
+        verbose("InputBackend", "Touchscreen enabled");
+    }
 
     if (input_enable_controller) {
         if (SDL_Init(SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER) < 0) {
@@ -116,6 +153,90 @@ std::shared_ptr<FakeJni::JArray<FakeJni::JInt>> InputBackend::getDeviceIds()
     return ids;
 }
 
+static long nowMillis()
+{
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+}
+
+// Builds one MotionEvent carrying every finger that is currently down and hands it to the game.
+void InputBackend::sendTouchEvent(int action, long eventTime)
+{
+    if (!onMotion || fingers.empty())
+        return;
+    auto event = std::make_shared<jnivm::android::view::MotionEvent>(devices[INPUT_ID_TOUCH], action, fingers[0].x, fingers[0].y);
+    event->timestamp = eventTime;
+    event->downTime = touchDownTime;
+    for (auto& f : fingers) {
+        jnivm::android::view::MotionEvent::Pointer p;
+        p.id = f.id;
+        p.x = f.x;
+        p.y = f.y;
+        p.pressure = f.pressure;
+        event->pointers.push_back(p);
+    }
+    onMotion(event);
+}
+
+void InputBackend::handleFingerEvent(const SDL_Event& e)
+{
+    using ME = jnivm::android::view::MotionEvent;
+    const SDL_TouchFingerEvent& t = e.tfinger;
+    // SDL gives positions as 0..1 of the touch surface; Android wants pixels of the screen.
+    float px = t.x * (float)display_get_width();
+    float py = t.y * (float)display_get_height();
+    float pressure = t.pressure > 0.0f ? t.pressure : 1.0f;
+    long now = nowMillis();
+
+    auto it = std::find_if(fingers.begin(), fingers.end(), [&](const ActiveFinger& f) { return f.sdlId == t.fingerId; });
+
+    if (e.type == SDL_FINGERDOWN) {
+        if (it != fingers.end())
+            return; // already down (duplicate event)
+        // The new finger gets the smallest Android pointer id that no other finger is using.
+        int id = 0;
+        while (std::any_of(fingers.begin(), fingers.end(), [&](const ActiveFinger& f) { return f.id == id; }))
+            id++;
+        bool first = fingers.empty();
+        if (first)
+            touchDownTime = now;
+        fingers.push_back({ t.fingerId, id, px, py, pressure });
+        int index = (int)fingers.size() - 1;
+        sendTouchEvent(first ? ME::ACTION_DOWN : (ME::ACTION_POINTER_DOWN | (index << ME::ACTION_POINTER_INDEX_SHIFT)), now);
+    } else if (e.type == SDL_FINGERMOTION) {
+        if (it == fingers.end())
+            return;
+        if (it->x == px && it->y == py && it->pressure == pressure)
+            return; // nothing changed
+        it->x = px;
+        it->y = py;
+        it->pressure = pressure;
+        sendTouchEvent(ME::ACTION_MOVE, now); // MOVE always lists all pointers, as on Android
+    } else if (e.type == SDL_FINGERUP) {
+        if (it == fingers.end())
+            return;
+        it->x = px;
+        it->y = py;
+        int index = (int)(it - fingers.begin());
+        // The lifted finger is still part of the UP / POINTER_UP event, then it is removed.
+        sendTouchEvent(fingers.size() == 1 ? ME::ACTION_UP : (ME::ACTION_POINTER_UP | (index << ME::ACTION_POINTER_INDEX_SHIFT)), now);
+        fingers.erase(fingers.begin() + index);
+    }
+}
+
+void InputBackend::cancelTouches()
+{
+    if (fingers.empty())
+        return;
+    sendTouchEvent(jnivm::android::view::MotionEvent::ACTION_CANCEL, nowMillis());
+    fingers.clear();
+}
+
+void InputBackend::setFocusCallback(std::function<void(bool)> cb)
+{
+    onFocus = cb;
+}
+
 // ---- Event Loop ----
 void InputBackend::runEventLoop()
 {
@@ -125,6 +246,8 @@ void InputBackend::runEventLoop()
         while (SDL_PollEvent(&e)) {
             switch (e.type) {
             case SDL_QUIT:
+                // Window closed / quit requested by the OS: shut the game down instead of just killing input.
+                request_quit("SDL_QUIT");
                 running = false;
                 break;
 
@@ -137,16 +260,21 @@ void InputBackend::runEventLoop()
 
                 auto keyEvent = std::make_shared<jnivm::android::view::KeyEvent>(devices[INPUT_ID_KEYBOARD], action, keyCode, 0);
                 onKey(keyEvent);
+                if (input_escape_as_back && e.key.keysym.scancode == SDL_SCANCODE_ESCAPE)
+                    onKey(std::make_shared<jnivm::android::view::KeyEvent>(devices[INPUT_ID_KEYBOARD], action, jnivm::android::view::KeyEvent::KEYCODE_BACK, 0));
                 break;
             }
 
             case SDL_MOUSEMOTION: {
                 if (!onMotion)
                     break;
+                // SDL also turns touches into fake mouse events; with real touch support those would be duplicates.
+                if (input_touch_enabled && e.motion.which == SDL_TOUCH_MOUSEID)
+                    break;
 
                 // In touch screen emulation move events are only generated when a button is pressed.
                 if (input_mouse_touch_mode && !buttonState)
-                    return;
+                    break;
 
                 // Mouse motion is a generic motion event.
                 auto motionEvent = std::make_shared<jnivm::android::view::MotionEvent>(devices[INPUT_ID_MOUSE],
@@ -159,6 +287,8 @@ void InputBackend::runEventLoop()
 
             case SDL_MOUSEBUTTONDOWN: {
                 if (!onMotion)
+                    break;
+                if (input_touch_enabled && e.button.which == SDL_TOUCH_MOUSEID)
                     break;
 
                 int previousButtonState = buttonState; // Store previous state for comparison
@@ -211,6 +341,8 @@ void InputBackend::runEventLoop()
             case SDL_MOUSEBUTTONUP: {
                 if (!onMotion)
                     break;
+                if (input_touch_enabled && e.button.which == SDL_TOUCH_MOUSEID)
+                    break;
 
                 // Update button state based on which button was released
                 if (e.button.button == SDL_BUTTON_LEFT)
@@ -256,6 +388,57 @@ void InputBackend::runEventLoop()
                 }
 
                 onMotion(motionEvent);
+                break;
+            }
+
+            case SDL_FINGERDOWN:
+            case SDL_FINGERMOTION:
+            case SDL_FINGERUP:
+                if (input_touch_enabled)
+                    handleFingerEvent(e);
+                break;
+
+            case SDL_MOUSEWHEEL: {
+                if (!onMotion)
+                    break;
+                // Android reports wheel movement as a SCROLL motion event carrying VSCROLL/HSCROLL axis values.
+                auto motionEvent = std::make_shared<jnivm::android::view::MotionEvent>(devices[INPUT_ID_MOUSE],
+                    jnivm::android::view::MotionEvent::ACTION_SCROLL, 0.0f, 0.0f);
+                motionEvent->axisValues[jnivm::android::view::MotionEvent::AXIS_VSCROLL] = (float)e.wheel.y;
+                motionEvent->axisValues[jnivm::android::view::MotionEvent::AXIS_HSCROLL] = (float)e.wheel.x;
+                onMotion(motionEvent);
+                break;
+            }
+
+            case SDL_CONTROLLERDEVICEADDED: {
+                // A gamepad was plugged in after startup. The virtual "Xbox controller" Android device always
+                // exists, so only the SDL side needs to start listening to it.
+                if (input_enable_controller && SDL_IsGameController(e.cdevice.which)) {
+                    SDL_GameControllerOpen(e.cdevice.which);
+                    verbose("InputBackend", "Controller added: %s", SDL_GameControllerNameForIndex(e.cdevice.which));
+                }
+                break;
+            }
+
+            case SDL_CONTROLLERDEVICEREMOVED: {
+                if (input_enable_controller) {
+                    SDL_GameController* controller = SDL_GameControllerFromInstanceID(e.cdevice.which);
+                    if (controller)
+                        SDL_GameControllerClose(controller);
+                    verbose("InputBackend", "Controller removed");
+                }
+                break;
+            }
+
+            case SDL_WINDOWEVENT: {
+                if (input_touch_enabled && e.window.event == SDL_WINDOWEVENT_FOCUS_LOST)
+                    cancelTouches();
+                if (!onFocus)
+                    break;
+                if (e.window.event == SDL_WINDOWEVENT_FOCUS_LOST)
+                    onFocus(false);
+                else if (e.window.event == SDL_WINDOWEVENT_FOCUS_GAINED)
+                    onFocus(true);
                 break;
             }
 
@@ -327,6 +510,8 @@ void InputBackend::runEventLoop()
 
                 auto keyEvent = std::make_shared<jnivm::android::view::KeyEvent>(devices[INPUT_ID_XBOX], action, keyCode, 0);
                 onKey(keyEvent);
+                if (input_back_mode == 2 && e.cbutton.button == SDL_CONTROLLER_BUTTON_BACK)
+                    onKey(std::make_shared<jnivm::android::view::KeyEvent>(devices[INPUT_ID_XBOX], action, jnivm::android::view::KeyEvent::KEYCODE_BACK, 0));
                 break;
             }
 
@@ -338,20 +523,21 @@ void InputBackend::runEventLoop()
     }
 }
 
-constexpr int InputBackend::toAndroidKeycode(SDL_ControllerButtonEvent sdl_button)
+int InputBackend::toAndroidKeycode(SDL_ControllerButtonEvent sdl_button)
 {
+    using KE = jnivm::android::view::KeyEvent;
     uint8_t button = sdl_button.button;
     switch (button) {
     case SDL_CONTROLLER_BUTTON_A:
-        return jnivm::android::view::KeyEvent::KEYCODE_BUTTON_B;
+        return input_swap_ab ? KE::KEYCODE_BUTTON_B : KE::KEYCODE_BUTTON_A;
     case SDL_CONTROLLER_BUTTON_B:
-        return jnivm::android::view::KeyEvent::KEYCODE_BUTTON_A;
+        return input_swap_ab ? KE::KEYCODE_BUTTON_A : KE::KEYCODE_BUTTON_B;
     case SDL_CONTROLLER_BUTTON_X:
-        return jnivm::android::view::KeyEvent::KEYCODE_BUTTON_Y;
+        return input_swap_xy ? KE::KEYCODE_BUTTON_Y : KE::KEYCODE_BUTTON_X;
     case SDL_CONTROLLER_BUTTON_Y:
-        return jnivm::android::view::KeyEvent::KEYCODE_BUTTON_X;
+        return input_swap_xy ? KE::KEYCODE_BUTTON_X : KE::KEYCODE_BUTTON_Y;
     case SDL_CONTROLLER_BUTTON_BACK:
-        return jnivm::android::view::KeyEvent::KEYCODE_BUTTON_SELECT;
+        return input_back_mode == 1 ? KE::KEYCODE_BACK : KE::KEYCODE_BUTTON_SELECT;
     case SDL_CONTROLLER_BUTTON_GUIDE:
         return jnivm::android::view::KeyEvent::KEYCODE_BUTTON_MODE;
     case SDL_CONTROLLER_BUTTON_START:

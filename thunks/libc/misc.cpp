@@ -2,6 +2,10 @@
 #define _GNU_SOURCE
 #endif
 #include <dlfcn.h>
+#include <glob.h>
+#include <string>
+#include <vector>
+#include <algorithm>
 
 #include "platform.h"
 #include "logging.h"
@@ -106,9 +110,73 @@ extern "C" ABI_ATTR void abort_impl(void)
     // exit(-1);
 }
 
+// Android system properties don't exist here: report "not found"/empty.
+extern "C" ABI_ATTR const void* system_property_find_impl(const char* name)
+{
+    verbose("SYSPROP", "__system_property_find(%s) -> NULL\n", name ? name : "(null)");
+    return NULL;
+}
+
+extern "C" ABI_ATTR int system_property_read_impl(const void* pi, char* name, char* value)
+{
+    if (name) name[0] = 0;
+    if (value) value[0] = 0;
+    return 0;
+}
+
+extern "C" ABI_ATTR void exit_impl(int status)
+{
+    fprintf(stderr, "[+%ldms] Guest called exit(%d)\n", bogo_uptime_ms(), status);
+    fflush(NULL);
+    sync();
+    _exit(status); // exit() would run static/TLS destructors while guest threads are still running, which can hang or abort
+}
+
+extern "C" ABI_ATTR void _exit_impl(int status)
+{
+    fprintf(stderr, "[+%ldms] Guest called _exit(%d)\n", bogo_uptime_ms(), status);
+    fflush(NULL);
+    sync();
+    _exit(status);
+}
+
+// IL2CPP's globalization code (System.Globalization.Native) dlopens the system ICU and probes versioned
+// symbols (u_getVersion_NN). On Android that's provided by the OS; here we hand it the host's ICU.
+static std::vector<void*> g_host_icu_handles;
+
+static void* open_host_icu(const char* prefix)
+{
+    std::string base = prefix;
+    void* h = dlopen((base + ".so").c_str(), RTLD_NOW | RTLD_GLOBAL);
+    const char* dirs[] = {"/usr/lib/aarch64-linux-gnu/", "/lib/aarch64-linux-gnu/", "/usr/lib64/", "/usr/lib/"};
+    for (size_t d = 0; !h && d < sizeof(dirs) / sizeof(*dirs); d++) {
+        glob_t g = {};
+        if (glob((std::string(dirs[d]) + base + ".so.*").c_str(), 0, NULL, &g) == 0) {
+            std::vector<std::string> paths(g.gl_pathv, g.gl_pathv + g.gl_pathc);
+            std::sort(paths.rbegin(), paths.rend()); // highest version first
+            for (auto& p : paths)
+                if ((h = dlopen(p.c_str(), RTLD_NOW | RTLD_GLOBAL)))
+                    break;
+        }
+        globfree(&g);
+    }
+    if (h) g_host_icu_handles.push_back(h);
+    bogo_log("Host ICU %s -> %p\n", prefix, h);
+    return h;
+}
+
 extern "C" ABI_ATTR void* dlopen_impl(const char* filename, int flags)
 {
-    printf("Guest called dlopen for %s\n", filename);
+    if (filename) {
+        const char* bn = strrchr(filename, '/');
+        bn = bn ? bn + 1 : filename;
+        if (strncmp(bn, "libicuuc", 8) == 0 || strncmp(bn, "libicui18n", 10) == 0) {
+            void* h = open_host_icu(strncmp(bn, "libicuuc", 8) == 0 ? "libicuuc" : "libicui18n");
+            if (h) return h;
+        }
+    }
+
+    bogo_log("Guest called dlopen for %s\n", filename);
 
     if (filename == NULL)
         return NULL;
@@ -120,7 +188,7 @@ extern "C" ABI_ATTR void* dlopen_impl(const char* filename, int flags)
     so_module* head = so_get_head();
     while(head)
     {
-        printf("Checking %s\n", head->path);
+        bogo_log("Checking %s\n", head->path);
         realpath(head->path, resolved2);
         if (strcmp(resolved1, resolved2) == 0)
             return head;
@@ -153,8 +221,11 @@ extern "C" ABI_ATTR int dladdr_impl(const void* addr, Dl_info* info)
 extern "C" ABI_ATTR void* dlsym_impl(void* handle, const char* name)
 {
 
+    if (std::find(g_host_icu_handles.begin(), g_host_icu_handles.end(), handle) != g_host_icu_handles.end())
+        return dlsym(handle, name);
+
     void* addr = (void*)so_resolve_link((so_module*)handle, name);
-    printf("dlsym(%p, %s) = 0x%p\n", handle, name, addr);
+    bogo_log("dlsym(%p, %s) = 0x%p\n", handle, name, addr);
     return addr;
 }
 

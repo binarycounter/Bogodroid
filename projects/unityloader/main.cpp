@@ -1,5 +1,6 @@
 #include "globals.h"
 #include <cstdlib>
+#include <string>
 #include <execinfo.h>
 #include <iostream>
 
@@ -24,6 +25,7 @@ toml::table config;
 
 #include "anative_activity.h"
 #include "ndk.h"
+#include "alooper.h"
 
 #include "debug_utils.h"
 #include "egl_sdl.h"
@@ -40,6 +42,15 @@ thread_local int tls0[2 << 12] = {};
 int foo() { return tls0[0]++; }
 
 using namespace FakeJni;
+
+#include <chrono>
+static const auto g_t0 = std::chrono::steady_clock::now();
+// Prints how long we've been running, so slow startup phases are easy to spot in the log.
+static void stage(const char* what)
+{
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - g_t0).count();
+    fprintf(stderr, "[+%5lldms] %s\n", (long long)ms, what);
+}
 
 // bool il2cpp_gc_is_incremental_stub()
 // {
@@ -108,6 +119,23 @@ static int ends_with(const char* str, const char* suffix)
 
 int main(int argc, char* argv[])
 {
+    std::string startDir;
+    {
+        char d[1024];
+        if (getcwd(d, sizeof(d))) startDir = d;
+    }
+    setvbuf(stdout, NULL, _IONBF, 0); // Unbuffered so nothing is lost if we die or _exit
+    setvbuf(stderr, NULL, _IONBF, 0);
+    {
+        char cwd[512] = "?";
+        if (!getcwd(cwd, sizeof(cwd))) cwd[0] = '?';
+        fprintf(stderr, "unityloader built %s %s, cwd=%s\n", __DATE__, __TIME__, cwd);
+        for (int i = 0; i < argc; i++) fprintf(stderr, "  argv[%d]=%s\n", i, argv[i]);
+        atexit([]() { fprintf(stderr, "unityloader: process exiting (atexit)\n"); });
+    }
+    // Stop SDL from installing its own fatal-signal handlers: they swallow the original fault and re-raise,
+    // which hides the real crash address/registers from Unity's crash reporter.
+    setenv("SDL_NO_SIGNAL_HANDLERS", "1", 1);
     print_backtrace_on_segfault(); // Registers a signal handler to print backtrace on segfaults
     exit_on_signals(); // Exits when CTRL-C is presset (or SIGINT or SIGTERM is received)
 
@@ -116,8 +144,21 @@ int main(int argc, char* argv[])
         return -1;
     }
 
+    // The main thread plays the role of Android's UI thread: Unity looks its looper up with ALooper_forThread().
+    ALooper_prepare(ALOOPER_PREPARE_ALLOW_NON_CALLBACKS);
+
     // Init config, GLES pointers, JNI VN and bindings
     init_config(argv[1]);
+    stage("config loaded");
+    {
+        std::string splash = config["device"]["splash"].value_or<std::string>("");
+        if (!splash.empty()) {
+            if (splash[0] != '/')
+                splash = startDir + "/" + splash;
+            splash_show(splash.c_str());
+            stage("splash shown");
+        }
+    }
     // sdl_initialize_gles();
     InitJNIBinding(&vm);
 
@@ -134,6 +175,7 @@ int main(int argc, char* argv[])
     // There is a weird incompatibility with Unity's incremental GC. Luckily there's a commandline parameter to overwrite it.
     putenv("GC_DISABLE_INCREMENTAL=1");
 
+    stage("loading libraries");
     printf("Loading libc++\n");
     so_module lcpp = {};
     uintptr_t addr_lcpp = 0x3100000000;
@@ -227,10 +269,13 @@ int main(int argc, char* argv[])
     so_module lmain = {};
     uintptr_t addr_lmain = 0x3200000000;
     const char* path_lmain = "lib/arm64-v8a/libmain.so";
-    if (!load_so_from_file(&lmain, path_lmain, addr_lmain)) {
-        return 1;
+    // Newer Unity versions have no libmain.so: the Java side loads libunity.so directly.
+    bool haveLibmain = load_so_from_file(&lmain, path_lmain, addr_lmain);
+    if (haveLibmain) {
+        loaded_modules[module_count++] = &lmain;
+    } else {
+        printf("No libmain.so found, assuming newer Unity (libunity.so is loaded directly)\n");
     }
-    loaded_modules[module_count++] = &lmain;
 
     printf("Loading libil2cpp\n");
     so_module lil2cpp = {};
@@ -301,13 +346,12 @@ int main(int argc, char* argv[])
     const char* directory = "assets/bin/Data/Managed/";
     DIR* d = opendir(directory);
     if (!d) {
-        perror(directory);
-        return -1;
-    }
-
-    printf("Loading assemblies from: %s\n", directory);
+        // IL2CPP builds (esp. newer Unity) have no Managed folder of .dll.so assemblies.
+        printf("%s not found, skipping assembly loading (IL2CPP build?)\n", directory);
+    } else
+        printf("Loading assemblies from: %s\n", directory);
     struct dirent* entry;
-    while ((entry = readdir(d)) != NULL) {
+    while (d && (entry = readdir(d)) != NULL) {
         if (!ends_with(entry->d_name, ".dll.so")) {
             continue;
         }
@@ -325,23 +369,25 @@ int main(int argc, char* argv[])
             free(mod); // It is safe to call free() on a NULL pointer
         }
     }
-    closedir(d);
+    if (d) closedir(d);
 
-    auto mainJNI_OnLoad = (jint (*)(JavaVM* vm, void* reserved))(so_symbol(&lmain, "JNI_OnLoad"));
-    if (mainJNI_OnLoad) {
-        printf("calling JNI_OnLoad from libmain.so\n");
-        mainJNI_OnLoad(&vm, nullptr);
-    }
+    if (haveLibmain) {
+        auto mainJNI_OnLoad = (jint (*)(JavaVM* vm, void* reserved))(so_symbol(&lmain, "JNI_OnLoad"));
+        if (mainJNI_OnLoad) {
+            printf("calling JNI_OnLoad from libmain.so\n");
+            mainJNI_OnLoad(&vm, nullptr);
+        }
 
-    JClass* nativeLoaderClass = vm.findClass("com/unity3d/player/NativeLoader").get();
-    LocalFrame frame(vm);
-    auto mainLoad = nativeLoaderClass->getMethod("(Ljava/lang/String;)Z", "load");
+        JClass* nativeLoaderClass = vm.findClass("com/unity3d/player/NativeLoader").get();
+        LocalFrame frame(vm);
+        auto mainLoad = nativeLoaderClass->getMethod("(Ljava/lang/String;)Z", "load");
 
-    printf("calling com/unity3d/player/NativeLoader/load from libmain.so\n");
-    jvalue ret = mainLoad.invoke(frame.getJniEnv(), nativeLoaderClass, (JString) "lib/arm64-v8a");
-    if (!ret.z) {
-        printf("libmain.so:load returned false, game could not be loaded\n");
-        return 1;
+        printf("calling com/unity3d/player/NativeLoader/load from libmain.so\n");
+        jvalue ret = mainLoad.invoke(frame.getJniEnv(), nativeLoaderClass, (JString) "lib/arm64-v8a");
+        if (!ret.z) {
+            printf("libmain.so:load returned false, game could not be loaded\n");
+            return 1;
+        }
     }
 
     auto il2cppJNI_OnLoad = (jint (*)(JavaVM* vm, void* reserved))(so_symbol(&lil2cpp, "JNI_OnLoad"));
@@ -362,15 +408,35 @@ int main(int argc, char* argv[])
         unityActivity->injectEvent(event);
     });
 
+    // Optional: pause the game while the window doesn't have focus ([device] pause_on_focus_loss, off by default).
+    static std::atomic<int> focusState{-1}; // -1 = nothing pending, 0 = lost, 1 = gained
+    const bool pauseOnFocusLoss = config["device"]["pause_on_focus_loss"].value_or<bool>(false);
+    if (pauseOnFocusLoss)
+        backend.setFocusCallback([](bool focused) { focusState = focused ? 1 : 0; });
+
     backend.setMotionCallback([unityActivity](std::shared_ptr<jnivm::android::view::MotionEvent> event) {
         unityActivity->injectEvent(event);
     });
 
-    auto unityInitJni = unityClass->getMethod("(Landroid/content/Context;)V", "initJni");
-    printf("calling initJni from libunity.so\n");
+    // Debug: list everything libunity registered on UnityPlayer (names + signatures), to find signature changes between Unity versions.
+    if (getenv("BOGODROID_VERBOSE")) {
+        std::lock_guard<std::mutex> lock(unityClass->mtx);
+        fprintf(stderr, "Methods registered on com/unity3d/player/UnityPlayer (%zu):\n", unityClass->methods.size());
+        for (auto& m : unityClass->methods)
+            fprintf(stderr, "  %s %s%s\n", m->name.c_str(), m->signature.c_str(), m->native ? " [native]" : "");
+    }
+    stage("libraries loaded, starting Unity");
     auto activity = std::make_shared<jnivm::android::app::Activity>();
     LocalFrame frame2(vm);
-    unityInitJni.invoke(frame2.getJniEnv(), unityPlayerObj.get(), activity);
+    if (auto initJni3 = unityClass->getMethod("(Landroid/content/Context;ILjava/lang/String;)V", "initJni")) {
+        // Newer Unity: initJni(Context, int, String). Meaning of the extra args is unknown; passing 0 and "".
+        printf("calling initJni(Context,int,String) from libunity.so\n");
+        initJni3.invoke(frame2.getJniEnv(), unityPlayerObj.get(), activity, 0, (JString) "");
+    } else {
+        auto unityInitJni = unityClass->getMethod("(Landroid/content/Context;)V", "initJni");
+        printf("calling initJni from libunity.so\n");
+        unityInitJni.invoke(frame2.getJniEnv(), unityPlayerObj.get(), activity);
+    }
 
     // In another thread, start the event loop
     std::thread([&backend]() {
@@ -380,41 +446,71 @@ int main(int argc, char* argv[])
     // vm.printStatistics();
     // return 0;
 
-    auto unityNRecreateGfxState = unityClass->getMethod("(ILandroid/view/Surface;)V", "nativeRecreateGfxState");
+    // Newer Unity: render/lifecycle natives are registered on UnityPlayerForActivityOrService instead of UnityPlayer.
+    JClass* playerClass = unityClass;
+    {
+        JClass* c2 = vm.findClass("com/unity3d/player/UnityPlayerForActivityOrService").get();
+        if (c2 && c2->getMethod("()Z", "nativeRender")) {
+            printf("Using UnityPlayerForActivityOrService for render/lifecycle natives\n");
+            playerClass = c2;
+        }
+    }
+    auto unityNRecreateGfxState = playerClass->getMethod("(ILandroid/view/Surface;)V", "nativeRecreateGfxState");
     printf("calling nativeRecreateGfxState from libunity.so\n");
     auto surface = std::make_shared<jnivm::android::view::Surface>();
     LocalFrame frame3(vm);
     auto ret2 = unityNRecreateGfxState.invoke(frame3.getJniEnv(), unityPlayerObj.get(), 0, surface);
 
-    auto unityNRestartACtivityIndicator = unityClass->getMethod("()V", "nativeRestartActivityIndicator");
+    auto unityNRestartACtivityIndicator = playerClass->getMethod("()V", "nativeRestartActivityIndicator");
     if (unityNRestartACtivityIndicator) {
         printf("calling nativeRestartActivityIndicator from libunity.so\n");
         unityNRestartACtivityIndicator.invoke(frame3.getJniEnv(), unityPlayerObj.get());
     }
 
-    auto unityNSendSurfaceChangedEvent = unityClass->getMethod("()V", "nativeSendSurfaceChangedEvent");
+    auto unityNSendSurfaceChangedEvent = playerClass->getMethod("()V", "nativeSendSurfaceChangedEvent");
     printf("calling nativeSendSurfaceChangedEvent from libunity.so\n");
     unityNSendSurfaceChangedEvent.invoke(frame3.getJniEnv(), unityPlayerObj.get());
 
     gdb_break_here();
 
-    auto unityNResume = unityClass->getMethod("()V", "nativeResume");
+    auto unityNResume = playerClass->getMethod("()V", "nativeResume");
     printf("calling nativeResume from libunity.so\n");
     unityNResume.invoke(frame3.getJniEnv(), unityPlayerObj.get());
 
-    auto unityNFocusChanged = unityClass->getMethod("(Z)V", "nativeFocusChanged");
+    auto unityNFocusChanged = playerClass->getMethod("(Z)V", "nativeFocusChanged");
     printf("calling nativeFocusChanged from libunity.so\n");
     unityNFocusChanged.invoke(frame3.getJniEnv(), unityPlayerObj.get(), true);
 
-    auto unityNRender = unityClass->getMethod("()Z", "nativeRender");
+    auto unityNRender = playerClass->getMethod("()Z", "nativeRender");
     printf("calling nativeRender from libunity.so\n");
     auto ret3 = unityNRender.invoke(frame3.getJniEnv(), unityPlayerObj.get());
 
     printf("NativeRender returned %d, Entering loop...\n", ret3.z);
+    stage("first nativeRender returned, entering render loop");
 
     constexpr auto frame_duration = std::chrono::milliseconds(15);
     // The app has created new threads and is happily doing its thing, we just do nothing for now. Eventually, this will be a SDL based event loop for controller input.
-    while (1) {
+    auto unityNPause = playerClass->getMethod("()Z", "nativePause");
+    bool paused = false;
+    while (!g_quit_requested) {
+        // Focus changes are applied here, on the thread that renders, like Android's UI thread would.
+        int focusChange = focusState.exchange(-1);
+        if (focusChange == 0 && !paused) {
+            printf("Window lost focus, pausing\n");
+            unityNFocusChanged.invoke(frame3.getJniEnv(), unityPlayerObj.get(), false);
+            if (unityNPause)
+                unityNPause.invoke(frame3.getJniEnv(), unityPlayerObj.get());
+            paused = true;
+        } else if (focusChange == 1 && paused) {
+            printf("Window regained focus, resuming\n");
+            unityNResume.invoke(frame3.getJniEnv(), unityPlayerObj.get());
+            unityNFocusChanged.invoke(frame3.getJniEnv(), unityPlayerObj.get(), true);
+            paused = false;
+        }
+        if (paused) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            continue;
+        }
         // printf(".");
         fflush(stdout);
         // auto start = std::chrono::steady_clock::now();
@@ -426,6 +522,24 @@ int main(int argc, char* argv[])
         // }
     }
 
-    printf("Exit.\n");
-    return 0;
+    // Quit requested. The exit thread started by request_quit() ends the process; this is the orderly part.
+    stage("quit: render loop stopped");
+    if (g_quit_from_guest) {
+        // The game ran its own shutdown before asking to quit, so calling Unity again would only risk blocking
+        // on an engine that is already gone. Just wait for the exit thread (it flushes and leaves).
+        std::this_thread::sleep_for(std::chrono::seconds(10));
+    } else {
+        // Host-initiated (signal / window closed): let Unity pause and tear down, like Android's onPause/onDestroy,
+        // so it saves its state. The exit thread's longer fallback timer covers a hang.
+        if (auto m = playerClass->getMethod("()Z", "nativePause"))
+            m.invoke(frame3.getJniEnv(), unityPlayerObj.get());
+        stage("quit: paused");
+        if (auto m = playerClass->getMethod("()Z", "nativeDone"))
+            m.invoke(frame3.getJniEnv(), unityPlayerObj.get());
+        stage("quit: done");
+    }
+    fflush(NULL);
+    sync();
+    _exit(0); // skip static destructors: guest threads are still running and can abort during teardown
+
 }

@@ -6,6 +6,7 @@ extern toml::table config;
 #include "javac.h"
 #include "logging.h"
 #include <fstream>
+#include <unistd.h>
 #include <inttypes.h>
 #include <pthread.h>
 
@@ -41,6 +42,33 @@ void jnivm::android::hardware::input::InputManager::registerInputDeviceListener(
 }
 
 ///// Activity
+
+std::atomic<bool> g_quit_requested{false};
+std::atomic<bool> g_quit_from_guest{false};
+
+void request_quit(const char* why, bool fromGuest)
+{
+    printf("[+%ldms] Quit requested (%s%s)\n", bogo_uptime_ms(), why, fromGuest ? ", from the game" : "");
+    if (g_quit_requested.exchange(true))
+        return;
+    g_quit_from_guest = fromGuest;
+
+    // A short grace period when the game asked to quit, in case it still has something to finish after calling us;
+    // a longer fallback when the host asked and a clean pause/shutdown is in progress. Either way we leave after
+    // flushing to disk. [device] quit_grace_ms tunes the first one.
+    int graceMs = fromGuest ? config["device"]["quit_grace_ms"].value_or<int>(300) : 3000;
+    std::thread([graceMs]() {
+        std::this_thread::sleep_for(std::chrono::milliseconds(graceMs));
+        printf("[+%ldms] Leaving now\n", bogo_uptime_ms());
+        fflush(NULL);
+        sync(); // saves written by the game must reach the SD card before the process disappears
+        _exit(0);
+    }).detach();
+}
+
+void jnivm::android::app::Activity::finish() { request_quit("Activity.finish", true); }
+void jnivm::android::app::Activity::finishAffinity() { request_quit("Activity.finishAffinity", true); }
+void jnivm::android::app::Activity::finishAndRemoveTask() { request_quit("Activity.finishAndRemoveTask", true); }
 
 void jnivm::android::app::Activity::runOnUiThread(std::shared_ptr<jnivm::java::lang::Runnable> runnable)
 {
@@ -121,6 +149,9 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::util::DisplayMetrics) { FakeJni::Constru
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::app::Activity) { FakeJni::Constructor<Activity> {} },
     { FakeJni::Function<&Activity::runOnUiThread> {}, "runOnUiThread", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Activity::finish> {}, "finish", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Activity::finishAffinity> {}, "finishAffinity", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Activity::finishAndRemoveTask> {}, "finishAndRemoveTask", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&Activity::getIntent> {}, "getIntent", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&Activity::getRequestedOrientation> {}, "getRequestedOrientation", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&Activity::setRequestedOrientation> {}, "setRequestedOrientation", FakeJni::JMethodID::PUBLIC },

@@ -2,6 +2,7 @@
 extern toml::table config;
 
 #include "android.h"
+#include "display_info.h"
 #include "baron/baron.h"
 #include "javac.h"
 #include "logging.h"
@@ -24,12 +25,12 @@ int jnivm::android::view::Display::getRotation()
 
 int jnivm::android::view::Display::getWidth()
 {
-    return config["device"]["displayWidth"].value_or<int>(640);
+    return display_get_width();
 }
 
 int jnivm::android::view::Display::getHeight()
 {
-    return config["device"]["displayHeight"].value_or<int>(480);
+    return display_get_height();
 }
 
 float jnivm::android::view::Display::getRefreshRate()
@@ -42,8 +43,8 @@ long jnivm::android::view::Display::getPresentationDeadlineNanos() { return 0; }
 
 void jnivm::android::view::Display::getRealMetrics(std::shared_ptr<jnivm::android::util::DisplayMetrics> metrics)
 {
-    metrics->widthPixels = config["device"]["displayWidth"].value_or<int>(640);
-    metrics->heightPixels = config["device"]["displayHeight"].value_or<int>(480);
+    metrics->widthPixels = display_get_width();
+    metrics->heightPixels = display_get_height();
     metrics->densityDpi = config["device"]["displayDpi"].value_or<int>(100);
 }
 
@@ -59,12 +60,12 @@ std::shared_ptr<jnivm::Array<jnivm::android::view::DisplayMode>> jnivm::android:
 
 int jnivm::android::view::DisplayMode::getPhysicalWidth()
 {
-    return config["device"]["displayWidth"].value_or<int>(640);
+    return display_get_width();
 }
 
 int jnivm::android::view::DisplayMode::getPhysicalHeight()
 {
-    return config["device"]["displayHeight"].value_or<int>(480);
+    return display_get_height();
 }
 
 float jnivm::android::view::DisplayMode::getRefreshRate()
@@ -180,10 +181,27 @@ long jnivm::android::view::KeyEvent::getEventTime()
 
 ///// MotionEvent
 
+namespace {
+using jnivm::android::view::MotionEvent;
+// Valid pointer entry for pointerIndex, or null (legacy single-pointer events have no entries).
+const MotionEvent::Pointer* pointerAt(const MotionEvent& e, int pointerIndex)
+{
+    if (pointerIndex >= 0 && pointerIndex < (int)e.pointers.size())
+        return &e.pointers[pointerIndex];
+    return nullptr;
+}
+}
+
 int jnivm::android::view::MotionEvent::getPointerCount()
 {
-    // For mouse and joystick, there's always one "pointer".
-    return 1;
+    // Touch events have one entry per finger; mouse and joystick events always have exactly one "pointer".
+    return pointers.empty() ? 1 : (int)pointers.size();
+}
+
+int jnivm::android::view::MotionEvent::getPointerId(int pointerIndex)
+{
+    auto p = pointerAt(*this, pointerIndex);
+    return p ? p->id : 0;
 }
 
 int jnivm::android::view::MotionEvent::getHistorySize()
@@ -194,28 +212,85 @@ int jnivm::android::view::MotionEvent::getHistorySize()
 
 float jnivm::android::view::MotionEvent::getAxisValue(int axis, int pointerIndex)
 {
+    if (auto p = pointerAt(*this, pointerIndex)) {
+        if (axis == AXIS_X)
+            return p->x;
+        if (axis == AXIS_Y)
+            return p->y;
+        if (axis == AXIS_PRESSURE)
+            return p->pressure;
+        if (axis == AXIS_SIZE)
+            return p->size;
+        if (axis == AXIS_TOUCH_MAJOR || axis == AXIS_TOUCH_MINOR)
+            return getTouchMajor(pointerIndex);
+        if (axis == AXIS_ORIENTATION)
+            return 0.0f;
+    }
     auto it = axisValues.find(axis);
     return (it != axisValues.end()) ? it->second : 0.0f;
 }
 
 int jnivm::android::view::MotionEvent::getToolType(int pointerIndex)
 {
-    return 3; 
+    if (auto p = pointerAt(*this, pointerIndex))
+        return p->toolType;
+    return TOOL_TYPE_MOUSE;
 }
 
 float jnivm::android::view::MotionEvent::getX(int pointerIndex)
 {
+    if (auto p = pointerAt(*this, pointerIndex))
+        return p->x;
     return this->x;
 }
 
 float jnivm::android::view::MotionEvent::getY(int pointerIndex)
 {
+    if (auto p = pointerAt(*this, pointerIndex))
+        return p->y;
     return this->y;
 }
+
+float jnivm::android::view::MotionEvent::getPressure(int pointerIndex)
+{
+    if (auto p = pointerAt(*this, pointerIndex))
+        return p->pressure;
+    // Mouse: 1.0 while a button is down, 0 otherwise (what Android reports).
+    return buttonState ? 1.0f : 0.0f;
+}
+
+float jnivm::android::view::MotionEvent::getSize(int pointerIndex)
+{
+    if (auto p = pointerAt(*this, pointerIndex))
+        return p->size;
+    return 0.0f;
+}
+
+float jnivm::android::view::MotionEvent::getTouchMajor(int pointerIndex)
+{
+    // Contact area in pixels; we only know the normalized size, so scale it by the shorter screen side.
+    auto p = pointerAt(*this, pointerIndex);
+    return p ? p->size * 320.0f : 0.0f;
+}
+
+float jnivm::android::view::MotionEvent::getTouchMinor(int pointerIndex) { return getTouchMajor(pointerIndex); }
+float jnivm::android::view::MotionEvent::getOrientation(int pointerIndex) { return 0.0f; }
+float jnivm::android::view::MotionEvent::getXPrecision() { return 1.0f; }
+float jnivm::android::view::MotionEvent::getYPrecision() { return 1.0f; }
+
+float jnivm::android::view::MotionEvent::getHistoricalX(int pointerIndex, int pos) { return getX(pointerIndex); }
+float jnivm::android::view::MotionEvent::getHistoricalY(int pointerIndex, int pos) { return getY(pointerIndex); }
+float jnivm::android::view::MotionEvent::getHistoricalAxisValue(int axis, int pointerIndex, int pos) { return getAxisValue(axis, pointerIndex); }
+long jnivm::android::view::MotionEvent::getHistoricalEventTime(int pos) { return this->timestamp; }
 
 long jnivm::android::view::MotionEvent::getEventTime()
 {
     return this->timestamp;
+}
+
+long jnivm::android::view::MotionEvent::getDownTime()
+{
+    return downTime ? downTime : this->timestamp;
 }
 
 int jnivm::android::view::MotionEvent::getButtonState()
@@ -230,8 +305,19 @@ int jnivm::android::view::MotionEvent::getAction()
 
 int jnivm::android::view::MotionEvent::getActionMasked()
 {
-    return this->action & 0xFF;
+    return this->action & ACTION_MASK;
 }
+
+int jnivm::android::view::MotionEvent::getActionIndex()
+{
+    return (this->action & ACTION_POINTER_INDEX_MASK) >> ACTION_POINTER_INDEX_SHIFT;
+}
+
+int jnivm::android::view::MotionEvent::getActionButton() { return 0; }
+int jnivm::android::view::MotionEvent::getFlags() { return 0; }
+int jnivm::android::view::MotionEvent::getEdgeFlags() { return 0; }
+int jnivm::android::view::MotionEvent::getClassification() { return 0; } // CLASSIFICATION_NONE
+int jnivm::android::view::MotionEvent::getDisplayId() { return 0; }
 
 std::shared_ptr<FakeJni::JString> jnivm::android::view::MotionEvent::axisToString(int axis)
 {
@@ -246,6 +332,9 @@ std::shared_ptr<jnivm::android::view::MotionEvent> jnivm::android::view::MotionE
     auto newEvent = std::make_shared<MotionEvent>(other->device, other->action, other->x, other->y);
     newEvent->axisValues = other->axisValues;
     newEvent->buttonState = other->buttonState;
+    newEvent->pointers = other->pointers;
+    newEvent->downTime = other->downTime;
+    newEvent->timestamp = other->timestamp;
     return newEvent;
     return other;
 }
@@ -503,7 +592,26 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::Display) { FakeJni::Constructor<Di
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::MotionEvent) { FakeJni::Constructor<MotionEvent, std::shared_ptr<jnivm::android::view::InputDevice>, int, int, int> {} },
     { FakeJni::Function<&MotionEvent::getEventTime> {}, "getEventTime", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getDownTime> {}, "getDownTime", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&MotionEvent::getPointerCount> {}, "getPointerCount", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getPointerId> {}, "getPointerId", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getActionIndex> {}, "getActionIndex", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getActionButton> {}, "getActionButton", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getFlags> {}, "getFlags", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getEdgeFlags> {}, "getEdgeFlags", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getClassification> {}, "getClassification", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getDisplayId> {}, "getDisplayId", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getPressure> {}, "getPressure", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getSize> {}, "getSize", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getTouchMajor> {}, "getTouchMajor", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getTouchMinor> {}, "getTouchMinor", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getOrientation> {}, "getOrientation", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getXPrecision> {}, "getXPrecision", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getYPrecision> {}, "getYPrecision", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getHistoricalX> {}, "getHistoricalX", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getHistoricalY> {}, "getHistoricalY", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getHistoricalAxisValue> {}, "getHistoricalAxisValue", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getHistoricalEventTime> {}, "getHistoricalEventTime", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&MotionEvent::getHistorySize> {}, "getHistorySize", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&MotionEvent::getAxisValue> {}, "getAxisValue", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&MotionEvent::getToolType> {}, "getToolType", FakeJni::JMethodID::PUBLIC },

@@ -15,13 +15,27 @@ extern toml::table config;
 std::shared_ptr<jnivm::android::content::pm::PackageInfo>
 jnivm::android::content::pm::PackageManager::getPackageInfo(std::shared_ptr<FakeJni::JString> packageName, int number)
 {
-    return std::make_shared<jnivm::android::content::pm::PackageInfo>();
+    auto info = std::make_shared<jnivm::android::content::pm::PackageInfo>();
+    // Report the version from the config ([package] versionName) instead of the built-in "0.1".
+    std::string versionName = config["package"]["versionName"].value_or<std::string>("");
+    if (!versionName.empty())
+        info->versionName = (FakeJni::JString) versionName.c_str();
+    return info;
 }
 
 bool jnivm::android::content::pm::PackageManager::hasSystemFeature(std::shared_ptr<FakeJni::JString> feature)
 {
+    if (feature == nullptr)
+        return false;
     verbose("JBRIDGE", "App asks about availability of feature: %s", feature.get()->c_str());
-    return false; // We don't claim support of anything right now
+    // Nothing is claimed by default. [device] features = ["android.hardware.gamepad", ...] opts features in.
+    if (auto* list = config["device"]["features"].as_array()) {
+        for (auto& item : *list)
+            if (auto name = item.value<std::string>())
+                if (*name == feature.get()->c_str())
+                    return true;
+    }
+    return false;
 }
 
 ///// AssetManager
@@ -68,7 +82,7 @@ jnivm::android::content::res::AssetManager::list(std::shared_ptr<FakeJni::JStrin
     }
     catch (const std::filesystem::filesystem_error& e) {
         verbose("JBRIDGE", "Error listing files in '%s': %s", relPath.c_str(), e.what());
-        std::make_shared<jnivm::Array<jnivm::java::lang::String>>(0);
+        return std::make_shared<jnivm::Array<jnivm::java::lang::String>>(0);
     }
 }
 
@@ -83,32 +97,158 @@ int jnivm::android::content::res::Resources::getIdentifier(std::shared_ptr<FakeJ
 
 ///// SharedPreferences
 
+namespace {
+std::string pref_escape(const std::string& in)
+{
+    std::string out;
+    for (char c : in) {
+        switch (c) {
+        case '\\': out += "\\\\"; break;
+        case '\t': out += "\\t"; break;
+        case '\n': out += "\\n"; break;
+        case '\r': out += "\\r"; break;
+        default: out += c;
+        }
+    }
+    return out;
+}
+
+std::string pref_unescape(const std::string& in)
+{
+    std::string out;
+    for (size_t i = 0; i < in.size(); i++) {
+        if (in[i] == '\\' && i + 1 < in.size()) {
+            char n = in[++i];
+            out += (n == 't') ? '\t' : (n == 'n') ? '\n' : (n == 'r') ? '\r' : n;
+        } else {
+            out += in[i];
+        }
+    }
+    return out;
+}
+
+std::string pref_key(const std::shared_ptr<FakeJni::JString>& key)
+{
+    return key ? std::string(key->c_str()) : std::string();
+}
+} // namespace
+
+// File format: one value per line, "<type>\t<key>\t<value>", type = i(nt) l(ong) f(loat) b(ool) s(tring).
+void jnivm::android::content::PreferencesStore::load()
+{
+    std::lock_guard<std::mutex> lock(mtx);
+    values.clear();
+    std::ifstream in(path);
+    std::string line;
+    while (std::getline(in, line)) {
+        size_t t1 = line.find('\t');
+        size_t t2 = (t1 == std::string::npos) ? t1 : line.find('\t', t1 + 1);
+        if (t2 == std::string::npos || t1 != 1)
+            continue;
+        PrefValue v;
+        std::string key = pref_unescape(line.substr(2, t2 - 2));
+        std::string val = pref_unescape(line.substr(t2 + 1));
+        switch (line[0]) {
+        case 'i': v.type = PrefValue::INT; v.i = atoll(val.c_str()); break;
+        case 'l': v.type = PrefValue::LONG; v.i = atoll(val.c_str()); break;
+        case 'b': v.type = PrefValue::BOOL; v.i = (val == "1"); break;
+        case 'f': v.type = PrefValue::FLOAT; v.f = atof(val.c_str()); break;
+        case 's': v.type = PrefValue::STRING; v.s = val; break;
+        default: continue;
+        }
+        values[key] = v;
+    }
+}
+
+void jnivm::android::content::PreferencesStore::save()
+{
+    std::lock_guard<std::mutex> lock(mtx);
+    if (path.empty())
+        return;
+    try {
+        std::filesystem::create_directories(std::filesystem::path(path).parent_path());
+    } catch (...) {
+    }
+    // Write to a temp file and rename, so a crash/power loss can't leave a half-written file.
+    std::string tmp = path + ".tmp";
+    {
+        std::ofstream out(tmp, std::ios::trunc);
+        if (!out)
+            return;
+        for (auto& kv : values) {
+            const PrefValue& v = kv.second;
+            char buf[64];
+            switch (v.type) {
+            case PrefValue::INT: out << "i\t" << pref_escape(kv.first) << '\t' << v.i << '\n'; break;
+            case PrefValue::LONG: out << "l\t" << pref_escape(kv.first) << '\t' << v.i << '\n'; break;
+            case PrefValue::BOOL: out << "b\t" << pref_escape(kv.first) << '\t' << (v.i ? 1 : 0) << '\n'; break;
+            case PrefValue::FLOAT:
+                snprintf(buf, sizeof(buf), "%.9g", v.f);
+                out << "f\t" << pref_escape(kv.first) << '\t' << buf << '\n';
+                break;
+            case PrefValue::STRING: out << "s\t" << pref_escape(kv.first) << '\t' << pref_escape(v.s) << '\n'; break;
+            }
+        }
+    }
+    std::error_code ec;
+    std::filesystem::rename(tmp, path, ec);
+}
+
 bool jnivm::android::content::SharedPreferences::contains(std::shared_ptr<FakeJni::JString> key)
 {
-    return false;
+    if (!store)
+        return false;
+    std::lock_guard<std::mutex> lock(store->mtx);
+    return store->values.count(pref_key(key)) > 0;
 }
 
 int jnivm::android::content::SharedPreferences::getInt(std::shared_ptr<FakeJni::JString> key, int def)
 {
-    verbose("JBRIDGE", "getInt(%s, %d)", key.get()->c_str(), def);
-    return def;
+    verbose("JBRIDGE", "getInt(%s, %d)", pref_key(key).c_str(), def);
+    if (!store)
+        return def;
+    std::lock_guard<std::mutex> lock(store->mtx);
+    auto it = store->values.find(pref_key(key));
+    return (it != store->values.end() && it->second.type == PrefValue::INT) ? (int)it->second.i : def;
+}
+
+jlong jnivm::android::content::SharedPreferences::getLong(std::shared_ptr<FakeJni::JString> key, jlong def)
+{
+    if (!store)
+        return def;
+    std::lock_guard<std::mutex> lock(store->mtx);
+    auto it = store->values.find(pref_key(key));
+    return (it != store->values.end() && (it->second.type == PrefValue::LONG || it->second.type == PrefValue::INT)) ? (jlong)it->second.i : def;
 }
 
 float jnivm::android::content::SharedPreferences::getFloat(std::shared_ptr<FakeJni::JString> key, float def)
 {
-    verbose("JBRIDGE", "getFloat(%s, %f)", key.get()->c_str(), def);
-    return def;
+    verbose("JBRIDGE", "getFloat(%s, %f)", pref_key(key).c_str(), def);
+    if (!store)
+        return def;
+    std::lock_guard<std::mutex> lock(store->mtx);
+    auto it = store->values.find(pref_key(key));
+    return (it != store->values.end() && it->second.type == PrefValue::FLOAT) ? (float)it->second.f : def;
+}
+
+bool jnivm::android::content::SharedPreferences::getBoolean(std::shared_ptr<FakeJni::JString> key, bool def)
+{
+    if (!store)
+        return def;
+    std::lock_guard<std::mutex> lock(store->mtx);
+    auto it = store->values.find(pref_key(key));
+    return (it != store->values.end() && it->second.type == PrefValue::BOOL) ? (it->second.i != 0) : def;
 }
 
 std::shared_ptr<FakeJni::JString> jnivm::android::content::SharedPreferences::getString(std::shared_ptr<FakeJni::JString> key, std::shared_ptr<FakeJni::JString> def)
 {
-    if (key != nullptr) {
-        if (def != nullptr) {
-            verbose("JBRIDGE", "getString(%s, %s)", key.get()->c_str(), def.get()->c_str());
-        } else {
-            verbose("JBRIDGE", "getString(%s, null)", key.get()->c_str());
-        }
-    }
+    verbose("JBRIDGE", "getString(%s)", pref_key(key).c_str());
+    if (!store || !key)
+        return def;
+    std::lock_guard<std::mutex> lock(store->mtx);
+    auto it = store->values.find(pref_key(key));
+    if (it != store->values.end() && it->second.type == PrefValue::STRING)
+        return std::make_shared<FakeJni::JString>(it->second.s);
     return def;
 }
 
@@ -119,26 +259,94 @@ std::shared_ptr<jnivm::java::util::Map> jnivm::android::content::SharedPreferenc
 
 std::shared_ptr<jnivm::android::content::SharedPreferencesEditor> jnivm::android::content::SharedPreferences::edit()
 {
-    return std::make_shared<SharedPreferencesEditor>();
+    auto editor = std::make_shared<SharedPreferencesEditor>();
+    editor->store = store;
+    return editor;
 }
 
 ///// SharedPreferencesEditor
 
+std::shared_ptr<jnivm::android::content::SharedPreferencesEditor> jnivm::android::content::SharedPreferencesEditor::self()
+{
+    // Editor calls are chained (edit().putInt(..).apply()), so the same object has to be handed back,
+    // not a second shared_ptr that thinks it owns it.
+    return std::dynamic_pointer_cast<SharedPreferencesEditor>(shared_from_this());
+}
+
 void jnivm::android::content::SharedPreferencesEditor::apply()
 {
+    if (!store)
+        return;
+    for (auto& op : ops) // each op takes the store lock itself
+        op(*store);
+    ops.clear();
+    store->save();
 }
+
+bool jnivm::android::content::SharedPreferencesEditor::commit()
+{
+    apply();
+    return true;
+}
+
+#define PREF_OP(body) \
+    ops.push_back([=](PreferencesStore& s) { std::lock_guard<std::mutex> lock(s.mtx); body; })
 
 std::shared_ptr<jnivm::android::content::SharedPreferencesEditor> jnivm::android::content::SharedPreferencesEditor::putInt(std::shared_ptr<FakeJni::JString> key, int val)
 {
-    verbose("JBRIDGE", "putInt(%s, %d)", key.get()->c_str(), val);
-    return std::shared_ptr<SharedPreferencesEditor>(this);
+    verbose("JBRIDGE", "putInt(%s, %d)", pref_key(key).c_str(), val);
+    std::string k = pref_key(key);
+    PREF_OP({ PrefValue v; v.type = PrefValue::INT; v.i = val; s.values[k] = v; });
+    return self();
+}
+
+std::shared_ptr<jnivm::android::content::SharedPreferencesEditor> jnivm::android::content::SharedPreferencesEditor::putLong(std::shared_ptr<FakeJni::JString> key, jlong val)
+{
+    std::string k = pref_key(key);
+    PREF_OP({ PrefValue v; v.type = PrefValue::LONG; v.i = val; s.values[k] = v; });
+    return self();
+}
+
+std::shared_ptr<jnivm::android::content::SharedPreferencesEditor> jnivm::android::content::SharedPreferencesEditor::putFloat(std::shared_ptr<FakeJni::JString> key, float val)
+{
+    std::string k = pref_key(key);
+    PREF_OP({ PrefValue v; v.type = PrefValue::FLOAT; v.f = val; s.values[k] = v; });
+    return self();
+}
+
+std::shared_ptr<jnivm::android::content::SharedPreferencesEditor> jnivm::android::content::SharedPreferencesEditor::putBoolean(std::shared_ptr<FakeJni::JString> key, bool val)
+{
+    std::string k = pref_key(key);
+    PREF_OP({ PrefValue v; v.type = PrefValue::BOOL; v.i = val ? 1 : 0; s.values[k] = v; });
+    return self();
 }
 
 std::shared_ptr<jnivm::android::content::SharedPreferencesEditor> jnivm::android::content::SharedPreferencesEditor::putString(std::shared_ptr<FakeJni::JString> key, std::shared_ptr<FakeJni::JString> val)
 {
-    verbose("JBRIDGE", "putString(%s, %s)", key.get()->c_str(), val.get()->c_str());
-    return std::shared_ptr<SharedPreferencesEditor>(this);
+    std::string k = pref_key(key);
+    if (!val) { // putString(key, null) removes the key
+        PREF_OP({ s.values.erase(k); });
+    } else {
+        std::string str = val->c_str();
+        PREF_OP({ PrefValue v; v.type = PrefValue::STRING; v.s = str; s.values[k] = v; });
+    }
+    return self();
 }
+
+std::shared_ptr<jnivm::android::content::SharedPreferencesEditor> jnivm::android::content::SharedPreferencesEditor::remove(std::shared_ptr<FakeJni::JString> key)
+{
+    std::string k = pref_key(key);
+    PREF_OP({ s.values.erase(k); });
+    return self();
+}
+
+std::shared_ptr<jnivm::android::content::SharedPreferencesEditor> jnivm::android::content::SharedPreferencesEditor::clear()
+{
+    PREF_OP({ s.values.clear(); });
+    return self();
+}
+
+#undef PREF_OP
 
 ///// Context
 
@@ -198,7 +406,30 @@ jnivm::android::content::Context::getPackageManager()
 std::shared_ptr<jnivm::android::content::SharedPreferences>
 jnivm::android::content::Context::getSharedPreferences(std::shared_ptr<FakeJni::JString> str, int num)
 {
-    return std::make_shared<jnivm::android::content::SharedPreferences>();
+    // One shared store per preferences name, loaded from <android_files>/shared_prefs/<name>.txt on first use.
+    static std::mutex storesMutex;
+    static std::map<std::string, std::shared_ptr<PreferencesStore>> stores;
+
+    std::string name = str ? std::string(str->c_str()) : std::string("default");
+    std::lock_guard<std::mutex> lock(storesMutex);
+    auto& store = stores[name];
+    if (!store) {
+        store = std::make_shared<PreferencesStore>();
+        std::string base = config["paths"]["android_files"].value_or<std::string>("");
+        if (!base.empty() && base.back() != '/')
+            base += '/';
+        // Keep file names safe: only [A-Za-z0-9._-], everything else becomes '_'.
+        std::string safe = name;
+        for (auto& c : safe)
+            if (!isalnum((unsigned char)c) && c != '.' && c != '_' && c != '-')
+                c = '_';
+        store->path = base.empty() ? std::string() : base + "shared_prefs/" + safe + ".txt";
+        if (!store->path.empty())
+            store->load();
+    }
+    auto prefs = std::make_shared<jnivm::android::content::SharedPreferences>();
+    prefs->store = store;
+    return prefs;
 }
 
 std::shared_ptr<FakeJni::JString>
@@ -355,14 +586,22 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::pm::ActivityInfo) { FakeJni::Co
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::SharedPreferencesEditor) { FakeJni::Constructor<SharedPreferencesEditor> {} },
     { FakeJni::Function<&SharedPreferencesEditor::apply> {}, "apply", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&SharedPreferencesEditor::commit> {}, "commit", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&SharedPreferencesEditor::putInt> {}, "putInt", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&SharedPreferencesEditor::putLong> {}, "putLong", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&SharedPreferencesEditor::putFloat> {}, "putFloat", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&SharedPreferencesEditor::putBoolean> {}, "putBoolean", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&SharedPreferencesEditor::putString> {}, "putString", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&SharedPreferencesEditor::remove> {}, "remove", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&SharedPreferencesEditor::clear> {}, "clear", FakeJni::JMethodID::PUBLIC },
     END_NATIVE_DESCRIPTOR
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::SharedPreferences) { FakeJni::Constructor<SharedPreferences> {} },
     { FakeJni::Function<&SharedPreferences::contains> {}, "contains", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&SharedPreferences::getInt> {}, "getInt", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&SharedPreferences::getLong> {}, "getLong", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&SharedPreferences::getFloat> {}, "getFloat", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&SharedPreferences::getBoolean> {}, "getBoolean", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&SharedPreferences::getString> {}, "getString", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&SharedPreferences::getAll> {}, "getAll", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&SharedPreferences::edit> {}, "edit", FakeJni::JMethodID::PUBLIC },

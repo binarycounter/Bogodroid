@@ -5,6 +5,8 @@
 #include "baron/baron.h"
 #include "javac.h"
 #include <atomic>
+#include <functional>
+#include <map>
 #include <chrono>
 #include <condition_variable>
 #include <memory>
@@ -368,6 +370,13 @@ namespace android {
 
             static inline int AXIS_X = 0;
             static inline int AXIS_Y = 1;
+            static inline int AXIS_PRESSURE = 2;
+            static inline int AXIS_SIZE = 3;
+            static inline int AXIS_TOUCH_MAJOR = 4;
+            static inline int AXIS_TOUCH_MINOR = 5;
+            static inline int AXIS_ORIENTATION = 8;
+            static inline int AXIS_VSCROLL = 9;
+            static inline int AXIS_HSCROLL = 10;
             static inline int AXIS_Z = 11;
             static inline int AXIS_RZ = 14;
             static inline int AXIS_LTRIGGER = 17;
@@ -378,6 +387,13 @@ namespace android {
             static inline int ACTION_DOWN = 0;
             static inline int ACTION_UP = 1;
             static inline int ACTION_MOVE = 2;
+            static inline int ACTION_CANCEL = 3;
+            static inline int ACTION_POINTER_DOWN = 5;
+            static inline int ACTION_POINTER_UP = 6;
+            static inline int ACTION_MASK = 0xff;
+            static inline int ACTION_POINTER_INDEX_MASK = 0xff00;
+            static inline int ACTION_POINTER_INDEX_SHIFT = 8;
+            static inline int ACTION_SCROLL = 8;
             static inline int ACTION_HOVER_MOVE = 7;
             static inline int ACTION_HOVER_ENTER = 9;
             static inline int ACTION_HOVER_EXIT = 10;
@@ -388,6 +404,23 @@ namespace android {
             static inline int BUTTON_PRIMARY = 1;
             static inline int BUTTON_SECONDARY = 2;
             static inline int BUTTON_TERTIARY = 4; // Middle
+
+            static inline int TOOL_TYPE_UNKNOWN = 0;
+            static inline int TOOL_TYPE_FINGER = 1;
+            static inline int TOOL_TYPE_STYLUS = 2;
+            static inline int TOOL_TYPE_MOUSE = 3;
+
+            // One touch point. Touch events carry one entry per finger that is currently down (in the order the
+            // fingers went down); mouse/gamepad events leave the list empty and use the single x/y below.
+            struct Pointer {
+                int id = 0;
+                float x = 0, y = 0;
+                float pressure = 1.0f;
+                float size = 0.05f;
+                int toolType = 1; // TOOL_TYPE_FINGER
+            };
+            std::vector<Pointer> pointers;
+            long downTime = 0; // when the current gesture started (ms, same clock as timestamp)
 
             int action;
             float x, y;
@@ -404,15 +437,35 @@ namespace android {
             {
             }
             long getEventTime();
+            long getDownTime();
             int getPointerCount();
+            int getPointerId(int pointerIndex);
             int getHistorySize();
             int getButtonState();
             int getToolType(int pointerIndex);
             int getAction();
             int getActionMasked();
+            int getActionIndex();
+            int getActionButton();
+            int getFlags();
+            int getEdgeFlags();
+            int getClassification();
+            int getDisplayId();
             float getAxisValue(int axis, int pointerIndex);
             float getX(int pointerIndex);
             float getY(int pointerIndex);
+            float getPressure(int pointerIndex);
+            float getSize(int pointerIndex);
+            float getTouchMajor(int pointerIndex);
+            float getTouchMinor(int pointerIndex);
+            float getOrientation(int pointerIndex);
+            float getXPrecision();
+            float getYPrecision();
+            // History is never recorded, so the "historical" values are just the current ones.
+            float getHistoricalX(int pointerIndex, int pos);
+            float getHistoricalY(int pointerIndex, int pos);
+            float getHistoricalAxisValue(int axis, int pointerIndex, int pos);
+            long getHistoricalEventTime(int pos);
 
             static std::shared_ptr<FakeJni::JString> axisToString(int axis);
             static std::shared_ptr<MotionEvent> obtain(std::shared_ptr<MotionEvent> other);
@@ -494,6 +547,8 @@ namespace android {
         public:
             DEFINE_CLASS_NAME("android/os/Process")
             static void setThreadPriority(int i, int j);
+            static void killProcess(int pid);
+            static int myPid();
         };
         class Bundle : public FakeJni::JObject {
         public:
@@ -700,23 +755,56 @@ namespace android {
             };
         }
 
+        // One value of a SharedPreferences file.
+        struct PrefValue {
+            enum Type { INT, LONG, FLOAT, BOOL, STRING } type = STRING;
+            long long i = 0; // INT, LONG, BOOL
+            double f = 0;    // FLOAT
+            std::string s;   // STRING
+        };
+
+        // In-memory copy of one preferences file, saved to <android_files>/shared_prefs/<name>.txt on apply()/commit().
+        class PreferencesStore {
+        public:
+            std::mutex mtx;
+            std::map<std::string, PrefValue> values;
+            std::string path;
+            void load();
+            void save();
+        };
+
         class SharedPreferencesEditor : public FakeJni::JObject {
         public:
             DEFINE_CLASS_NAME("android/content/SharedPreferences$Editor")
+            std::shared_ptr<PreferencesStore> store;
+            std::vector<std::function<void(PreferencesStore&)>> ops; // applied (in order) on apply()/commit()
+
             void apply();
-            std::shared_ptr<jnivm::android::content::SharedPreferencesEditor> putInt(std::shared_ptr<FakeJni::JString> key, int val);
-            std::shared_ptr<jnivm::android::content::SharedPreferencesEditor> putString(std::shared_ptr<FakeJni::JString> key, std::shared_ptr<FakeJni::JString> val);
+            bool commit();
+            std::shared_ptr<SharedPreferencesEditor> putInt(std::shared_ptr<FakeJni::JString> key, int val);
+            std::shared_ptr<SharedPreferencesEditor> putLong(std::shared_ptr<FakeJni::JString> key, jlong val);
+            std::shared_ptr<SharedPreferencesEditor> putFloat(std::shared_ptr<FakeJni::JString> key, float val);
+            std::shared_ptr<SharedPreferencesEditor> putBoolean(std::shared_ptr<FakeJni::JString> key, bool val);
+            std::shared_ptr<SharedPreferencesEditor> putString(std::shared_ptr<FakeJni::JString> key, std::shared_ptr<FakeJni::JString> val);
+            std::shared_ptr<SharedPreferencesEditor> remove(std::shared_ptr<FakeJni::JString> key);
+            std::shared_ptr<SharedPreferencesEditor> clear();
+
+        private:
+            std::shared_ptr<SharedPreferencesEditor> self();
         };
 
         class SharedPreferences : public FakeJni::JObject {
         public:
             DEFINE_CLASS_NAME("android/content/SharedPreferences")
+            std::shared_ptr<PreferencesStore> store;
             bool contains(std::shared_ptr<FakeJni::JString> key);
             int getInt(std::shared_ptr<FakeJni::JString> key, int def);
+            jlong getLong(std::shared_ptr<FakeJni::JString> key, jlong def);
             float getFloat(std::shared_ptr<FakeJni::JString> key, float def);
+            bool getBoolean(std::shared_ptr<FakeJni::JString> key, bool def);
             std::shared_ptr<FakeJni::JString> getString(std::shared_ptr<FakeJni::JString> key, std::shared_ptr<FakeJni::JString> def);
             std::shared_ptr<jnivm::java::util::Map> getAll();
-            std::shared_ptr<jnivm::android::content::SharedPreferencesEditor> edit();
+            std::shared_ptr<SharedPreferencesEditor> edit();
         };
 
         class ContentResolver : public FakeJni::JObject {
@@ -768,6 +856,9 @@ namespace android {
         public:
             DEFINE_CLASS_NAME("android/app/Activity", jnivm::android::content::Context)
             void runOnUiThread(std::shared_ptr<jnivm::java::lang::Runnable> runnable);
+            void finish();
+            void finishAffinity();
+            void finishAndRemoveTask();
             std::shared_ptr<jnivm::android::content::Intent> getIntent();
             int getRequestedOrientation();
             void setRequestedOrientation(int orientation);

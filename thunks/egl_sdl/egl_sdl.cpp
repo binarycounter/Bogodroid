@@ -2,11 +2,14 @@
 #include "SDL2/SDL.h"
 #include "glad_egl.h"
 #include "gles2.h"
+#include "display_info.h"
 #include "logging.h"
 #include "platform.h"
 #include "so_util.h"
 #include "thunk_gen.h"
 #include <chrono>
+#include "toml++/toml.hpp"
+extern toml::table config;
 #include <inttypes.h>
 #include <memory>
 #include <dlfcn.h>
@@ -64,7 +67,7 @@ EGLBoolean eglSwapBuffers_impl(EGLDisplay display,
         fps = frameCount / elapsed.count();
         frameCount = 0;
         lastTime = now;
-        warning("FPS: %f\n", fps);
+        if (bogo_show_fps()) warning("FPS: %f\n", fps);
     }
     // verbose("EGL_SDL", "[Thread: %" PRIxPTR "] eglSwapBuffers about to call getInstance().", (uintptr_t)pthread_self());
 
@@ -76,23 +79,27 @@ EGLBoolean eglSwapBuffers_impl(EGLDisplay display,
     return EGL_TRUE;
 }
 
-// Just return the current display
-EGLDisplay eglGetDisplay_impl(NativeDisplayType native_display)
+bool g_splash_shown = false;
+
+bool sdl_ensure_window()
 {
-    printf("[NATIVE] eglGetDisplay\n");
-    if (egl_display)
-        return egl_display;
+    if (sdl_win && sdl_ctx)
+        return true;
 
     // Initialize SDL with video, audio, joystick, and controller support
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         fatal_error("SDL could not initialize! SDL_Error: %s\n", SDL_GetError());
-        // return -1;
+        return false;
     }
 
-    sdl_win = SDL_CreateWindow("Teapot", 0, 0, 640, 480, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+    // Size/mode: config [device] displayWidth/Height (windowed, as before) or, if unset, the real screen (fullscreen).
+    {
+        Uint32 flags = SDL_WINDOW_OPENGL | (display_use_fullscreen() ? SDL_WINDOW_FULLSCREEN_DESKTOP : SDL_WINDOW_RESIZABLE);
+        sdl_win = SDL_CreateWindow("Teapot", 0, 0, display_get_width(), display_get_height(), flags);
+    }
     if (sdl_win == NULL) {
         fatal_error("Failed to create SDL Window: %s\n", SDL_GetError());
-        // return -1;
+        return false;
     }
 
     // Basic OpenGL ES 2.x setup
@@ -107,8 +114,22 @@ EGLDisplay eglGetDisplay_impl(NativeDisplayType native_display)
         sdl_ctx = SDL_GL_CreateContext(sdl_win);
         if (sdl_ctx == NULL) {
             fatal_error("Failed to create OpenGL Context: %s\n", SDL_GetError());
+            return false;
         }
-        // return -1;
+    }
+    SDL_GL_MakeCurrent(sdl_win, sdl_ctx);
+    return true;
+}
+
+// Just return the current display
+EGLDisplay eglGetDisplay_impl(NativeDisplayType native_display)
+{
+    bogo_log("[NATIVE] eglGetDisplay\n");
+    if (egl_display)
+        return egl_display;
+
+    if (!sdl_ensure_window()) {
+        fatal_error("Failed to create window/context\n");
     }
     SDL_GL_MakeCurrent(sdl_win, sdl_ctx);
 
@@ -146,17 +167,14 @@ EGLDisplay eglGetDisplay_impl(NativeDisplayType native_display)
     }
 
     if (glExtensions) {
-        printf("OpenGL Extensions: %s\n", glExtensions);
+        bogo_log("OpenGL Extensions: %s\n", glExtensions);
     } else {
         fatal_error("Failed to retrieve OpenGL extensions.\n");
     }
 
-    // Just for good measure
-    SDL_GL_SwapWindow(sdl_win);
-    SDL_GL_SwapWindow(sdl_win);
-    SDL_GL_SwapWindow(sdl_win);
-    SDL_GL_SwapWindow(sdl_win);
-    SDL_GL_SwapWindow(sdl_win);
+    // Just for good measure (skipped when a splash is up, these swaps would replace it with black)
+    for (int i = 0; i < 5 && !g_splash_shown; i++)
+        SDL_GL_SwapWindow(sdl_win);
 
     return egl_display;
 }
@@ -353,7 +371,14 @@ EGLSurface eglGetCurrentSurface_impl()
 EGLBoolean eglSwapInterval_impl(EGLDisplay display,
     EGLint interval)
 {
-    return EGL_FALSE; // Generally can't set swap interval on these platforms.
+    // Forward to the real EGL (SDL's own "current context" tracking is bypassed by eglMakeCurrent_impl, so
+    // SDL_GL_SetSwapInterval would refuse). [device] swapInterval in the config overrides what the game asks for.
+    int forced = config["device"]["swapInterval"].value_or<int>(-1);
+    EGLint value = forced >= 0 ? forced : interval;
+    auto fn = (EGLBoolean (*)(EGLDisplay, EGLint))getProc("eglSwapInterval");
+    if (!fn)
+        return EGL_FALSE; // Generally can't set swap interval on these platforms.
+    return fn(display, value);
 }
 
 // Actually implemented in egl.cpp

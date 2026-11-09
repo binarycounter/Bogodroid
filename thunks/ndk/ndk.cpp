@@ -1,7 +1,9 @@
 
+#include <zlib.h>
 #include "toml++/toml.hpp"
 extern toml::table config;
 #include "ndk.h"
+#include "display_info.h"
 #include "logging.h"
 #include "thunk_gen.h"
 #include "platform.h"
@@ -111,12 +113,12 @@ ABI_ATTR ANativeWindow* ANativeWindow_fromSurface(void*, void*)
 
 ABI_ATTR int32_t ANativeWindow_getWidth(ANativeWindow *window)
 {
-    return config["device"]["displayWidth"].value_or<int>(640);
+    return display_get_width();
 }
 
 ABI_ATTR int32_t ANativeWindow_getHeight(ANativeWindow *window)
 {
-    return config["device"]["displayHeight"].value_or<int>(480);
+    return display_get_height();
 }
 
 ABI_ATTR void __assert2(const char* __file, int __line, const char* __function, const char* __msg)
@@ -165,6 +167,33 @@ NO_THUNK("AAsset_getBuffer",(uintptr_t)&AAsset_getBuffer),
 NO_THUNK("AAsset_getLength",(uintptr_t)&AAsset_getLength),
 NO_THUNK("AAsset_close",(uintptr_t)&AAsset_close),
 NO_THUNK("AAsset_read", (uintptr_t)&AAsset_read),
+NO_THUNK("inflateInit2_", (uintptr_t)&inflateInit2_),
+NO_THUNK("inflateEnd", (uintptr_t)&inflateEnd),
+NO_THUNK("inflate", (uintptr_t)&inflate),
+// Stubs (return 0/NULL). Revisit if the game actually depends on them.
+NO_THUNK("eglSurfaceAttrib", (uintptr_t)&ret0),
+NO_THUNK("eglCreatePbufferSurface", (uintptr_t)&ret0),
+NO_THUNK("eglTerminate", (uintptr_t)&ret0),
+NO_THUNK("AChoreographer_getInstance", (uintptr_t)&ret0),
+NO_THUNK("AChoreographer_postFrameCallback64", (uintptr_t)&ret0),
+NO_THUNK("AChoreographer_postFrameCallback", (uintptr_t)&ret0),
+NO_THUNK("ALooper_removeFd", (uintptr_t)&ALooper_removeFd),
+NO_THUNK("ALooper_acquire", (uintptr_t)&ALooper_acquire),
+NO_THUNK("ALooper_release", (uintptr_t)&ALooper_release),
+NO_THUNK("ALooper_wake", (uintptr_t)&ALooper_wake),
+NO_THUNK("ALooper_forThread", (uintptr_t)&ALooper_forThread),
+NO_THUNK("ASensorManager_getSensorList", (uintptr_t)&ret0),
+NO_THUNK("ASensorEventQueue_hasEvents", (uintptr_t)&ret0),
+NO_THUNK("ASensorEventQueue_getEvents", (uintptr_t)&ret0),
+NO_THUNK("ASensorEventQueue_enableSensor", (uintptr_t)&ret0),
+NO_THUNK("ASensorManager_destroyEventQueue", (uintptr_t)&ret0),
+NO_THUNK("ASensorEventQueue_disableSensor", (uintptr_t)&ret0),
+NO_THUNK("ASensor_getType", (uintptr_t)&ret0),
+NO_THUNK("ASensor_getResolution", (uintptr_t)&ret0),
+NO_THUNK("ASensor_getMinDelay", (uintptr_t)&ret0),
+NO_THUNK("ASensor_getName", (uintptr_t)&ret0),
+NO_THUNK("ASensor_getVendor", (uintptr_t)&ret0),
+NO_THUNK("ASensorEventQueue_setEventRate", (uintptr_t)&ret0),
     {NULL, (uintptr_t)NULL}};
 
 

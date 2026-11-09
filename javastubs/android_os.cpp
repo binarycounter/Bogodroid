@@ -6,6 +6,7 @@ extern toml::table config;
 #include "javac.h"
 #include "logging.h"
 #include <fstream>
+#include <unistd.h>
 #include <pthread.h>
 #include <inttypes.h>
 
@@ -34,6 +35,12 @@ std::shared_ptr<FakeJni::JString> jnivm::android::os::Bundle::getString(std::sha
 ///// Process
 
 void jnivm::android::os::Process::setThreadPriority(int i, int j) { }
+void jnivm::android::os::Process::killProcess(int pid)
+{
+    // Only our own (fake) pid exists, so any kill is a request to quit.
+    request_quit("Process.killProcess", true);
+}
+int jnivm::android::os::Process::myPid() { return (int)getpid(); }
 
 ///// Looper
 
@@ -429,6 +436,8 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::os::Build) { FakeJni::Constructor<Build>
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::os::Process) { FakeJni::Constructor<Process> {} },
     { FakeJni::Function<&Process::setThreadPriority> {}, "setThreadPriority", FakeJni::JMethodID::STATIC },
+    { FakeJni::Function<&Process::killProcess> {}, "killProcess", FakeJni::JMethodID::STATIC },
+    { FakeJni::Function<&Process::myPid> {}, "myPid", FakeJni::JMethodID::STATIC },
     END_NATIVE_DESCRIPTOR
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::os::Message) { FakeJni::Constructor<Message> {} },

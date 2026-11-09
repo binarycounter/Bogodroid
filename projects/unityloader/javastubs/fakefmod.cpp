@@ -1,3 +1,5 @@
+#include "toml++/toml.hpp"
+extern toml::table config;
 #include "fakefmod.h"
 #include "../globals.h" 
 #include "android.h"
@@ -94,8 +96,12 @@ void FMODAudioDevice::runAudio() {
     
     SDL_PauseAudioDevice(mAudioDevice, 0);
     
+    // Keep a couple of FMOD buffers queued (at least 4096 bytes): a render hiccup then doesn't turn into crackle.
+    // [audio] queue_bytes in the config overrides this.
+    int queueTarget = config["audio"]["queue_bytes"].value_or<int>((int)std::max<int>(4096, bufferSize * 2));
+
     while (mRunning.load()) {
-        while(SDL_GetQueuedAudioSize(mAudioDevice) < 4096){
+        while((int)SDL_GetQueuedAudioSize(mAudioDevice) < queueTarget){
             local_fmodProcess();
             SDL_QueueAudio(mAudioDevice, mAudioBuffer.data(), mAudioBuffer.size());    
         }
@@ -117,7 +123,9 @@ int FMODAudioDevice::local_fmodGetInfo(int info_id) {
 int FMODAudioDevice::local_fmodProcess()
 {
     FakeJni::LocalFrame frame(vm);
-    static auto buffer = frame.getJniEnv().NewDirectByteBuffer(mAudioBuffer.data(),mAudioBuffer.size());
+    // Created per call: mAudioBuffer can be resized when the device is restarted, and a cached ByteBuffer would
+    // keep pointing at the old memory (and a local reference must not outlive its frame).
+    auto buffer = frame.getJniEnv().NewDirectByteBuffer(mAudioBuffer.data(),mAudioBuffer.size());
     static auto fmodProcess = fmodClass->getMethod("(Ljava/nio/ByteBuffer;)I", "fmodProcess");
     return fmodProcess.invoke(frame.getJniEnv(),fmodClass,buffer).i;
 }

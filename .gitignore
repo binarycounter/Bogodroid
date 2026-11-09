@@ -8,3 +8,4 @@ build_cross/
 libjnivm/build/
 il2cpp/
 projects/unityloader/monocompat/il2cpp_log_shim.cpp
+build-arm64*/

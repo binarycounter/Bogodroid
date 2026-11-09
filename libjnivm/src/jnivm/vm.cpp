@@ -1,3 +1,5 @@
+#include <cstdio>
+#include <cstdlib>
 #include <jnivm.h>
 #ifdef _WIN32
 #define pthread_self() GetCurrentThreadId()
@@ -252,7 +254,8 @@ jclass GetObjectClass(JNIEnv *env, jobject jo) {
 	return jo ? JNITypes<std::shared_ptr<jnivm::Class>>::ToJNIType(ENV::FromJNIEnv(env), JNITypes<std::shared_ptr<jnivm::Object>>::JNICast(ENV::FromJNIEnv(env), jo)->getClassInternal(ENV::FromJNIEnv(env))) : env->FindClass("Invalid");
 };
 jboolean IsInstanceOf(JNIEnv *env, jobject jo, jclass cl) {
-	printf("[JNIVM] Is %s an instance of %s? - %d\n",
+	static const bool verboseJni = getenv("BOGODROID_VERBOSE") != nullptr;
+	if (verboseJni) printf("[JNIVM] Is %s an instance of %s? - %d\n",
 		JNITypes<std::shared_ptr<jnivm::Object>>::JNICast(ENV::FromJNIEnv(env), jo).get()->getClass().getName().c_str(),
 		JNITypes<std::shared_ptr<jnivm::Class>>::JNICast(ENV::FromJNIEnv(env), cl).get()->getName().c_str(),
 		jo && IsAssignableFrom(env, GetObjectClass(env, jo), cl));
@@ -280,6 +283,7 @@ jint RegisterNatives(JNIEnv *env, jclass c, const JNINativeMethod *method, jint 
 			ss << "Class \"" << clazz->nativeprefix << "\" registred native method: " << method->name << " signature: " << method->signature;
 			LOG("JNIVM", "%s", ss.str().data());
 #endif
+			if (getenv("BOGODROID_VERBOSE")) fprintf(stderr, "[RegisterNatives] %s: %s %s\n", clazz->nativeprefix.c_str(), method->name, method->signature);
 			auto m = std::make_shared<Method>();
 			m->name = method->name;
 			m->signature = method->signature;

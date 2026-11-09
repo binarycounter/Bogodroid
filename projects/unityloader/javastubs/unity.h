@@ -26,9 +26,18 @@ namespace com {
 
                 bool initializeGoogleAr();
                 std::shared_ptr<FakeJni::JString> getLaunchURL();
+                // Called by newer Unity versions every frame / on init. Nothing to do on our side.
+                void executeMainThreadJobs();
+                bool shouldSetGameState();
 
                 static std::shared_ptr<jnivm::android::app::Activity> currentActivity;
     
+            };
+
+            // Created by libunity via reflection in newer Unity versions; methods get added as the logs show they're needed.
+            class UnityPlayerUtilities : public FakeJni::JObject {
+            public:
+                DEFINE_CLASS_NAME("com/unity3d/player/UnityPlayerUtilities")
             };
 
             class ReflectionHelper : public FakeJni::JObject {

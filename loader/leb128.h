@@ -32,12 +32,8 @@ Boston, MA 02110-1301, USA.  */
 /* Get a definition for NULL, size_t.  */
 #include <stddef.h>
 
-#ifdef HAVE_STDINT_H
 #include <stdint.h>
-#endif
-#ifdef HAVE_INTTYPES_H
 #include <inttypes.h>
-#endif
 
 /* Decode the unsigned LEB128 constant at BUF into the variable pointed to
    by R, and return the number of bytes read.

@@ -2,10 +2,19 @@
 #define __JAVAC_H__
 
 #include "baron/baron.h"
+#include <atomic>
 #include <fstream>
 #include <thread>
 
 void InitJNIJavaClasses(FakeJni::Jvm* vm);
+
+// Set when the game asks to quit (Activity.finish(), Process.killProcess(), System.exit()).
+// request_quit() also arms a watchdog that force-exits after a few seconds in case a clean shutdown hangs.
+extern std::atomic<bool> g_quit_requested;
+// fromGuest = the game itself asked to quit (its own shutdown is already done, so we only flush and leave);
+// otherwise the host did (signal, window close), and the game gets a chance to pause and save first.
+extern std::atomic<bool> g_quit_from_guest;
+void request_quit(const char* why, bool fromGuest = false);
 
 void HookStringExtensions(FakeJni::Jvm* vm);
 void HookClassExtensions(FakeJni::Jvm* vm);
@@ -135,6 +144,7 @@ namespace java {
         public:
             DEFINE_CLASS_NAME("java/lang/System")
             static long nanoTime();
+            static void exit(int code);
         };
 
         // Fake method reflect, just so Unity cann call "toString" on it

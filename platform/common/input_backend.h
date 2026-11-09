@@ -12,6 +12,7 @@
 #define INPUT_ID_KEYBOARD 1
 #define INPUT_ID_XBOX 2
 #define INPUT_ID_MOUSE 3
+#define INPUT_ID_TOUCH 4
 
 class InputBackend {
 private:
@@ -22,8 +23,23 @@ private:
     // Callbacks to dispatch events to the Android shim layer
     std::function<void(std::shared_ptr<jnivm::android::view::KeyEvent>)> onKey;
     std::function<void(std::shared_ptr<jnivm::android::view::MotionEvent>)> onMotion;
+    std::function<void(bool)> onFocus; // window focus gained (true) / lost (false)
 
     std::unordered_map<int, float> mControllerAxisState;
+
+    // ---- Touchscreen ----
+    // A finger that is currently down. The vector is kept in the order the fingers went down, which is also
+    // Android's pointer index order; "id" is the stable Android pointer id (smallest unused number).
+    struct ActiveFinger {
+        SDL_FingerID sdlId;
+        int id;
+        float x, y, pressure;
+    };
+    std::vector<ActiveFinger> fingers;
+    long touchDownTime = 0;
+    void handleFingerEvent(const SDL_Event& e);
+    void sendTouchEvent(int action, long eventTime);
+    void cancelTouches(); // ends any gesture in progress (focus lost, ...)
 
     InputBackend(); // Private constructor for singleton
 
@@ -49,8 +65,9 @@ public:
     // ---- Callbacks ----
     void setKeyCallback(std::function<void(std::shared_ptr<jnivm::android::view::KeyEvent>)> cb);
     void setMotionCallback(std::function<void(std::shared_ptr<jnivm::android::view::MotionEvent>)> cb);
+    void setFocusCallback(std::function<void(bool)> cb);
 
     // Utilities
     static constexpr int toAndroidKeycode(SDL_Scancode sdl_scancode);
-    static constexpr int toAndroidKeycode(SDL_ControllerButtonEvent sdl_button);
+    static int toAndroidKeycode(SDL_ControllerButtonEvent sdl_button); // not constexpr: depends on [input] settings
 };

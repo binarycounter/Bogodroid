@@ -8,6 +8,10 @@
 #include <csignal>
 #include <execinfo.h>
 #include <unistd.h>
+#include <atomic>
+#include <chrono>
+#include <thread>
+#include "javac.h"
 
 void print_native_callbacks(ANativeActivity nActivity)
 {
@@ -40,22 +44,51 @@ void segfault_handler(int signal) {
     std::cerr << "Error: signal " << signal << ":\n";
     backtrace_symbols_fd(array, size, STDERR_FILENO);
 
-    // Exit the program
-    exit(1);
+    // Exit immediately: exit() runs atexit/TLS destructors which can abort again and hang on a black screen
+    _exit(1);
 }
 
+// Milliseconds since the process started (this file's static init is about as early as it gets).
+long bogo_uptime_ms()
+{
+    static const auto t0 = std::chrono::steady_clock::now();
+    return (long)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
+}
+static const long g_uptime_init = bogo_uptime_ms(); // starts the clock at load time
+
 void exit_handler(int signal) {
-    printf("Caught signal %d, exiting...\n", signal);
-    exit(0);
+    // A second signal means "really, now".
+    if (g_quit_requested.exchange(true))
+        _exit(0);
+    static const char msg[] = "Caught signal, shutting down...\n";
+    ssize_t ignored = write(STDERR_FILENO, msg, sizeof(msg) - 1);
+    (void)ignored;
+    // The main loop notices g_quit_requested; the monitor thread started in exit_on_signals() force-exits if it doesn't.
 }
 
 void print_backtrace_on_segfault()
 {
     signal(SIGSEGV, segfault_handler);
+    signal(SIGTRAP, segfault_handler);
+    signal(SIGABRT, segfault_handler);
+    signal(SIGBUS, segfault_handler);
+    signal(SIGILL, segfault_handler);
+    signal(SIGFPE, segfault_handler);
 }
 
 void exit_on_signals()
 {
+    // Quit monitor: exit() from a signal handler runs destructors that can abort or hang (guest threads are still
+    // running), so the handler only sets a flag, and this thread leaves for good if nothing exits cleanly in time.
+    std::thread([]() {
+        while (!g_quit_requested)
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+        fflush(NULL);
+        sync();
+        _exit(0);
+    }).detach();
+
     struct sigaction sa;
     sa.sa_handler = exit_handler;
     sa.sa_flags = 0;
@@ -63,4 +96,4 @@ void exit_on_signals()
 
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
-}
+}

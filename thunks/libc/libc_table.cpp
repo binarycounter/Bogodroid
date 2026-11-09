@@ -12,6 +12,14 @@
 #include "thunk_pthread.h"
 #include "thunk_time64.h"
 #include <signal.h>
+#include <math.h>
+#include <string.h>
+#include <net/if.h>
+#include <mntent.h>
+#include <sys/inotify.h>
+#include <sys/eventfd.h>
+#include <sys/ptrace.h>
+extern "C" int __register_atfork(void (*)(void), void (*)(void), void (*)(void), void *);
 #include <link.h>
 
 //Some necessary types

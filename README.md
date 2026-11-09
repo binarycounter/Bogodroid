@@ -91,6 +91,37 @@ cmake .. -DCMAKE_BUILD_TYPE=Release -DPROJ=hexagonloader
 
 `./unityloader ../configs/unity.toml`
 
+# Configuration options
+
+The config file (`unity.toml` etc.) is plain TOML. Besides `[paths]` and `[package]` (see `configs/unity.toml`), these optional keys are supported. Everything here is off or unchanged by default.
+
+```toml
+[device]
+displayWidth = 640        # With displayWidth AND displayHeight set, a window of that size is created.
+displayHeight = 480       # If both are left out, the real screen size is detected and the window is fullscreen.
+fullscreen = false        # Force fullscreen on/off, whatever the above says.
+swapInterval = 1          # Force the swap interval (0 = no vsync). Default: whatever the game asks for.
+splash = "splash.bmp"     # BMP shown while the game loads (path relative to where the loader is started).
+pause_on_focus_loss = false  # Pause the game while the window is not focused.
+quit_grace_ms = 300      # After the game asks to quit, wait this long, flush to disk, then exit.
+features = ["android.hardware.gamepad"]  # Android system features the game is told exist (none by default).
+
+[input]
+controller = true
+swap_ab = true            # Swap A<->B (default true: Nintendo-style labels). false = Xbox layout.
+swap_xy = true            # Swap X<->Y (default true).
+back_button = "select"    # What the pad's Back/Select button sends: "select", "back" (Android Back key) or "both".
+escape_as_back = false    # Also send Android's Back key when Escape is pressed.
+touch = "auto"           # Real multi-touch from the touchscreen: true, false, or "auto" (on when SDL finds a touch device).
+
+[audio]
+queue_bytes = 8192        # Audio data kept queued before it runs dry. Raise it if sound crackles.
+```
+
+Game preferences written through Android's `SharedPreferences` (this is what Unity's `PlayerPrefs` uses) are saved under `<android_files>/shared_prefs/`.
+
+Environment variables: `BOGODROID_VERBOSE=1` turns on the chatty diagnostics (dlopen/dlsym traces, JNI type checks, GL extensions, ...), `BOGODROID_FPS=1` prints just the FPS counter.
+
 # Debugging with QEMU and GDB-multiarch
 
 (This expects the chroot environment as provided by [this VM](https://forum.odroid.com/viewtopic.php?p=306185#p306185))

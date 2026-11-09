@@ -1,6 +1,7 @@
 #include "unity.h"
 #include "../globals.h"
 #include "baron/baron.h"
+#include "jnibridge.h"
 #include "logging.h"
 
 ///// UnityPlayer
@@ -19,6 +20,13 @@ bool jnivm::com::unity3d::player::UnityPlayerActivity::injectEvent(std::shared_p
     if (!unityPlayerClass) {
         verbose("UnityPlayerActivity", "Could not find class com/unity3d/player/UnityPlayer");
         return false;
+    }
+
+    // Newer Unity: nativeInjectEvent(InputEvent, int). The int is passed as 0 (probably a display/window index).
+    if (auto method2 = unityPlayerClass->getMethod("(Landroid/view/InputEvent;I)Z", "nativeInjectEvent")) {
+        auto result = method2.invoke(frame.getJniEnv(), unityPlayerClass, event, 0).z;
+        verbose("UnityPlayerActivity", "Result: %d", result);
+        return result == JNI_TRUE;
     }
 
     // Find the static native method
@@ -59,14 +67,34 @@ std::shared_ptr<FakeJni::JString> jnivm::com::unity3d::player::UnityPlayer::getL
     return std::make_shared<FakeJni::JString>("");
 }
 
+void jnivm::com::unity3d::player::UnityPlayer::executeMainThreadJobs()
+{
+    // The loader's own loop already runs the main thread; there are no queued Java-side jobs.
+}
+
+bool jnivm::com::unity3d::player::UnityPlayer::shouldSetGameState()
+{
+    return false;
+}
+
 
 
 ///// ReflectionHelper
 
 std::shared_ptr<jnivm::java::lang::reflect::Constructor> jnivm::com::unity3d::player::ReflectionHelper::getConstructorID(std::shared_ptr<jnivm::java::lang::Class> clazz, std::shared_ptr<FakeJni::JString> signature)
 {
+    if (clazz == nullptr || signature == nullptr)
+        return nullptr;
     verbose("UnityReflection", "getConstructorID(%s, %s) \n", clazz->getName().c_str(), signature.get()->c_str());
-    return nullptr;
+    // Constructors are registered as "<init>" methods. As with getMethodID, the jnivm Method object itself stands in
+    // for the reflection object: FromReflectedMethod() turns the handle straight back into the method.
+    auto ctor = (Method*)clazz->getMethod(signature.get()->c_str(), "<init>");
+    if (ctor == nullptr)
+        return nullptr;
+    return std::shared_ptr<jnivm::java::lang::reflect::Constructor>(
+        reinterpret_cast<jnivm::java::lang::reflect::Constructor*>(ctor),
+        [](jnivm::java::lang::reflect::Constructor*) { } // No-op deleter: the class owns the method
+    );
 }
 
 std::shared_ptr<jnivm::java::lang::reflect::Method> jnivm::com::unity3d::player::ReflectionHelper::getMethodID(std::shared_ptr<jnivm::java::lang::Class> clazz, std::shared_ptr<FakeJni::JString> methodName, std::shared_ptr<FakeJni::JString> signature, bool isStatic)
@@ -152,8 +180,11 @@ std::shared_ptr<FakeJni::JString> jnivm::com::unity3d::player::ReflectionHelper:
 
 std::shared_ptr<jnivm::Object> jnivm::com::unity3d::player::ReflectionHelper::newProxyInstance(std::shared_ptr<UnityPlayer> player, long nativeHandle, std::shared_ptr<jnivm::Class> interface)
 {
+    if (interface == nullptr)
+        return nullptr;
     verbose("UnityReflection", "newProxyInstance(%p, %ld, %s) \n", player.get(), nativeHandle, interface.get()->getName().c_str());
-    return nullptr;
+    // Same proxy type JNIBridge.newInterfaceProxy hands out: native callbacks arrive through JNIBridge.invoke.
+    return std::make_shared<jnivm::bitter::jnibridge::JNIBridgeProxy>(nativeHandle, std::set<std::string>{interface->getName()});
 }
 
 std::shared_ptr<jnivm::Object> jnivm::com::unity3d::player::ReflectionHelper::createInvocationError(long nativeHandle, bool toggle)
@@ -167,6 +198,9 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::com::unity3d::player::PlayAssetDeliveryUnityWrapp
     { FakeJni::Function<&PlayAssetDeliveryUnityWrapper::playCoreApiMissing> {}, "playCoreApiMissing", FakeJni::JMethodID::PUBLIC },
     END_NATIVE_DESCRIPTOR
 
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::com::unity3d::player::UnityPlayerUtilities) { FakeJni::Constructor<UnityPlayerUtilities> {} },
+    END_NATIVE_DESCRIPTOR
+
     BEGIN_NATIVE_DESCRIPTOR(jnivm::com::unity3d::player::UnityPlayerActivity) { FakeJni::Constructor<UnityPlayerActivity> {} },
     END_NATIVE_DESCRIPTOR
 
@@ -174,6 +208,8 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::com::unity3d::player::PlayAssetDeliveryUnityWrapp
     { FakeJni::Field<&UnityPlayer::currentActivity> {}, "currentActivity", FakeJni::JFieldID::STATIC },
     { FakeJni::Function<&UnityPlayer::initializeGoogleAr> {}, "initializeGoogleAr", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&UnityPlayer::getLaunchURL> {}, "getLaunchURL", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&UnityPlayer::executeMainThreadJobs> {}, "executeMainThreadJobs", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&UnityPlayer::shouldSetGameState> {}, "shouldSetGameState", FakeJni::JMethodID::PUBLIC },
     END_NATIVE_DESCRIPTOR
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::com::unity3d::player::ReflectionHelper) { FakeJni::Constructor<ReflectionHelper> {} },
