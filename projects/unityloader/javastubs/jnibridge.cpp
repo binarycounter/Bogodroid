@@ -96,6 +96,7 @@ void JNIBridge::invoke(long nativeHandle, const char* className, const char* met
 template void JNIBridge::invoke(long, const char*, const char*, const char*); // For Runnable.run()
 template void JNIBridge::invoke(long, const char*, const char*, const char*, std::shared_ptr<jnivm::android::os::Message>); // For Handler.Callback.handleMessage()
 template void JNIBridge::invoke(long, const char*, const char*, const char*, jlong); // for FrameCallback.doFrame()
+template void JNIBridge::invoke(long, const char*, const char*, const char*, std::shared_ptr<jnivm::java::lang::Object>); // listeners taking one object (Play Billing)
 
 
 BEGIN_NATIVE_DESCRIPTOR(jnivm::bitter::jnibridge::JNIBridge) { FakeJni::Function<&JNIBridge::newInterfaceProxy> {}, "newInterfaceProxy", FakeJni::JMethodID::STATIC },

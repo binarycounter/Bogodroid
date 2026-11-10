@@ -2,6 +2,12 @@
 #include "../globals.h"
 #include "baron/baron.h"
 #include "logging.h"
+#include "so_util.h"
+#include "java_security.h"
+#include <stdexcept>
+#include <jnivm/throwable.h>
+#include <unistd.h>
+#include <limits.h>
 
 ///// Long
 
@@ -43,8 +49,18 @@ jnivm::java::lang::ClassLoader::ClassLoader(jnivm::Object* obj)
 
 std::shared_ptr<FakeJni::JString> jnivm::java::lang::ClassLoader::findLibrary(std::shared_ptr<FakeJni::JString> name)
 {
-    verbose("JBRIDGE", "findLibrary stub %s", name.get()->c_str());
-    return name;
+    // Like Android: "foo" -> <libs>/libfoo.so. Unity 7 loads Burst this way ("_burst_generated" -> lib_burst_generated.so).
+    std::string n = name ? name->c_str() : "";
+    for (std::string candidate : { "lib/arm64-v8a/lib" + n + ".so", "lib/arm64-v8a/" + n + ".so", "lib/arm64-v8a/" + n }) {
+        if (access(candidate.c_str(), R_OK) == 0) {
+            char abs[PATH_MAX];
+            std::string found = realpath(candidate.c_str(), abs) ? std::string(abs) : candidate;
+            verbose("JBRIDGE", "findLibrary %s -> %s", n.c_str(), found.c_str());
+            return std::make_shared<FakeJni::JString>(found);
+        }
+    }
+    verbose("JBRIDGE", "findLibrary %s: not found", n.c_str());
+    return name; // older Unity versions expect the name back
 }
 
 ///// StringBuilder
@@ -75,7 +91,15 @@ jnivm::java::io::InputStream::InputStream(std::shared_ptr<FakeJni::JString> file
     if (!file->is_open()) {
         verbose("JBRIDGE", "IOStream ERROR on file %s", filename.get()->c_str());
     }
+    this->ok = file->is_open();
     this->file = file;
+}
+
+jnivm::java::io::InputStream::InputStream(const std::string& name, std::string&& contents)
+{
+    verbose("JBRIDGE", "IOStream reading %s from the APK (%zu bytes)", name.c_str(), contents.size());
+    this->file = new std::istringstream(std::move(contents), std::ios::binary);
+    this->ok = true;
 }
 
 int jnivm::java::io::InputStream::read(
@@ -83,7 +107,7 @@ int jnivm::java::io::InputStream::read(
     int offset,
     int length)
 {
-    if (!file || !file->is_open()) {
+    if (!file || !ok) {
         // Java: If the first byte cannot be read for any reason other than EOF ⇒ throw IOException
         return -1;
     }
@@ -126,6 +150,20 @@ jnivm::java::io::File::File(std::shared_ptr<FakeJni::JString> path)
 std::shared_ptr<FakeJni::JString> jnivm::java::io::File::getPath()
 {
     return path;
+}
+
+std::shared_ptr<FakeJni::JString> jnivm::java::io::File::getAbsolutePath()
+{
+    std::string p = path ? path->c_str() : "";
+    if (!p.empty() && p[0] == '/')
+        return path;
+    char cwd[4096];
+    if (!getcwd(cwd, sizeof(cwd)))
+        return path;
+    std::string abs = cwd;
+    if (p.rfind("./", 0) == 0) p = p.substr(2);
+    if (!p.empty()) abs += "/" + p;
+    return std::make_shared<FakeJni::JString>(abs);
 }
 
 std::shared_ptr<FakeJni::JString> jnivm::java::io::File::toString()
@@ -198,6 +236,29 @@ void jnivm::java::lang::System::exit(int code)
     request_quit("System.exit", true);
 }
 
+long jnivm::java::lang::System::currentTimeMillis()
+{
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
+int jnivm::java::lang::System::identityHashCode(std::shared_ptr<FakeJni::JObject> obj)
+{
+    uintptr_t p = reinterpret_cast<uintptr_t>(obj.get());
+    return (int)(p ^ (p >> 32));
+}
+
+void jnivm::java::lang::System::loadLibrary(std::shared_ptr<FakeJni::JString> name)
+{
+    if (!name || !so_load_library(name->c_str(), &vm))
+        throw std::runtime_error("java.lang.UnsatisfiedLinkError: couldn't find \"lib" + std::string(name ? name->c_str() : "") + ".so\"");
+}
+
+void jnivm::java::lang::System::load(std::shared_ptr<FakeJni::JString> path)
+{
+    if (!path || !so_load_library(path->c_str(), &vm))
+        throw std::runtime_error("java.lang.UnsatisfiedLinkError: dlopen failed: \"" + std::string(path ? path->c_str() : "") + "\" not found");
+}
+
 long jnivm::java::lang::System::nanoTime()
 {
     return time_point_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now()).time_since_epoch().count();
@@ -257,6 +318,27 @@ std::shared_ptr<jnivm::java::util::Iterator> jnivm::java::util::ArrayList::itera
 }
 
 int jnivm::java::util::ArrayList::size() { return elements.size(); }
+
+bool jnivm::java::util::HashSet::add(std::shared_ptr<FakeJni::JObject> obj)
+{
+    if (contains(obj)) return false;
+    items->add(obj);
+    return true;
+}
+bool jnivm::java::util::HashSet::contains(std::shared_ptr<FakeJni::JObject> obj)
+{
+    for (int i = 0; i < items->size(); i++) {
+        auto o = items->get(i);
+        if (o == obj) return true;
+        // strings compare by value, like String.equals
+        auto a = std::dynamic_pointer_cast<FakeJni::JString>(o), b = std::dynamic_pointer_cast<FakeJni::JString>(obj);
+        if (a && b && a->asStdString() == b->asStdString()) return true;
+    }
+    return false;
+}
+int jnivm::java::util::HashSet::size() { return items->size(); }
+bool jnivm::java::util::HashSet::isEmpty() { return items->size() == 0; }
+std::shared_ptr<jnivm::java::util::Iterator> jnivm::java::util::HashSet::iterator() { return items->iterator(); }
 void jnivm::java::util::ArrayList::add(std::shared_ptr<FakeJni::JObject> obj) { elements.push_back(obj); }
 std::shared_ptr<FakeJni::JObject> jnivm::java::util::ArrayList::get(int index) { return elements.at(index); }
 
@@ -284,6 +366,52 @@ std::shared_ptr<FakeJni::JObject> jnivm::java::util::ArrayListIterator::next()
 std::shared_ptr<jnivm::java::util::Locale> jnivm::java::util::Locale::getDefault()
 {
     return std::make_shared<jnivm::java::util::Locale>();
+}
+
+std::shared_ptr<FakeJni::JString> jnivm::java::util::Locale::getLanguage()
+{
+    return std::make_shared<FakeJni::JString>("en");
+}
+
+std::shared_ptr<FakeJni::JString> jnivm::java::util::Locale::getCountry()
+{
+    return std::make_shared<FakeJni::JString>("US");
+}
+
+std::shared_ptr<FakeJni::JString> jnivm::java::util::Locale::toString()
+{
+    return std::make_shared<FakeJni::JString>("en_US");
+}
+
+std::shared_ptr<jnivm::java::util::UUID> jnivm::java::util::UUID::randomUUID()
+{
+    // Version 4 (random) UUID, formatted like java.util.UUID.toString()
+    unsigned char b[16];
+    std::ifstream f("/dev/urandom", std::ios::binary);
+    f.read(reinterpret_cast<char*>(b), sizeof(b));
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    char s[37];
+    snprintf(s, sizeof(s), "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+        b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]);
+    auto u = std::make_shared<UUID>();
+    u->value = s;
+    return u;
+}
+
+std::shared_ptr<FakeJni::JString> jnivm::java::util::UUID::toString()
+{
+    return std::make_shared<FakeJni::JString>(value);
+}
+
+std::shared_ptr<jnivm::java::util::TimeZone> jnivm::java::util::TimeZone::getDefault()
+{
+    return std::make_shared<TimeZone>();
+}
+
+std::shared_ptr<FakeJni::JString> jnivm::java::util::TimeZone::getID()
+{
+    return std::make_shared<FakeJni::JString>(bogo_host_time_zone());
 }
 
 std::shared_ptr<FakeJni::JString> jnivm::java::util::Locale::toLanguageTag()
@@ -319,6 +447,8 @@ std::shared_ptr<jnivm::java::util::Scanner> jnivm::java::util::Scanner::useDelim
 
 std::shared_ptr<FakeJni::JString> jnivm::java::util::Scanner::next()
 {
+    if (!istream || !istream->file || !istream->ok)
+        throw std::runtime_error("java.util.NoSuchElementException");
     std::string str;
     (istream->file)->seekg(0, std::ios::end);
     str.reserve((istream->file)->tellg());
@@ -332,6 +462,8 @@ std::shared_ptr<FakeJni::JString> jnivm::java::util::Scanner::next()
 
 std::shared_ptr<FakeJni::JString> jnivm::java::util::Scanner::nextLine()
 {
+    if (!istream || !istream->file || !istream->ok)
+        throw std::runtime_error("java.util.NoSuchElementException");
     std::string str;
     (istream->file)->seekg(0, std::ios::end);
     str.reserve((istream->file)->tellg());
@@ -369,6 +501,7 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::java::lang::Long) { FakeJni::Constructor<Long, jl
     END_NATIVE_DESCRIPTOR
     BEGIN_NATIVE_DESCRIPTOR(jnivm::java::io::File) { FakeJni::Constructor<File, std::shared_ptr<FakeJni::JString>> {} },
     { FakeJni::Function<&File::getPath> {}, "getPath", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&File::getAbsolutePath> {}, "getAbsolutePath", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&File::toString> {}, "toString", FakeJni::JMethodID::PUBLIC },
     END_NATIVE_DESCRIPTOR
 
@@ -382,12 +515,24 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::java::lang::Long) { FakeJni::Constructor<Long, jl
     BEGIN_NATIVE_DESCRIPTOR(jnivm::java::util::List) { FakeJni::Constructor<List> {} },
     { FakeJni::Function<&List::iterator> {}, "iterator", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&List::size> {}, "size", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&List::isEmpty> {}, "isEmpty", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&List::get> {}, "get", FakeJni::JMethodID::PUBLIC },
     END_NATIVE_DESCRIPTOR
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::java::util::ArrayList) { FakeJni::Constructor<ArrayList> {} },
     { FakeJni::Function<&ArrayList::iterator> {}, "iterator", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&ArrayList::size> {}, "size", FakeJni::JMethodID::PUBLIC },
-    { FakeJni::Function<&ArrayList::add> {}, "size", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&ArrayList::add> {}, "add", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&ArrayList::get> {}, "get", FakeJni::JMethodID::PUBLIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::java::util::HashSet) { FakeJni::Constructor<HashSet> {} },
+    { FakeJni::Constructor<HashSet, int> {} },
+    { FakeJni::Function<&HashSet::add> {}, "add", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&HashSet::contains> {}, "contains", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&HashSet::size> {}, "size", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&HashSet::isEmpty> {}, "isEmpty", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&HashSet::iterator> {}, "iterator", FakeJni::JMethodID::PUBLIC },
     END_NATIVE_DESCRIPTOR
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::java::util::Iterator) { FakeJni::Constructor<Iterator> {} },
@@ -402,6 +547,19 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::java::lang::Long) { FakeJni::Constructor<Long, jl
     BEGIN_NATIVE_DESCRIPTOR(jnivm::java::util::Locale) { FakeJni::Constructor<Locale> {} },
     { FakeJni::Function<&Locale::getDefault> {}, "getDefault", FakeJni::JMethodID::STATIC },
     { FakeJni::Function<&Locale::toLanguageTag> {}, "toLanguageTag", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Locale::getLanguage> {}, "getLanguage", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Locale::getCountry> {}, "getCountry", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Locale::toString> {}, "toString", FakeJni::JMethodID::PUBLIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::java::util::UUID) { FakeJni::Constructor<UUID> {} },
+    { FakeJni::Function<&UUID::randomUUID> {}, "randomUUID", FakeJni::JMethodID::STATIC },
+    { FakeJni::Function<&UUID::toString> {}, "toString", FakeJni::JMethodID::PUBLIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::java::util::TimeZone) { FakeJni::Constructor<TimeZone> {} },
+    { FakeJni::Function<&TimeZone::getDefault> {}, "getDefault", FakeJni::JMethodID::STATIC },
+    { FakeJni::Function<&TimeZone::getID> {}, "getID", FakeJni::JMethodID::PUBLIC },
     END_NATIVE_DESCRIPTOR
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::java::lang::Runnable) { FakeJni::Function<&Runnable::run> {}, "run", FakeJni::JMethodID::PUBLIC },
@@ -412,6 +570,10 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::java::lang::Long) { FakeJni::Constructor<Long, jl
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::java::lang::System) { FakeJni::Constructor<System> {} },
     { FakeJni::Function<&System::nanoTime> {}, "nanoTime", FakeJni::JMethodID::STATIC },
+    { FakeJni::Function<&System::currentTimeMillis> {}, "currentTimeMillis", FakeJni::JMethodID::STATIC },
+    { FakeJni::Function<&System::identityHashCode> {}, "identityHashCode", FakeJni::JMethodID::STATIC },
+    { FakeJni::Function<&System::loadLibrary> {}, "loadLibrary", FakeJni::JMethodID::STATIC },
+    { FakeJni::Function<&System::load> {}, "load", FakeJni::JMethodID::STATIC },
     { FakeJni::Function<&System::exit> {}, "exit", FakeJni::JMethodID::STATIC },
     END_NATIVE_DESCRIPTOR
 
@@ -435,6 +597,7 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::java::lang::Long) { FakeJni::Constructor<Long, jl
 {
     verbose("JBRIDGE", "Initializing Java JNI Classes");
     vm->registerClass<jnivm::java::lang::reflect::Constructor>();
+    InitJNISecurityClasses(vm);
     vm->registerClass<jnivm::java::lang::Long>();
     vm->registerClass<jnivm::java::lang::Boolean>();
     vm->registerClass<jnivm::java::lang::ClassLoader>();
@@ -450,10 +613,13 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::java::lang::Long) { FakeJni::Constructor<Long, jl
     vm->registerClass<jnivm::java::util::Set>();
     vm->registerClass<jnivm::java::util::List>();
     vm->registerClass<jnivm::java::util::ArrayList>();
+    vm->registerClass<jnivm::java::util::HashSet>();
     vm->registerClass<jnivm::java::util::Iterator>();
     vm->registerClass<jnivm::java::util::ArrayListIterator>();
     vm->registerClass<jnivm::java::util::Scanner>();
     vm->registerClass<jnivm::java::util::Locale>();
+    vm->registerClass<jnivm::java::util::UUID>();
+    vm->registerClass<jnivm::java::util::TimeZone>();
 }
 
 ///// Extensions to built-in Java classes
@@ -572,6 +738,16 @@ void HookObjectExtensions(FakeJni::Jvm* vm)
 
     objClass->HookInstanceFunction(&frame.getJniEnv(), "toString", [](jnivm::ENV* env, jnivm::Object* self) {
         verbose("JBRIDGE", "toString for Object %s", self->getClass().getName().c_str());
+        // A pending C++ exception that was turned into a Throwable: report its message like Java would.
+        if (auto* th = dynamic_cast<jnivm::Throwable*>(self)) {
+            try {
+                if (th->except) std::rethrow_exception(th->except);
+            } catch (const std::exception& e) {
+                std::string what = e.what();
+                if (what.rfind("java.", 0) != 0) what = "java.lang.RuntimeException: " + what;
+                return std::make_shared<FakeJni::JString>(what);
+            } catch (...) {}
+        }
         return std::make_shared<FakeJni::JString>("I dunno");
     });
 }

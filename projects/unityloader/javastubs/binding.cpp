@@ -5,6 +5,7 @@
 #include "javac.h"
 #include "jnibridge.h"
 #include "unity.h"
+#include "playbilling.h"
 
 void InitJNIBinding(FakeJni::Jvm* vm)
 {
@@ -12,6 +13,7 @@ void InitJNIBinding(FakeJni::Jvm* vm)
     InitJNIJavaClasses(vm);
     InitJNIAndroidClasses(vm);
     InitJNIGooglePlayClasses(vm);
+    InitJNIPlayBillingClasses(vm);
 
     // vm->registerClass<jnivm::java::util::NoSuchElementException>();
     // vm->registerClass<jnivm::com::unity3d::player::NativeLoader>();
@@ -51,7 +53,9 @@ void InitJNIBinding(FakeJni::Jvm* vm)
         if (self == nullptr)
             return nullptr;
         auto selfField = dynamic_cast<jnivm::java::lang::reflect::Field*>(self);
-        verbose("getDeclaringClass","%s - %s", selfField->name.c_str(), selfField->type.c_str());
-        return nullptr; // TODO: Implement this beyond just logging. Unity looks for it, but doesn't actually call it.
+        auto owner = selfField ? unity_field_declaring_class(selfField) : nullptr;
+        verbose("getDeclaringClass","%s - %s -> %s", selfField ? selfField->name.c_str() : "?", selfField ? selfField->type.c_str() : "?",
+            owner ? owner->getName().c_str() : "unknown");
+        return owner; // Unity 7 uses this to read instance fields such as PackageInfo.versionName
     });
 }

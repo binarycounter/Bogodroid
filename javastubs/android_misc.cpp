@@ -2,6 +2,7 @@
 extern toml::table config;
 
 #include "android.h"
+#include "android_extra.h"
 #include "baron/baron.h"
 #include "javac.h"
 #include "logging.h"
@@ -59,10 +60,7 @@ void request_quit(const char* why, bool fromGuest)
     int graceMs = fromGuest ? config["device"]["quit_grace_ms"].value_or<int>(300) : 3000;
     std::thread([graceMs]() {
         std::this_thread::sleep_for(std::chrono::milliseconds(graceMs));
-        printf("[+%ldms] Leaving now\n", bogo_uptime_ms());
-        fflush(NULL);
-        sync(); // saves written by the game must reach the SD card before the process disappears
-        _exit(0);
+        bogo_exit(0);
     }).detach();
 }
 
@@ -132,6 +130,10 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::util::DisplayMetrics) { FakeJni::Constru
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::net::Uri) { FakeJni::Constructor<Uri> {} },
     { FakeJni::Function<&Uri::encode> {}, "encode", FakeJni::JMethodID::STATIC },
+    { FakeJni::Function<&Uri::parse> {}, "parse", FakeJni::JMethodID::STATIC },
+    { FakeJni::Function<&Uri::decode> {}, "decode", FakeJni::JMethodID::STATIC },
+    { FakeJni::Function<&Uri::isRelative> {}, "isRelative", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Uri::toString> {}, "toString", FakeJni::JMethodID::PUBLIC },
     END_NATIVE_DESCRIPTOR
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::hardware::input::InputManager) { FakeJni::Constructor<InputManager> {} },
@@ -145,6 +147,7 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::util::DisplayMetrics) { FakeJni::Constru
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::hardware::display::DisplayManager) { FakeJni::Constructor<DisplayManager> {} },
     { FakeJni::Function<&DisplayManager::getDisplay> {}, "getDisplay", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&DisplayManager::registerDisplayListener> {}, "registerDisplayListener", FakeJni::JMethodID::PUBLIC },
     END_NATIVE_DESCRIPTOR
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::app::Activity) { FakeJni::Constructor<Activity> {} },

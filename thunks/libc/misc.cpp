@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <unistd.h>
 #include <elf.h>
 #include <inttypes.h>
@@ -96,6 +97,8 @@ extern "C" long syscall_impl(long number,
         return ret;
     }
 
+    // Passed straight to the host kernel below; these are known to need nothing more.
+    if (number != SYS_sched_setaffinity && number != SYS_sched_getaffinity)
     {
         verbose("SYSCALLS","Unimplemented syscall: %ld\n", number);
     }
@@ -127,17 +130,13 @@ extern "C" ABI_ATTR int system_property_read_impl(const void* pi, char* name, ch
 extern "C" ABI_ATTR void exit_impl(int status)
 {
     fprintf(stderr, "[+%ldms] Guest called exit(%d)\n", bogo_uptime_ms(), status);
-    fflush(NULL);
-    sync();
-    _exit(status); // exit() would run static/TLS destructors while guest threads are still running, which can hang or abort
+    bogo_exit(status); // exit() would run static/TLS destructors while guest threads are still running, which can hang or abort
 }
 
 extern "C" ABI_ATTR void _exit_impl(int status)
 {
     fprintf(stderr, "[+%ldms] Guest called _exit(%d)\n", bogo_uptime_ms(), status);
-    fflush(NULL);
-    sync();
-    _exit(status);
+    bogo_exit(status);
 }
 
 // IL2CPP's globalization code (System.Globalization.Native) dlopens the system ICU and probes versioned
@@ -195,7 +194,11 @@ extern "C" ABI_ATTR void* dlopen_impl(const char* filename, int flags)
         head = head->next;
     }
 
+    // One of the game's own libraries that isn't loaded yet (a plugin): load it now, like Android's linker.
+    if (so_module* mod = so_load_library(filename, NULL))
+        return mod;
 
+    // An Android system library: its functions come from the thunk tables, which dlsym() on this handle searches.
     return (void*)0xDEAD;
 }
 
@@ -267,7 +270,7 @@ extern "C" ABI_ATTR int* __errno_impl(void)
 extern "C" ABI_ATTR int __android_log_write_impl(int prio, const char* tag, const char* text)
 {
     char andlog[2048] = {};
-    warning("LOG[%s]: %s\n", tag, text);
+    warning("[+%5ldms] LOG[%s]: %s\n", bogo_uptime_ms(), tag, text);
     return 1;
 }
 
@@ -276,7 +279,7 @@ extern "C" ABI_ATTR int __android_log_print_impl(int prio, const char* tag, cons
     char andlog[2048] = {};
     va_list va;
     va_start(va, fmt);
-    warning("LOG[%s]: ", tag);
+    warning("[+%5ldms] LOG[%s]: ", bogo_uptime_ms(), tag);
     int r = vsnprintf(andlog, 2047, fmt, va);
     warning("%s\n", andlog);
     va_end(va);
@@ -286,7 +289,7 @@ extern "C" ABI_ATTR int __android_log_print_impl(int prio, const char* tag, cons
 extern "C" ABI_ATTR int __android_log_vprint_impl(int prio, const char* tag, const char* fmt, va_list va)
 {
     char andlog[2048] = {};
-    warning("LOG[%s]: ", tag);
+    warning("[+%5ldms] LOG[%s]: ", bogo_uptime_ms(), tag);
     int r = vsnprintf(andlog, 2047, fmt, va);
     warning("%s\n", andlog);
     return r;
@@ -302,9 +305,44 @@ extern "C" ABI_ATTR void android_set_abort_message_impl(const char* msg)
     //   abort();
 }
 
+// The host's IANA time zone name (e.g. "Pacific/Auckland"): $TZ, /etc/timezone, or the /etc/localtime symlink.
+std::string bogo_host_time_zone()
+{
+    if (const char* tz = getenv("TZ")) {
+        if (*tz == ':') tz++;
+        if (*tz && *tz != '/') return tz;
+    }
+    if (FILE* f = fopen("/etc/timezone", "r")) {
+        char line[128] = {0};
+        bool ok = fgets(line, sizeof(line), f) != NULL;
+        fclose(f);
+        if (ok) {
+            std::string s(line);
+            while (!s.empty() && isspace((unsigned char)s.back())) s.pop_back();
+            if (!s.empty()) return s;
+        }
+    }
+    char link[256];
+    ssize_t n = readlink("/etc/localtime", link, sizeof(link) - 1);
+    if (n > 0) {
+        link[n] = 0;
+        const char* marker = strstr(link, "zoneinfo/");
+        if (marker) return marker + strlen("zoneinfo/");
+    }
+    return "UTC";
+}
+
 extern "C" ABI_ATTR int __system_property_get_impl(const char* name, char* value)
 {
-    WARN_STUB;
+    // Mono/IL2CPP's TimeZoneInfo.Local asks for this to pick the local zone out of Android's tzdata file.
+    if (name && strcmp(name, "persist.sys.timezone") == 0) {
+        std::string tz = bogo_host_time_zone();
+        strncpy(value, tz.c_str(), 91); // PROP_VALUE_MAX is 92 including the terminator
+        value[91] = 0;
+        verbose("SYSPROP", "__system_property_get(%s) -> %s", name, value);
+        return (int)strlen(value);
+    }
+    verbose("SYSPROP", "__system_property_get(%s) -> empty", name ? name : "(null)");
     value[0] = 0;
     return 0;
 }

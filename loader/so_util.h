@@ -117,6 +117,13 @@ void hook_symbol(so_module *mod, const char *symbol, uintptr_t dst, int is_optio
 void hook_symbols(so_module *mod, DynLibHooks *hooks);
 
 int so_load(so_module *mod, const char *filename, uintptr_t load_addr, void *so_data, size_t sz);
+// Like so_load, but maps the segments from an open file instead of a copy in memory (faster, less RAM).
+int so_load_fd(so_module *mod, const char *filename, uintptr_t load_addr, int fd);
+// Loads one of the game's libraries on demand (dlopen, System.loadLibrary, [libraries] preload): finds it in
+// lib/arm64-v8a, loads its DT_NEEDED dependencies that the game ships first, and returns the module, or null if the
+// game doesn't ship it (an Android system library). Already loaded libraries are returned as they are. With java_vm,
+// the library's JNI_OnLoad is called once, as Android does for libraries loaded from Java.
+so_module* so_load_library(const char* name, void* java_vm);
 void so_relocate(so_module *mod);
 int so_static_overrides(so_module *mod);
 uintptr_t so_resolve_link(so_module *mod, const char *symbol);

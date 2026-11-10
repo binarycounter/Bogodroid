@@ -5,6 +5,8 @@ extern toml::table config;
 #include "baron/baron.h"
 #include "javac.h"
 #include "logging.h"
+#include "android_extra.h"
+#include "notifications.h"
 #include <fstream>
 #include <inttypes.h>
 #include <pthread.h>
@@ -14,6 +16,8 @@ extern toml::table config;
 void InitJNIAndroidClasses(FakeJni::Jvm* vm)
 {
     verbose("JBRIDGE", "Initializing Android JNI Classes");
+    InitJNIAndroidExtraClasses(vm);
+    InitJNINotificationClasses(vm);
     // Net
     vm->registerClass<jnivm::android::net::Uri>();
 

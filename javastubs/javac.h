@@ -4,6 +4,7 @@
 #include "baron/baron.h"
 #include <atomic>
 #include <fstream>
+#include <sstream>
 #include <thread>
 
 void InitJNIJavaClasses(FakeJni::Jvm* vm);
@@ -144,6 +145,11 @@ namespace java {
         public:
             DEFINE_CLASS_NAME("java/lang/System")
             static long nanoTime();
+            static long currentTimeMillis();
+            static int identityHashCode(std::shared_ptr<FakeJni::JObject> obj);
+            // Load one of the game's native libraries (and call its JNI_OnLoad); UnsatisfiedLinkError if it isn't there.
+            static void loadLibrary(std::shared_ptr<FakeJni::JString> name);
+            static void load(std::shared_ptr<FakeJni::JString> path);
             static void exit(int code);
         };
 
@@ -165,8 +171,10 @@ namespace java {
         class InputStream : public FakeJni::JObject {
         public:
             DEFINE_CLASS_NAME("java/io/InputStream")
-            std::ifstream* file;
+            std::istream* file = nullptr; // a file on disk, or an APK entry held in memory
+            bool ok = false;
             InputStream(std::shared_ptr<FakeJni::JString> filename);
+            InputStream(const std::string& name, std::string&& contents); // in-memory (an APK entry)
             int read(std::shared_ptr<FakeJni::JByteArray> buffer, int offset, int length);
         };
 
@@ -176,6 +184,7 @@ namespace java {
             std::shared_ptr<FakeJni::JString> path;
             File(std::shared_ptr<FakeJni::JString> path);
             std::shared_ptr<FakeJni::JString> getPath();
+            std::shared_ptr<FakeJni::JString> getAbsolutePath();
             std::shared_ptr<FakeJni::JString> toString();
         };
     }
@@ -206,6 +215,7 @@ namespace java {
             virtual std::shared_ptr<Iterator> iterator();
             virtual int size();
             virtual void add(std::shared_ptr<FakeJni::JObject> obj){}
+            virtual bool isEmpty() { return size() == 0; }
             // Internal helper to get element at index, for the iterator
             virtual std::shared_ptr<FakeJni::JObject> get(int index){return 0;}
         };
@@ -234,6 +244,20 @@ namespace java {
             std::shared_ptr<FakeJni::JObject> next() override;
         };
 
+        // java.util.HashSet (insertion-ordered, identity-based: what Unity uses it for doesn't need hashing)
+        class HashSet : public FakeJni::JObject {
+        public:
+            DEFINE_CLASS_NAME("java/util/HashSet")
+            std::shared_ptr<ArrayList> items = std::make_shared<ArrayList>();
+            HashSet() {}
+            HashSet(int capacity) {}
+            bool add(std::shared_ptr<FakeJni::JObject> obj);
+            bool contains(std::shared_ptr<FakeJni::JObject> obj);
+            int size();
+            bool isEmpty();
+            std::shared_ptr<Iterator> iterator();
+        };
+
         class Scanner : public FakeJni::JObject {
         private:
             std::shared_ptr<jnivm::java::io::InputStream> istream;
@@ -252,6 +276,25 @@ namespace java {
             DEFINE_CLASS_NAME("java/util/Locale")
             static std::shared_ptr<jnivm::java::util::Locale> getDefault();
             std::shared_ptr<FakeJni::JString> toLanguageTag();
+            std::shared_ptr<FakeJni::JString> getLanguage();
+            std::shared_ptr<FakeJni::JString> getCountry();
+            std::shared_ptr<FakeJni::JString> toString();
+        };
+
+        class UUID : public FakeJni::JObject {
+        public:
+            DEFINE_CLASS_NAME("java/util/UUID")
+            std::string value;
+            static std::shared_ptr<UUID> randomUUID();
+            std::shared_ptr<FakeJni::JString> toString();
+        };
+
+        // The host's zone (same answer as the persist.sys.timezone property).
+        class TimeZone : public FakeJni::JObject {
+        public:
+            DEFINE_CLASS_NAME("java/util/TimeZone")
+            static std::shared_ptr<TimeZone> getDefault();
+            std::shared_ptr<FakeJni::JString> getID();
         };
 
     }

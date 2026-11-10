@@ -2,6 +2,7 @@
 extern toml::table config;
 
 #include "android.h"
+#include "android_extra.h"
 #include "display_info.h"
 #include "baron/baron.h"
 #include "javac.h"
@@ -532,6 +533,9 @@ std::shared_ptr<jnivm::android::content::res::Resources> jnivm::android::view::C
 
 ///// View Descriptors
 
+bool jnivm::android::view::Display::isHdr() { return false; }
+bool jnivm::android::view::Display::isWideColorGamut() { return false; }
+
 BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::Display) { FakeJni::Constructor<Display> {} },
     { FakeJni::Function<&Display::getDisplayId> {}, "getDisplayId", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&Display::getRotation> {}, "getRotation", FakeJni::JMethodID::PUBLIC },
@@ -542,6 +546,8 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::Display) { FakeJni::Constructor<Di
     { FakeJni::Function<&Display::getRefreshRate> {}, "getRefreshRate", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&Display::getRealMetrics> {}, "getRealMetrics", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&Display::getSupportedModes> {}, "getSupportedModes", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Display::isHdr> {}, "isHdr", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Display::isWideColorGamut> {}, "isWideColorGamut", FakeJni::JMethodID::PUBLIC },
     END_NATIVE_DESCRIPTOR
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::DisplayMode) { FakeJni::Constructor<DisplayMode> {} },
@@ -562,6 +568,7 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::Display) { FakeJni::Constructor<Di
     { FakeJni::Function<&InputDevice::getDescriptorString> {}, "getDescriptor", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&InputDevice::isVirtual> {}, "isVirtual", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&InputDevice::getMotionRanges> {}, "getMotionRanges", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&InputDevice::getVibrator> {}, "getVibrator", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&InputDevice::getDevice> {}, "getDevice", FakeJni::JMethodID::STATIC },
     { FakeJni::Function<&InputDevice::getDeviceIds> {}, "getDeviceIds", FakeJni::JMethodID::STATIC },
     END_NATIVE_DESCRIPTOR

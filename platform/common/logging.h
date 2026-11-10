@@ -8,8 +8,16 @@
 // Set BOGODROID_VERBOSE=1 in the environment to turn them on, BOGODROID_FPS=1 for just the FPS counter.
 static inline int bogo_verbose() { static int v = -1; if (v < 0) v = getenv("BOGODROID_VERBOSE") ? 1 : 0; return v; }
 static inline int bogo_show_fps() { static int v = -1; if (v < 0) v = (getenv("BOGODROID_FPS") || getenv("BOGODROID_VERBOSE")) ? 1 : 0; return v; }
+#ifdef __cplusplus
+#include <string>
 // Milliseconds since startup, for timing lines in the log.
 long bogo_uptime_ms();
+// The host's IANA time zone name (TZ, /etc/timezone or the /etc/localtime link), "UTC" if unknown.
+std::string bogo_host_time_zone();
+// Flushes our stdio, starts a detached `sync` so pending writes (saves, logs) still reach the SD card, and leaves
+// at once with _exit() (no static destructors: guest threads are still running). Never returns.
+[[noreturn]] void bogo_exit(int status);
+#endif
 #define bogo_log(...) do { if (bogo_verbose()) printf(__VA_ARGS__); } while (0)
 
 #ifdef DEBUG

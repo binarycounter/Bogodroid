@@ -88,13 +88,17 @@ add_executable(${CMAKE_PROJECT_NAME}
     javastubs/android_media.cpp
     javastubs/android_misc.cpp
     javastubs/android_descriptors.cpp
+    javastubs/android_extra.cpp
+    javastubs/notifications.cpp
     javastubs/javac.cpp
+    javastubs/java_security.cpp
     javastubs/gplay.cpp
     platform/common/toml_include.cpp
     platform/common/debug_utils.cpp
     platform/common/config.cpp
     platform/common/input_backend.cpp
     platform/common/display_info.cpp
+    platform/common/apk.cpp
 
     loader/so_util.cpp
     loader/so_util_arm64.cpp
@@ -112,10 +116,12 @@ add_executable(${CMAKE_PROJECT_NAME}
     thunks/libc/sigaction.cpp
     thunks/libc/fcntl.cpp
     thunks/libc/semaphores.cpp
+    thunks/libc/extra.cpp
 
     thunks/ndk/ndk.cpp
     thunks/ndk/alooper.c
     thunks/ndk/asset_manager.c
+    thunks/ndk/media_stubs.cpp
 
     thunks/khronos/egl.cpp
     thunks/khronos/gles2.cpp

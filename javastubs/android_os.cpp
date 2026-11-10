@@ -14,6 +14,8 @@ extern toml::table config;
 
 bool jnivm::android::os::Bundle::containsKey(std::shared_ptr<FakeJni::JString> key)
 {
+    if (key && (strings.count(key->c_str()) || numbers.count(key->c_str())))
+        return true;
 
     if (!config["package"].as_table()->contains("mainIntentBundle"))
         return false;
@@ -25,12 +27,44 @@ bool jnivm::android::os::Bundle::containsKey(std::shared_ptr<FakeJni::JString> k
 
 std::shared_ptr<FakeJni::JString> jnivm::android::os::Bundle::getString(std::shared_ptr<FakeJni::JString> key, std::shared_ptr<FakeJni::JString> def)
 {
+    if (key && strings.count(key->c_str()))
+        return std::make_shared<FakeJni::JString>(strings[key->c_str()]);
     if (!containsKey(key))
         return def;
 
     verbose("JBRIDGE", "Bundle key %s = %s", key.get()->c_str(), config["package"]["mainIntentBundle"][key.get()->c_str()].value_or<std::string>("").c_str());
     return std::make_shared<FakeJni::JString>(config["package"]["mainIntentBundle"][key.get()->c_str()].value_or<std::string>(""));
 }
+
+std::shared_ptr<FakeJni::JString> jnivm::android::os::Bundle::getStringOnly(std::shared_ptr<FakeJni::JString> key)
+{
+    return getString(key, nullptr);
+}
+
+bool jnivm::android::os::Bundle::getBoolean(std::shared_ptr<FakeJni::JString> key, bool def)
+{
+    return key && numbers.count(key->c_str()) ? numbers[key->c_str()] != 0 : def;
+}
+
+int jnivm::android::os::Bundle::getInt(std::shared_ptr<FakeJni::JString> key, int def)
+{
+    return key && numbers.count(key->c_str()) ? (int)numbers[key->c_str()] : def;
+}
+
+long jnivm::android::os::Bundle::getLong(std::shared_ptr<FakeJni::JString> key, long def)
+{
+    return key && numbers.count(key->c_str()) ? (long)numbers[key->c_str()] : def;
+}
+
+void jnivm::android::os::Bundle::putString(std::shared_ptr<FakeJni::JString> key, std::shared_ptr<FakeJni::JString> value)
+{
+    if (!key) return;
+    if (value) strings[key->c_str()] = value->c_str(); else strings.erase(key->c_str());
+}
+
+void jnivm::android::os::Bundle::putBoolean(std::shared_ptr<FakeJni::JString> key, bool value) { if (key) numbers[key->c_str()] = value; }
+void jnivm::android::os::Bundle::putInt(std::shared_ptr<FakeJni::JString> key, int value) { if (key) numbers[key->c_str()] = value; }
+void jnivm::android::os::Bundle::putLong(std::shared_ptr<FakeJni::JString> key, long value) { if (key) numbers[key->c_str()] = value; }
 
 ///// Process
 
@@ -432,6 +466,14 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::os::Build) { FakeJni::Constructor<Build>
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::os::Bundle) { FakeJni::Constructor<Bundle> {} },
     { FakeJni::Function<&Bundle::containsKey> {}, "containsKey", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&Bundle::getString> {}, "getString", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Bundle::getStringOnly> {}, "getString", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Bundle::getBoolean> {}, "getBoolean", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Bundle::getInt> {}, "getInt", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Bundle::getLong> {}, "getLong", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Bundle::putString> {}, "putString", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Bundle::putBoolean> {}, "putBoolean", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Bundle::putInt> {}, "putInt", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Bundle::putLong> {}, "putLong", FakeJni::JMethodID::PUBLIC },
     END_NATIVE_DESCRIPTOR
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::os::Process) { FakeJni::Constructor<Process> {} },

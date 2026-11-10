@@ -2,6 +2,8 @@
 extern toml::table config;
 
 #include "android.h"
+#include "android_extra.h"
+#include "apk.h"
 #include "baron/baron.h"
 #include "javac.h"
 #include "logging.h"
@@ -44,6 +46,17 @@ std::shared_ptr<jnivm::java::io::InputStream>
 jnivm::android::content::res::AssetManager::open(std::shared_ptr<FakeJni::JString> filename)
 {
     verbose("JBRIDGE", "AssetManager opening file %s", filename.get()->c_str());
+    // Android throws FileNotFoundException for a missing asset; apps probe for optional ones this way
+    // (e.g. Unity 7's "pram-shadow-files") and carry on after catching it.
+    std::string path = std::string("assets/").append(filename.get()->c_str());
+    if (!std::filesystem::is_regular_file(path)) {
+        // Not extracted: read it straight from the APK when one is configured.
+        std::string data;
+        if (ApkArchive* apk = bogo_apk())
+            if (apk->read(path, data))
+                return std::make_shared<jnivm::java::io::InputStream>(path, std::move(data));
+        throw std::runtime_error("java.io.FileNotFoundException: " + std::string(filename.get()->c_str()));
+    }
     return std::make_shared<jnivm::java::io::InputStream>(std::make_shared<FakeJni::JString>(std::string("assets/").append(filename.get()->c_str())));
 }
 
@@ -58,7 +71,14 @@ jnivm::android::content::res::AssetManager::list(std::shared_ptr<FakeJni::JStrin
 
     try {
         if (!std::filesystem::exists(p) || !std::filesystem::is_directory(p)) {
-            return std::make_shared<jnivm::Array<jnivm::java::lang::String>>(0);
+            // Not extracted: list the APK's folder instead (files and subfolders, like Android).
+            std::vector<std::string> names;
+            if (ApkArchive* apk = bogo_apk())
+                names = apk->list(p.string(), true);
+            auto result = std::make_shared<jnivm::Array<jnivm::java::lang::String>>(names.size());
+            for (size_t i = 0; i < names.size(); i++)
+                (*result)[i] = std::make_shared<jnivm::java::lang::String>(names[i]);
+            return result;
         }
 
         std::vector<std::string> entries;
@@ -369,7 +389,7 @@ jnivm::android::content::Context::getSystemService(std::shared_ptr<FakeJni::JStr
         return nullptr;
 
     if (*service == LOCATION_SERVICE)
-        return nullptr;
+        return std::make_shared<jnivm::android::location::LocationManager>(); // reports no providers
 
     if (*service == AUDIO_SERVICE)
         return std::make_shared<jnivm::android::media::AudioManager>();
@@ -385,6 +405,12 @@ jnivm::android::content::Context::getSystemService(std::shared_ptr<FakeJni::JStr
 
     if (*service == INPUT_SERVICE)
         return std::make_shared<jnivm::android::hardware::input::InputManager>();
+
+    if (*service == VIBRATOR_SERVICE)
+        return std::make_shared<jnivm::android::os::Vibrator>();
+
+    if (*service == SENSOR_SERVICE)
+        return std::make_shared<jnivm::android::hardware::SensorManager>();
 
     verbose("JBRIDGE", "App requesting unknown system service %s", service.get()->c_str());
 
@@ -435,6 +461,10 @@ jnivm::android::content::Context::getSharedPreferences(std::shared_ptr<FakeJni::
 std::shared_ptr<FakeJni::JString>
 jnivm::android::content::Context::getPackageCodePath()
 {
+    // With [paths] apk the real APK is the package: Unity reads its data (and jar:file:// URLs) from it, as on Android.
+    std::string apk = bogo_apk_path();
+    if (!apk.empty())
+        return std::make_shared<FakeJni::JString>(apk);
     return std::make_shared<FakeJni::JString>(config["paths"]["android_package_code"].value_or<std::string>("./path_not_defined_code"));
 }
 
@@ -573,6 +603,7 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::pm::ActivityInfo) { FakeJni::Co
     { FakeJni::Field<&PackageManager::PERMISSION_GRANTED> {}, "PERMISSION_GRANTED", FakeJni::JFieldID::STATIC },
     { FakeJni::Function<&PackageManager::getPackageInfo> {}, "getPackageInfo", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&PackageManager::hasSystemFeature> {}, "hasSystemFeature", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&PackageManager::getInstallerPackageName> {}, "getInstallerPackageName", FakeJni::JMethodID::PUBLIC },
     END_NATIVE_DESCRIPTOR
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::res::AssetManager) { FakeJni::Constructor<AssetManager> {} },
@@ -581,6 +612,7 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::pm::ActivityInfo) { FakeJni::Co
     END_NATIVE_DESCRIPTOR
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::res::Resources) { FakeJni::Constructor<Resources> {} },
+    { FakeJni::Function<&Resources::getConfiguration> {}, "getConfiguration", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&Resources::getIdentifier> {}, "getIdentifier", FakeJni::JMethodID::PUBLIC },
     END_NATIVE_DESCRIPTOR
 
@@ -612,6 +644,10 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::pm::ActivityInfo) { FakeJni::Co
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::Context) { FakeJni::Constructor<Context> {} },
     { FakeJni::Field<&Context::LOCATION_SERVICE> {}, "LOCATION_SERVICE", FakeJni::JFieldID::STATIC },
+    { FakeJni::Field<&Context::VIBRATOR_SERVICE> {}, "VIBRATOR_SERVICE", FakeJni::JFieldID::STATIC },
+    { FakeJni::Field<&Context::SENSOR_SERVICE> {}, "SENSOR_SERVICE", FakeJni::JFieldID::STATIC },
+    { FakeJni::Function<&Context::registerReceiver> {}, "registerReceiver", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Context::startActivity> {}, "startActivity", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Field<&Context::DISPLAY_SERVICE> {}, "DISPLAY_SERVICE", FakeJni::JFieldID::STATIC },
     { FakeJni::Field<&Context::AUDIO_SERVICE> {}, "AUDIO_SERVICE", FakeJni::JFieldID::STATIC },
     { FakeJni::Field<&Context::MEDIA_ROUTER_SERVICE> {}, "MEDIA_ROUTER_SERVICE", FakeJni::JFieldID::STATIC },
@@ -638,5 +674,11 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::pm::ActivityInfo) { FakeJni::Co
     END_NATIVE_DESCRIPTOR
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::Intent) { FakeJni::Constructor<Intent> {} },
+    { FakeJni::Constructor<Intent, std::shared_ptr<FakeJni::JString>> {} },
+    { FakeJni::Field<&Intent::ACTION_BATTERY_CHANGED> {}, "ACTION_BATTERY_CHANGED", FakeJni::JFieldID::STATIC },
+    { FakeJni::Field<&Intent::ACTION_VIEW> {}, "ACTION_VIEW", FakeJni::JFieldID::STATIC },
     { FakeJni::Function<&Intent::getExtras> {}, "getExtras", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Intent::getAction> {}, "getAction", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Intent::getIntExtra> {}, "getIntExtra", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Intent::setData> {}, "setData", FakeJni::JMethodID::PUBLIC },
     END_NATIVE_DESCRIPTOR

@@ -281,3 +281,12 @@ extern "C" ABI_ATTR int dl_iterate_phdr_impl(void);
 extern ABI_ATTR long sysconf_impl(int name);
 ABI_ATTR int strerror_r_impl(int errnum, char *buf, size_t buflen);
 ABI_ATTR int fnmatch_impl(const char *pattern, const char *string, int flags);
+// extra.cpp
+struct bionic_regex_t;
+struct bionic_regmatch_t;
+extern "C" ABI_ATTR int regcomp_impl(bionic_regex_t* preg, const char* pattern, int cflags);
+extern "C" ABI_ATTR int regexec_impl(const bionic_regex_t* preg, const char* string, size_t nmatch, bionic_regmatch_t* pmatch, int eflags);
+extern "C" ABI_ATTR void regfree_impl(bionic_regex_t* preg);
+extern "C" ABI_ATTR size_t regerror_impl(int errcode, const bionic_regex_t* preg, char* buf, size_t size);
+extern "C" ABI_ATTR int openat_impl(int dirfd, const char* path, int flags, ...);
+extern "C" ABI_ATTR int statvfs_impl(const char* path, struct statvfs* buf);

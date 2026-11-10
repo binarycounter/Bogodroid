@@ -1,3 +1,5 @@
+#include "logging.h"
+#include "apk.h"
 #include "globals.h"
 #include <cstdlib>
 #include <string>
@@ -67,6 +69,7 @@ extern DynLibFunction symtable_il2cpp_log[];
 extern DynLibFunction symtable_libc[];
 extern DynLibFunction symtable_ndk[];
 extern DynLibFunction symtable_gles2[];
+extern DynLibFunction symtable_media[];
 extern DynLibFunction symtable_egl_sdl[];
 
 DynLibFunction* so_static_patches[32] = {
@@ -78,6 +81,7 @@ DynLibFunction* so_dynamic_libraries[32] = {
     symtable_ndk,
     symtable_egl_sdl,
     symtable_gles2,
+    symtable_media,
     NULL
 };
 
@@ -159,6 +163,12 @@ int main(int argc, char* argv[])
             stage("splash shown");
         }
     }
+    // After the splash, so the first run's extraction isn't spent on a black screen.
+    // [paths] apk: native libraries and managed code have to be plain files; take any missing ones from the APK.
+    if (!bogo_apk_extract_runtime_files())
+        fprintf(stderr, "[APK] some files could not be extracted; loading may fail\n");
+    if (!bogo_apk_path().empty())
+        stage("APK runtime files ready");
     // sdl_initialize_gles();
     InitJNIBinding(&vm);
 
@@ -425,6 +435,18 @@ int main(int argc, char* argv[])
         for (auto& m : unityClass->methods)
             fprintf(stderr, "  %s %s%s\n", m->name.c_str(), m->signature.c_str(), m->native ? " [native]" : "");
     }
+    // [libraries] preload = ["libfoo.so", ...]: plugins that must be loaded before Unity starts (normally they're
+    // loaded when the game first asks for them). Their dependencies come along and JNI_OnLoad is called.
+    if (auto* preload = config["libraries"]["preload"].as_array()) {
+        for (auto& item : *preload) {
+            auto name = item.value<std::string>();
+            if (!name) continue;
+            if (so_load_library(name->c_str(), &vm))
+                printf("Preloaded %s\n", name->c_str());
+            else
+                fprintf(stderr, "[libraries] preload: %s not found in lib/arm64-v8a\n", name->c_str());
+        }
+    }
     stage("libraries loaded, starting Unity");
     auto activity = std::make_shared<jnivm::android::app::Activity>();
     LocalFrame frame2(vm);
@@ -492,6 +514,7 @@ int main(int argc, char* argv[])
     // The app has created new threads and is happily doing its thing, we just do nothing for now. Eventually, this will be a SDL based event loop for controller input.
     auto unityNPause = playerClass->getMethod("()Z", "nativePause");
     bool paused = false;
+    int renderFalseFrames = 0;
     while (!g_quit_requested) {
         // Focus changes are applied here, on the thread that renders, like Android's UI thread would.
         int focusChange = focusState.exchange(-1);
@@ -515,6 +538,14 @@ int main(int argc, char* argv[])
         fflush(stdout);
         // auto start = std::chrono::steady_clock::now();
         auto ret4 = unityNRender.invoke(frame3.getJniEnv(), unityPlayerObj.get());
+        // Android's UnityPlayer finishes the activity when nativeRender() returns false: that's how
+        // Application.Quit() arrives on newer Unity (it doesn't call Activity.finish() or exit() itself).
+        if (!ret4.z) {
+            if (++renderFalseFrames == 2)
+                request_quit("nativeRender returned false (Application.Quit)", true);
+        } else {
+            renderFalseFrames = 0;
+        }
         // auto end = std::chrono::steady_clock::now();
         // auto elapsed = end - start;
         // if (elapsed < frame_duration) {
@@ -538,8 +569,6 @@ int main(int argc, char* argv[])
             m.invoke(frame3.getJniEnv(), unityPlayerObj.get());
         stage("quit: done");
     }
-    fflush(NULL);
-    sync();
-    _exit(0); // skip static destructors: guest threads are still running and can abort during teardown
+    bogo_exit(0); // skips static destructors: guest threads are still running and can abort during teardown
 
 }

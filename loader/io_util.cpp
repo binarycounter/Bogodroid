@@ -6,9 +6,22 @@
 #include <stdio.h>
 #include <iostream>
 #include <fstream>
+#include <fcntl.h>
+#include <stdlib.h>
+#include <unistd.h>
 
 bool load_so_from_file(so_module *mod, const char *filename, uintptr_t addr)
 {
+  // Map the library from the file (only the pages that get used are read from storage).
+  // BOGODROID_NO_MMAP=1 restores the old behaviour (read the whole file and copy the segments).
+  int fd = getenv("BOGODROID_NO_MMAP") ? -1 : open(filename, O_RDONLY | O_CLOEXEC);
+  if (fd >= 0) {
+    int r = so_load_fd(mod, filename, addr, fd);
+    close(fd);
+    if (r == 0)
+      return true;
+    std::cerr << "Mapping " << filename << " failed, reading it instead" << std::endl;
+  }
   std::ifstream file(filename, std::ios::binary);
   if (!file.is_open())
   {

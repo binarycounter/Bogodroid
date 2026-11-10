@@ -20,11 +20,17 @@ void InitJNIAndroidClasses(FakeJni::Jvm* vm);
 
 namespace jnivm {
 namespace android {
+    namespace os { class Vibrator; class Handler; } // android_extra.h / below
     namespace net {
         class Uri : public FakeJni::JObject {
         public:
             DEFINE_CLASS_NAME("android/net/Uri")
+            std::string value;
             static std::shared_ptr<FakeJni::JString> encode(std::shared_ptr<FakeJni::JString> string);
+            static std::shared_ptr<Uri> parse(std::shared_ptr<FakeJni::JString> string);
+            static std::shared_ptr<FakeJni::JString> decode(std::shared_ptr<FakeJni::JString> string);
+            bool isRelative();
+            std::shared_ptr<FakeJni::JString> toString();
         };
 
     }
@@ -60,6 +66,8 @@ namespace android {
             long getPresentationDeadlineNanos();
             void getRealMetrics(std::shared_ptr<jnivm::android::util::DisplayMetrics> metrics);
             std::shared_ptr<jnivm::Array<jnivm::android::view::DisplayMode>> getSupportedModes();
+            bool isHdr();
+            bool isWideColorGamut();
         };
         class Surface : public FakeJni::JObject {
         public:
@@ -142,6 +150,7 @@ namespace android {
             std::shared_ptr<FakeJni::JString> getDescriptorString(); // Actually getDescriptor() but that's already taken
             bool isVirtual();
             std::shared_ptr<java::util::List> getMotionRanges();
+            std::shared_ptr<jnivm::android::os::Vibrator> getVibrator(); // a gamepad without rumble
             static std::shared_ptr<jnivm::android::view::InputDevice> getDevice(int device);
             static std::shared_ptr<FakeJni::JArray<int>> getDeviceIds();
 
@@ -484,6 +493,8 @@ namespace android {
             public:
                 DEFINE_CLASS_NAME("android/hardware/display/DisplayManager")
                 std::shared_ptr<jnivm::android::view::Display> getDisplay(int disp);
+                // Display changes are never reported (fixed panel).
+                void registerDisplayListener(std::shared_ptr<FakeJni::JObject> listener, std::shared_ptr<jnivm::android::os::Handler> handler);
             };
         }
     }
@@ -553,8 +564,19 @@ namespace android {
         class Bundle : public FakeJni::JObject {
         public:
             DEFINE_CLASS_NAME("android/os/Bundle")
+            // Values put by the app; anything else falls back to [package] mainIntentBundle (the launch intent).
+            std::map<std::string, std::string> strings;
+            std::map<std::string, long long> numbers;
             bool containsKey(std::shared_ptr<FakeJni::JString> key);
             std::shared_ptr<FakeJni::JString> getString(std::shared_ptr<FakeJni::JString> key, std::shared_ptr<FakeJni::JString> def);
+            std::shared_ptr<FakeJni::JString> getStringOnly(std::shared_ptr<FakeJni::JString> key);
+            bool getBoolean(std::shared_ptr<FakeJni::JString> key, bool def);
+            int getInt(std::shared_ptr<FakeJni::JString> key, int def);
+            long getLong(std::shared_ptr<FakeJni::JString> key, long def);
+            void putString(std::shared_ptr<FakeJni::JString> key, std::shared_ptr<FakeJni::JString> value);
+            void putBoolean(std::shared_ptr<FakeJni::JString> key, bool value);
+            void putInt(std::shared_ptr<FakeJni::JString> key, int value);
+            void putLong(std::shared_ptr<FakeJni::JString> key, long value);
         };
 
         class Handler;
@@ -737,6 +759,7 @@ namespace android {
                 inline static int PERMISSION_GRANTED = 0;
                 std::shared_ptr<PackageInfo> getPackageInfo(std::shared_ptr<FakeJni::JString> packageName, int number);
                 bool hasSystemFeature(std::shared_ptr<FakeJni::JString> feature);
+                std::shared_ptr<FakeJni::JString> getInstallerPackageName(std::shared_ptr<FakeJni::JString> packageName);
             };
         }
 
@@ -748,9 +771,12 @@ namespace android {
                 std::shared_ptr<jnivm::Array<FakeJni::JString>> list(std::shared_ptr<FakeJni::JString> path);
             };
 
+            class Configuration; // android_extra.h
+
             class Resources : public FakeJni::JObject {
             public:
                 DEFINE_CLASS_NAME("android/content/res/Resources")
+                std::shared_ptr<Configuration> getConfiguration();
                 int getIdentifier(std::shared_ptr<FakeJni::JString> name, std::shared_ptr<FakeJni::JString> defType, std::shared_ptr<FakeJni::JString> defPackage);
             };
         }
@@ -812,9 +838,15 @@ namespace android {
             DEFINE_CLASS_NAME("android/content/ContentResolver")
         };
 
+        class Intent;
+        class IntentFilter;
+        class BroadcastReceiver;
+
         class Context : public FakeJni::JObject {
         public:
             DEFINE_CLASS_NAME("android/content/Context")
+            inline static FakeJni::JString VIBRATOR_SERVICE = (FakeJni::JString) "vibrator";
+            inline static FakeJni::JString SENSOR_SERVICE = (FakeJni::JString) "sensor";
             inline static FakeJni::JString LOCATION_SERVICE = (FakeJni::JString) "location";
             inline static FakeJni::JString DISPLAY_SERVICE = (FakeJni::JString) "display";
             inline static FakeJni::JString AUDIO_SERVICE = (FakeJni::JString) "audio";
@@ -842,12 +874,24 @@ namespace android {
             std::shared_ptr<jnivm::android::content::res::Resources> getResources();
             std::shared_ptr<jnivm::android::view::Window> getWindow();
             std::shared_ptr<ContentResolver> getContentResolver();
+            // Only the sticky ACTION_BATTERY_CHANGED broadcast is answered (from /sys/class/power_supply).
+            std::shared_ptr<Intent> registerReceiver(std::shared_ptr<BroadcastReceiver> receiver, std::shared_ptr<IntentFilter> filter);
+            void startActivity(std::shared_ptr<Intent> intent);
         };
 
         class Intent : public FakeJni::JObject {
         public:
             DEFINE_CLASS_NAME("android/content/Intent")
+            inline static FakeJni::JString ACTION_BATTERY_CHANGED = (FakeJni::JString) "android.intent.action.BATTERY_CHANGED";
+            inline static FakeJni::JString ACTION_VIEW = (FakeJni::JString) "android.intent.action.VIEW";
+            std::string action;
+            std::string data;
+            Intent() {}
+            Intent(std::shared_ptr<FakeJni::JString> action);
             std::shared_ptr<jnivm::android::os::Bundle> getExtras();
+            std::shared_ptr<FakeJni::JString> getAction();
+            int getIntExtra(std::shared_ptr<FakeJni::JString> name, int defaultValue);
+            std::shared_ptr<Intent> setData(std::shared_ptr<jnivm::android::net::Uri> uri);
         };
     }
 

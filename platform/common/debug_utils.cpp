@@ -1,4 +1,5 @@
 #include "debug_utils.h"
+#include "logging.h"
 
 #include "gles2.h"
 #include "glad.h"
@@ -11,6 +12,9 @@
 #include <atomic>
 #include <chrono>
 #include <thread>
+#include <spawn.h>
+#include <fcntl.h>
+#include <sys/wait.h>
 #include "javac.h"
 
 void print_native_callbacks(ANativeActivity nActivity)
@@ -56,6 +60,31 @@ long bogo_uptime_ms()
 }
 static const long g_uptime_init = bogo_uptime_ms(); // starts the clock at load time
 
+extern char** environ;
+
+[[noreturn]] void bogo_exit(int status)
+{
+    // sync() waits for every dirty page on the system to be written; with a big log on a slow SD card that took from
+    // seconds to minutes, and the window stayed up the whole time. Run it in a child the shell doesn't wait for: the
+    // data is already in the page cache, so it reaches the card whether we're still around or not.
+    printf("[+%ldms] Exiting (status %d); pending writes are synced in the background\n", bogo_uptime_ms(), status);
+    fflush(NULL);
+    static std::atomic<bool> leaving{false};
+    if (!leaving.exchange(true)) {
+        posix_spawn_file_actions_t fa;
+        posix_spawn_file_actions_init(&fa);
+        for (int fd = 0; fd <= 2; fd++)
+            posix_spawn_file_actions_addopen(&fa, fd, "/dev/null", fd == 0 ? O_RDONLY : O_WRONLY, 0);
+        pid_t pid;
+        char arg0[] = "sync";
+        char* argv[] = { arg0, nullptr };
+        if (posix_spawnp(&pid, "sync", &fa, nullptr, argv, environ) != 0)
+            sync(); // no sync binary: fall back to doing it ourselves
+        posix_spawn_file_actions_destroy(&fa);
+    }
+    _exit(status);
+}
+
 void exit_handler(int signal) {
     // A second signal means "really, now".
     if (g_quit_requested.exchange(true))
@@ -84,9 +113,7 @@ void exit_on_signals()
         while (!g_quit_requested)
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
         std::this_thread::sleep_for(std::chrono::seconds(2));
-        fflush(NULL);
-        sync();
-        _exit(0);
+        bogo_exit(0);
     }).detach();
 
     struct sigaction sa;
@@ -96,4 +123,4 @@ void exit_on_signals()
 
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
-}
+}

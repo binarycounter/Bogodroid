@@ -29,6 +29,9 @@ namespace com {
                 // Called by newer Unity versions every frame / on init. Nothing to do on our side.
                 void executeMainThreadJobs();
                 bool shouldSetGameState();
+                // Unity 7: System.load for plugins found via ClassLoader.findLibrary. Libraries the loader already
+                // loaded (lib_burst_generated.so, ...) are reported as loaded so Unity's dlopen() finds them.
+                bool loadLibrary(std::shared_ptr<FakeJni::JString> path);
 
                 static std::shared_ptr<jnivm::android::app::Activity> currentActivity;
     
@@ -61,4 +64,7 @@ namespace com {
     }
 }
 }
+
+// The class a Field was looked up on through ReflectionHelper.getFieldID (for Field.getDeclaringClass()).
+std::shared_ptr<jnivm::java::lang::Class> unity_field_declaring_class(const jnivm::Field* field);
 #endif

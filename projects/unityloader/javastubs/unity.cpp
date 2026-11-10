@@ -1,3 +1,10 @@
+#include "so_util.h"
+#include <limits.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unordered_map>
+#include <mutex>
+#include <set>
 #include "unity.h"
 #include "../globals.h"
 #include "baron/baron.h"
@@ -77,6 +84,16 @@ bool jnivm::com::unity3d::player::UnityPlayer::shouldSetGameState()
     return false;
 }
 
+bool jnivm::com::unity3d::player::UnityPlayer::loadLibrary(std::shared_ptr<FakeJni::JString> path)
+{
+    // A library name ("_burst_generated", like System.loadLibrary) or a path (like System.load). Loads it if the
+    // game ships it and it isn't loaded yet, and calls its JNI_OnLoad (Unity's own libraries are already set up).
+    if (!path) return false;
+    so_module* mod = so_load_library(path->c_str(), &vm);
+    if (!mod) verbose("JBRIDGE", "UnityPlayer.loadLibrary(%s): not shipped with the game", path->c_str());
+    return mod != nullptr;
+}
+
 
 
 ///// ReflectionHelper
@@ -107,16 +124,31 @@ std::shared_ptr<jnivm::java::lang::reflect::Method> jnivm::com::unity3d::player:
 
     // Method 1: Search for matching methods in class by name only (bail out if there is ambiguity due to duplicates)
 
+    // The class and its ancestors (e.g. UnityPlayerActivity -> Activity -> Context), most derived first, so inherited
+    // methods are found too; an override with the same signature isn't an ambiguity.
     std::shared_ptr<Method> foundMethod=nullptr;
     bool duplicate=false;
-    for(std::shared_ptr<Method> method : clazz.get()->methods)
     {
-        if(strcmp(method->name.c_str(), name) == 0)
-        {
-            if(foundMethod != nullptr)
-                duplicate=true;
-            
-            foundMethod=method;
+        auto* env = jnivm::ENV::FromJNIEnv(FakeJni::JniEnv::getCurrentEnv());
+        std::vector<std::shared_ptr<jnivm::Class>> pending { std::static_pointer_cast<jnivm::Class>(clazz) };
+        std::set<jnivm::Class*> seen;
+        while (!pending.empty()) {
+            auto c = pending.front();
+            pending.erase(pending.begin());
+            if (!c || !seen.insert(c.get()).second)
+                continue;
+            for(std::shared_ptr<Method> method : c->methods)
+            {
+                if(strcmp(method->name.c_str(), name) != 0)
+                    continue;
+                if(foundMethod == nullptr)
+                    foundMethod=method;
+                else if(foundMethod->signature != method->signature)
+                    duplicate=true;
+            }
+            if (c->baseclasses)
+                for (auto& b : c->baseclasses(env))
+                    pending.push_back(b);
         }
     }
 
@@ -150,6 +182,17 @@ std::shared_ptr<jnivm::java::lang::reflect::Method> jnivm::com::unity3d::player:
     verbose("UnityReflection", "getMethodID(type 2, %s, %s, %s, %d) = 0x%p \n", clazz->getName().c_str(), name, sig, isStatic, method.get());
     return method;
 }
+// Field -> the class it was looked up on, for Field.getDeclaringClass() (jnivm's Field doesn't know its class).
+static std::mutex g_fieldOwnersMutex;
+static std::unordered_map<const jnivm::Field*, std::weak_ptr<jnivm::java::lang::Class>> g_fieldOwners;
+
+std::shared_ptr<jnivm::java::lang::Class> unity_field_declaring_class(const jnivm::Field* field)
+{
+    std::lock_guard<std::mutex> lock(g_fieldOwnersMutex);
+    auto it = g_fieldOwners.find(field);
+    return it == g_fieldOwners.end() ? nullptr : it->second.lock();
+}
+
 std::shared_ptr<jnivm::java::lang::reflect::Field> jnivm::com::unity3d::player::ReflectionHelper::getFieldID(std::shared_ptr<jnivm::java::lang::Class> clazz, std::shared_ptr<FakeJni::JString> fieldName, std::shared_ptr<FakeJni::JString> signature, bool isStatic)
 {
     const char* name = fieldName.get()->c_str();
@@ -160,8 +203,16 @@ std::shared_ptr<jnivm::java::lang::reflect::Field> jnivm::com::unity3d::player::
     else
         sig = signature.get()->c_str();
 
+    // UnityPlayer.currentActivity is registered as android/app/Activity; Unity 7 asks for it as UnityPlayerActivity.
+    // Match by name alone: getFieldSignature() then hands back the registered type, which the later
+    // GetStaticFieldID lookup accepts.
+    const bool anyType = strcmp("currentActivity", name) == 0 && strcmp(clazz->getName().c_str(), "com/unity3d/player/UnityPlayer") == 0;
     for (auto field : clazz->fields) {
-        if (field->name == name && field->type == sig) {
+        if (field->name == name && (anyType || field->type == sig)) {
+            {
+                std::lock_guard<std::mutex> lock(g_fieldOwnersMutex);
+                g_fieldOwners[field.get()] = clazz;
+            }
             verbose("UnityReflection", "getFieldID(%s, %s, %s, %d) = %p \n", clazz->getName().c_str(), fieldName.get()->c_str(), sig, isStatic, field);
             return field;
         }
@@ -210,6 +261,7 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::com::unity3d::player::PlayAssetDeliveryUnityWrapp
     { FakeJni::Function<&UnityPlayer::getLaunchURL> {}, "getLaunchURL", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&UnityPlayer::executeMainThreadJobs> {}, "executeMainThreadJobs", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&UnityPlayer::shouldSetGameState> {}, "shouldSetGameState", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&UnityPlayer::loadLibrary> {}, "loadLibrary", FakeJni::JMethodID::PUBLIC },
     END_NATIVE_DESCRIPTOR
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::com::unity3d::player::ReflectionHelper) { FakeJni::Constructor<ReflectionHelper> {} },

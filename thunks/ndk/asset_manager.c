@@ -6,6 +6,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include "logging.h"
+#include "apk.h"
 
 // Ensure large file support
 #ifndef _LARGEFILE64_SOURCE
@@ -29,6 +31,7 @@ struct AAssetDir {
     DIR* dir;
     char* path;
     struct dirent** files;
+    char** apkNames; // listing from the APK when the folder isn't extracted
     int count;
     int current;
 };
@@ -64,17 +67,38 @@ AAssetManager* AAssetManager_fromJava(void* env, void* obj) {
 
 
 AAsset* AAssetManager_open(AAssetManager* mgr, const char* filename, int mode) {
-    char* full_path = get_full_path(mgr, filename);
+    // Asset names are relative to the APK's assets/ folder; tolerate callers that include it or a leading slash.
+    const char* name = filename;
+    while (*name == '/') name++;
+    if (strncmp(name, "assets/", 7) == 0) name += 7;
+    char* full_path = get_full_path(mgr, name);
     struct stat st;
-    
+
     if(stat(full_path, &st) < 0) {
+        // Not extracted: read it from the APK when one is configured (full_path is "assets/<name>").
+        void* data = NULL;
+        size_t size = 0;
+        if (bogo_apk_read(full_path, &data, &size) == 0) {
+            bogo_log("[ASSET] AAssetManager_open(%s) -> APK entry %s\n", filename, full_path);
+            AAsset* asset = malloc(sizeof(AAsset));
+            memset(asset, 0, sizeof(AAsset));
+            asset->fd = -1;
+            asset->mode = mode;
+            asset->length = size;
+            asset->buffer = data;
+            free(full_path);
+            return asset;
+        }
+        printf("[ASSET] AAssetManager_open(%s) -> not found (%s)\n", filename, full_path);
         free(full_path);
         return NULL;
     }
+    bogo_log("[ASSET] AAssetManager_open(%s) -> %s\n", filename, full_path);
 
     AAsset* asset = malloc(sizeof(AAsset));
     memset(asset, 0, sizeof(AAsset));
-    
+    asset->fd = -1; // buffer mode never opens one; 0 would make AAsset_close close stdin
+
     asset->mode = mode;
     asset->length = st.st_size;
     asset->pos = 0;
@@ -171,8 +195,15 @@ AAssetDir* AAssetManager_openDir(AAssetManager* mgr, const char* dirName) {
     AAssetDir* dir = malloc(sizeof(AAssetDir));
     dir->dir = opendir(full_path);
     dir->path = full_path;
+    dir->files = NULL;
+    dir->apkNames = NULL;
     dir->count = 0;
     dir->current = 0;
+
+    if(!dir->dir) {
+        dir->apkNames = bogo_apk_list(full_path, &dir->count);
+        return dir;
+    }
 
     if(dir->dir) {
         struct dirent* entry;
@@ -194,6 +225,10 @@ AAssetDir* AAssetManager_openDir(AAssetManager* mgr, const char* dirName) {
 }
 
 void AAssetDir_close(AAssetDir* assetDir) {
+    if(assetDir->apkNames) {
+        for(int i = 0; i < assetDir->count; i++) free(assetDir->apkNames[i]);
+        free(assetDir->apkNames);
+    }
     if(assetDir->dir) closedir(assetDir->dir);
     free(assetDir->path);
     free(assetDir->files);
@@ -202,6 +237,7 @@ void AAssetDir_close(AAssetDir* assetDir) {
 
 const char* AAssetDir_getNextFileName(AAssetDir* assetDir) {
     if(assetDir->current >= assetDir->count) return NULL;
+    if(assetDir->apkNames) return assetDir->apkNames[assetDir->current++];
     return assetDir->files[assetDir->current++]->d_name;
 }
 
