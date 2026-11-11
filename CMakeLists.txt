@@ -99,6 +99,7 @@ add_executable(${CMAKE_PROJECT_NAME}
     platform/common/input_backend.cpp
     platform/common/display_info.cpp
     platform/common/apk.cpp
+    platform/common/manifest.cpp
 
     loader/so_util.cpp
     loader/so_util_arm64.cpp
@@ -177,7 +178,6 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
     SDL2
     dl
     pthread
-    bsd
     z
 )
 

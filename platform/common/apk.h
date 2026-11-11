@@ -20,8 +20,12 @@ ApkArchive* bogo_apk();
 // Absolute path of the configured APK, empty if none.
 std::string bogo_apk_path();
 
-// Extracts lib/arm64-v8a/*, assets/bin/Data/Managed/* and assets/dotnet/* into the current directory (the game
-// files folder) when they're missing or older than the APK. Returns false if extraction failed.
+// The ABIs the APK ships native libraries for (the folder names under lib/), e.g. {"armeabi-v7a"}.
+std::vector<std::string> bogo_apk_abis();
+
+// Extracts lib/<abi>/* (see abi.h), assets/bin/Data/Managed/* and assets/dotnet/* into the current directory (the game
+// files folder) when they're missing or older than the APK. For a new APK the old assets/ and lib/ are cleared first
+// (except any libc++_shared.so, which isn't in the APK). Returns false if extraction failed.
 bool bogo_apk_extract_runtime_files();
 
 class ApkArchive {

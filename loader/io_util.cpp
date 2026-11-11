@@ -10,7 +10,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-bool load_so_from_file(so_module *mod, const char *filename, uintptr_t addr)
+bool load_so_from_file(so_module *mod, const char *filename, uintptr_t addr, bool optional)
 {
   // Map the library from the file (only the pages that get used are read from storage).
   // BOGODROID_NO_MMAP=1 restores the old behaviour (read the whole file and copy the segments).
@@ -25,7 +25,10 @@ bool load_so_from_file(so_module *mod, const char *filename, uintptr_t addr)
   std::ifstream file(filename, std::ios::binary);
   if (!file.is_open())
   {
-    std::cerr << "Error opening file: " << filename << std::endl;
+    if (optional)
+        std::cout << "Note: " << filename << " not present (optional)" << std::endl;
+    else
+        std::cerr << "Error opening file: " << filename << std::endl;
     return false;
   }
   // Determine the file size

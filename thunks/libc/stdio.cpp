@@ -6,6 +6,9 @@
 #include <stdarg.h>
 #include <wchar.h>
 #include <bsd/stdio.h>
+#include <sys/random.h>
+#include <errno.h>
+#include <unistd.h>
 
 #include "platform.h"
 #include "bionic_file.h"
@@ -271,8 +274,8 @@ ABI_ATTR size_t strlcat_impl(char * dst, const char * src, size_t maxlen) {
     if (srclen < maxlen-dstlen) {
         memcpy(dst+dstlen, src, srclen+1);
     } else {
-        memcpy(dst+dstlen, src, maxlen-1);
-        dst[dstlen+maxlen-1] = '\0';
+        memcpy(dst+dstlen, src, maxlen-dstlen-1);
+        dst[maxlen-1] = '\0';
     }
     return dstlen + srclen;
 }
@@ -286,6 +289,32 @@ ABI_ATTR size_t strlcpy_impl(char * dst, const char * src, size_t maxlen) {
         dst[maxlen-1] = '\0';
     }
     return srclen;
+}
+
+// arc4random_buf without libbsd: the kernel's random bytes (getrandom, else /dev/urandom).
+ABI_ATTR void arc4random_buf_impl(void* buf, size_t n)
+{
+    unsigned char* p = (unsigned char*)buf;
+    while (n > 0) {
+        ssize_t r = getrandom(p, n, 0);
+        if (r < 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+        p += r;
+        n -= (size_t)r;
+    }
+    if (n > 0) {
+        int fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
+        while (fd >= 0 && n > 0) {
+            ssize_t r = read(fd, p, n);
+            if (r < 0 && errno == EINTR) continue;
+            if (r <= 0) break;
+            p += r;
+            n -= (size_t)r;
+        }
+        if (fd >= 0) close(fd);
+    }
 }
 
 ABI_ATTR int swprintf_impl(wchar_t* buf, size_t n, const wchar_t* fmt, ...)

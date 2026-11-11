@@ -291,3 +291,5 @@ y1
 y1f
 yn
 ynf
+# own implementation (no libbsd)
+arc4random_buf

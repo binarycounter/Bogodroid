@@ -127,6 +127,7 @@ std::shared_ptr<jnivm::java::lang::reflect::Method> jnivm::com::unity3d::player:
     // The class and its ancestors (e.g. UnityPlayerActivity -> Activity -> Context), most derived first, so inherited
     // methods are found too; an override with the same signature isn't an ambiguity.
     std::shared_ptr<Method> foundMethod=nullptr;
+    std::vector<std::shared_ptr<Method>> sameName; // every method of that name in the class and its ancestors
     bool duplicate=false;
     {
         auto* env = jnivm::ENV::FromJNIEnv(FakeJni::JniEnv::getCurrentEnv());
@@ -141,6 +142,7 @@ std::shared_ptr<jnivm::java::lang::reflect::Method> jnivm::com::unity3d::player:
             {
                 if(strcmp(method->name.c_str(), name) != 0)
                     continue;
+                sameName.push_back(method);
                 if(foundMethod == nullptr)
                     foundMethod=method;
                 else if(foundMethod->signature != method->signature)
@@ -179,6 +181,37 @@ std::shared_ptr<jnivm::java::lang::reflect::Method> jnivm::com::unity3d::player:
         (Method*)clazz->getMethod(sig, name),
         [](Method*) { } // No-op deleter
     );
+    if (!method.get() && !sameName.empty()) {
+        // Unity builds the signature from the runtime classes of the arguments and a generic return type, so it rarely
+        // matches a registered overload exactly. Fall back to: same parameter list (ignoring the return type), else
+        // the only overload with that many parameters.
+        auto params = [](const std::string& s) { size_t e = s.find(')'); return e == std::string::npos ? s : s.substr(0, e + 1); };
+        auto paramCount = [&](const std::string& s) {
+            int n = 0;
+            for (size_t i = 1; i < s.size() && s[i] != ')'; i++) {
+                while (s[i] == '[') i++;
+                if (s[i] == 'L') i = s.find(';', i);
+                if (i == std::string::npos) return -1;
+                n++;
+            }
+            return n;
+        };
+        std::string want = sig;
+        std::shared_ptr<Method> pick;
+        int exact = 0, sameCount = 0;
+        std::shared_ptr<Method> countPick;
+        for (auto& m : sameName) {
+            if (params(m->signature) == params(want)) { pick = m; exact++; }
+            if (paramCount(m->signature) == paramCount(want)) { countPick = m; sameCount++; }
+        }
+        if (exact == 1 || (exact == 0 && sameCount == 1)) {
+            auto chosen = exact == 1 ? pick : countPick;
+            method = std::shared_ptr<Method>(
+                (Method*)clazz->getMethod(chosen->signature.c_str(), name),
+                [](Method*) { });
+            verbose("UnityReflection", "getMethodID: %s%s not registered exactly, using %s", name, sig, chosen->signature.c_str());
+        }
+    }
     verbose("UnityReflection", "getMethodID(type 2, %s, %s, %s, %d) = 0x%p \n", clazz->getName().c_str(), name, sig, isStatic, method.get());
     return method;
 }

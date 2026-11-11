@@ -14,22 +14,25 @@ extern toml::table config;
 
 bool jnivm::android::os::Bundle::containsKey(std::shared_ptr<FakeJni::JString> key)
 {
-    if (key && (strings.count(key->c_str()) || numbers.count(key->c_str())))
+    if (!key)
+        return false;
+    if (strings.count(key->c_str()) || numbers.count(key->c_str()))
         return true;
 
-    if (!config["package"].as_table()->contains("mainIntentBundle"))
+    // [package] mainIntentBundle is optional (and so is the [package] table itself).
+    auto* bundle = config["package"]["mainIntentBundle"].as_table();
+    if (!bundle)
         return false;
 
-    verbose("JBRIDGE", "Bundle containsKey %s %d", key.get()->c_str(), config["package"].as_table()->contains("mainIntentBundle"));
-
-    return config["package"]["mainIntentBundle"].as_table()->contains(key.get()->c_str());
+    verbose("JBRIDGE", "Bundle containsKey %s", key->c_str());
+    return bundle->contains(key->c_str());
 }
 
 std::shared_ptr<FakeJni::JString> jnivm::android::os::Bundle::getString(std::shared_ptr<FakeJni::JString> key, std::shared_ptr<FakeJni::JString> def)
 {
     if (key && strings.count(key->c_str()))
         return std::make_shared<FakeJni::JString>(strings[key->c_str()]);
-    if (!containsKey(key))
+    if (!key || !containsKey(key))
         return def;
 
     verbose("JBRIDGE", "Bundle key %s = %s", key.get()->c_str(), config["package"]["mainIntentBundle"][key.get()->c_str()].value_or<std::string>("").c_str());

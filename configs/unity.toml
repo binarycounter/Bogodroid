@@ -12,8 +12,10 @@ android_source_dirs=["/fakepath_source"]
 
 [package]
 
-packageName="com.example.package"
-versionName="0.1"
+# packageName, versionName, versionCode, minSdkVersion and targetSdkVersion are read from the APK's
+# AndroidManifest.xml ([paths] apk). Setting any of them here overrides the manifest.
+#packageName="com.example.package"
+#versionName="0.1"
 mainIntentBundle = { unity = "-forcegles20" }
 
 

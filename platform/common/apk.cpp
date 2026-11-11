@@ -1,8 +1,10 @@
+#include "abi.h"
 #include "apk.h"
 #include "logging.h"
 #include "toml++/toml.hpp"
 
 #include <zlib.h>
+#include <filesystem>
 #include <algorithm>
 #include <cstring>
 #include <fstream>
@@ -185,6 +187,43 @@ static bool mkdirs(const std::string& path)
     return true;
 }
 
+std::vector<std::string> bogo_apk_abis()
+{
+    std::set<std::string> abis;
+    if (ApkArchive* apk = bogo_apk()) {
+        for (auto& e : apk->entries()) {
+            if (e.name.compare(0, 4, "lib/") != 0) continue;
+            size_t slash = e.name.find('/', 4);
+            if (slash != std::string::npos) abis.insert(e.name.substr(4, slash - 4));
+        }
+    }
+    return std::vector<std::string>(abis.begin(), abis.end());
+}
+
+// A new APK replaces the old one's native libraries and managed code, so leftovers (another game's, another ABI's)
+// must not stay behind. libc++_shared.so isn't in the APK (it's copied in by hand), so it's kept.
+static void clear_stale_runtime_files()
+{
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    if (fs::is_directory(fs::symlink_status("assets", ec)))
+        fs::remove_all("assets", ec);
+    if (fs::is_directory(fs::symlink_status("lib", ec))) {
+        std::vector<fs::path> dirs;
+        for (fs::recursive_directory_iterator it("lib", ec), end; !ec && it != end; it.increment(ec)) {
+            std::error_code e2;
+            if (fs::is_directory(it->symlink_status(e2)))
+                dirs.push_back(it->path());
+            else if (it->path().filename() != "libc++_shared.so")
+                fs::remove(it->path(), e2);
+        }
+        // Deepest first; a folder that still holds libc++_shared.so isn't empty, so it stays.
+        for (auto d = dirs.rbegin(); d != dirs.rend(); ++d)
+            fs::remove(*d, ec);
+    }
+    printf("[APK] new APK: cleared the old assets/ and lib/ (kept any libc++_shared.so)\n");
+}
+
 bool bogo_apk_extract_runtime_files()
 {
     ApkArchive* apk = bogo_apk();
@@ -194,13 +233,17 @@ bool bogo_apk_extract_runtime_files()
 
     // A stamp of the APK we extracted from: handhelds often have a wrong clock, so file times can't be compared.
     const char* stampFile = ".bogodroid-apk-stamp";
-    char stampWanted[128];
-    snprintf(stampWanted, sizeof(stampWanted), "%lld %lld", (long long)as.st_size, (long long)as.st_mtime);
+    char stampWanted[512];
+    // Size, time and name: a different APK dropped in under another name is new even if size and time happen to match.
+    std::string apkName = apk->path().substr(apk->path().rfind('/') + 1);
+    snprintf(stampWanted, sizeof(stampWanted), "%lld %lld %s", (long long)as.st_size, (long long)as.st_mtime, apkName.c_str());
     std::string stampHave;
     { std::ifstream in(stampFile); std::getline(in, stampHave); }
     bool sameApk = stampHave == stampWanted;
+    if (!sameApk)
+        clear_stale_runtime_files();
 
-    const char* prefixes[] = { "lib/arm64-v8a/", "assets/bin/Data/Managed/", "assets/dotnet/" };
+    const char* prefixes[] = { BOGO_LIB_DIR "/", "assets/bin/Data/Managed/", "assets/dotnet/" };
     int extracted = 0, kept = 0;
     bool ok = true;
     for (auto& e : apk->entries()) {

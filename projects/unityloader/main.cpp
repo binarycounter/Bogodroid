@@ -1,3 +1,4 @@
+#include "abi.h"
 #include "logging.h"
 #include "apk.h"
 #include "globals.h"
@@ -46,12 +47,11 @@ int foo() { return tls0[0]++; }
 using namespace FakeJni;
 
 #include <chrono>
-static const auto g_t0 = std::chrono::steady_clock::now();
 // Prints how long we've been running, so slow startup phases are easy to spot in the log.
 static void stage(const char* what)
 {
-    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - g_t0).count();
-    fprintf(stderr, "[+%5lldms] %s\n", (long long)ms, what);
+    // The same clock as the "LOG[tag]" lines (bogo_uptime_ms), so the two interleave in order.
+    fprintf(stderr, "[+%5ldms] %s\n", bogo_uptime_ms(), what);
 }
 
 // bool il2cpp_gc_is_incremental_stub()
@@ -143,16 +143,15 @@ int main(int argc, char* argv[])
     print_backtrace_on_segfault(); // Registers a signal handler to print backtrace on segfaults
     exit_on_signals(); // Exits when CTRL-C is presset (or SIGINT or SIGTERM is received)
 
-    if (argc < 2) {
-        fatal_error("Usage: %s <config file>\n", argv[0]);
-        return -1;
-    }
+    // The config file is optional: without one (or with an empty one) the defaults in init_config() apply.
+    if (argc < 2)
+        fprintf(stderr, "Usage: %s [config file]; no config given, using game.toml if present, else defaults\n", argv[0]);
 
     // The main thread plays the role of Android's UI thread: Unity looks its looper up with ALooper_forThread().
     ALooper_prepare(ALOOPER_PREPARE_ALLOW_NON_CALLBACKS);
 
     // Init config, GLES pointers, JNI VN and bindings
-    init_config(argv[1]);
+    init_config(argc > 1 ? argv[1] : nullptr);
     stage("config loaded");
     {
         std::string splash = config["device"]["splash"].value_or<std::string>("");
@@ -163,12 +162,34 @@ int main(int argc, char* argv[])
             stage("splash shown");
         }
     }
+    if (!config_apk_problem().empty()) {
+        fprintf(stderr, "Error: %s\n", config_apk_problem().c_str());
+        return 1;
+    }
     // After the splash, so the first run's extraction isn't spent on a black screen.
     // [paths] apk: native libraries and managed code have to be plain files; take any missing ones from the APK.
     if (!bogo_apk_extract_runtime_files())
         fprintf(stderr, "[APK] some files could not be extracted; loading may fail\n");
     if (!bogo_apk_path().empty())
         stage("APK runtime files ready");
+    if (!bogo_apk() && access(BOGO_LIB_DIR "/libunity.so", R_OK) != 0) {
+        fprintf(stderr, "Error: no game found: put the game's .apk in the game files folder (or set [paths] apk), "
+                        "or extract it there so that " BOGO_LIB_DIR "/libunity.so exists.\n");
+        return 1;
+    }
+    // A process can only run code of its own bitness: say so now, rather than failing on missing libraries later.
+    if (ApkArchive* apk = bogo_apk()) {
+        if (!apk->find(BOGO_LIB_DIR "/libunity.so")) {
+            std::string have;
+            for (auto& abi : bogo_apk_abis())
+                have += (have.empty() ? "" : ", ") + abi;
+            fprintf(stderr, "Error: %s has no " BOGO_LIB_DIR "/libunity.so. It ships native libraries for: %s.\n"
+                            "This is a %d-bit loader and can only run %s builds. Export the game for that ABI%s.\n",
+                    bogo_apk_path().c_str(), have.empty() ? "(none)" : have.c_str(), BOGO_ABI_BITS, BOGO_ABI,
+                    BOGO_ABI_BITS == 64 ? " (Unity: Player Settings > Other Settings > Target Architectures > ARM64)" : "");
+            return 1;
+        }
+    }
     // sdl_initialize_gles();
     InitJNIBinding(&vm);
 
@@ -189,81 +210,77 @@ int main(int argc, char* argv[])
     printf("Loading libc++\n");
     so_module lcpp = {};
     uintptr_t addr_lcpp = 0x3100000000;
-    const char* path_lcpp = "lib/arm64-v8a/libc++_shared.so";
+    const char* path_lcpp = BOGO_LIB_DIR "/libc++_shared.so";
     if (!load_so_from_file(&lcpp, path_lcpp, addr_lcpp)) {
-        printf("No libhelp found\n");
+        printf("libc++_shared.so not found; the game may bring its own C++ runtime\n");
     }
     loaded_modules[module_count++] = &lcpp;
 
     so_module lbootstrap = {};
     uintptr_t addr_lbootstrap = 0x4200000000;
-    const char* path_lbootstrap = "lib/arm64-v8a/libBootstrap.so";
+    const char* path_lbootstrap = BOGO_LIB_DIR "/libBootstrap.so";
 
     so_module ldobby = {};
     uintptr_t addr_ldobby = 0x4250000000;
-    const char* path_ldobby = "lib/arm64-v8a/libdobby.so";
+    const char* path_ldobby = BOGO_LIB_DIR "/libdobby.so";
     if (llcompat) {
         printf("LemonLoader Compat active, loading libBootstrap.so and libdobby.so\n");
-        if (!load_so_from_file(&ldobby, path_ldobby, addr_ldobby)) {
-            printf("No libdobby found\n");
-        }
+        load_so_from_file(&ldobby, path_ldobby, addr_ldobby, true);
         loaded_modules[module_count++] = &ldobby;
 
-        if (!load_so_from_file(&lbootstrap, path_lbootstrap, addr_lbootstrap)) {
-            printf("No libbootstrap found\n");
-        }
+        load_so_from_file(&lbootstrap, path_lbootstrap, addr_lbootstrap, true);
         loaded_modules[module_count++] = &lbootstrap;
 
         so_module* mod = (so_module*)calloc(1, sizeof(so_module));
-        if (mod && load_so_from_file(mod, "lib/arm64-v8a/libcrypto.so", 0x4251000000)) {
+        if (mod && load_so_from_file(mod, BOGO_LIB_DIR "/libcrypto.so", 0x4251000000, true)) {
             printf("  Loaded: libcrypto.so\n");
             loaded_modules[module_count++] = mod;
         }
 
         mod = (so_module*)calloc(1, sizeof(so_module));
-        if (mod && load_so_from_file(mod, "lib/arm64-v8a/libssl.so", 0x4252000000)) {
+        if (mod && load_so_from_file(mod, BOGO_LIB_DIR "/libssl.so", 0x4252000000, true)) {
             printf("  Loaded: libssl.so\n");
             loaded_modules[module_count++] = mod;
         }
 
         mod = (so_module*)calloc(1, sizeof(so_module));
-        if (mod && load_so_from_file(mod, "assets/dotnet/host/fxr/8.0.6/libhostfxr.so", 0x4253000000)) {
+        if (mod && load_so_from_file(mod, "assets/dotnet/host/fxr/8.0.6/libhostfxr.so", 0x4253000000, true)) {
             printf("  Loaded: libhostfxr.so\n");
             loaded_modules[module_count++] = mod;
         }
 
         mod = (so_module*)calloc(1, sizeof(so_module));
-        if (mod && load_so_from_file(mod, "assets/dotnet/shared/Microsoft.NETCore.App/8.0.6/libhostpolicy.so", 0x4254000000)) {
+        if (mod && load_so_from_file(mod, "assets/dotnet/shared/Microsoft.NETCore.App/8.0.6/libhostpolicy.so", 0x4254000000, true)) {
             printf("  Loaded: libhostpolicy.so\n");
             loaded_modules[module_count++] = mod;
         }
 
         mod = (so_module*)calloc(1, sizeof(so_module));
-        if (mod && load_so_from_file(mod, "assets/dotnet/shared/Microsoft.NETCore.App/8.0.6/libcoreclr.so", 0x4255000000)) {
+        if (mod && load_so_from_file(mod, "assets/dotnet/shared/Microsoft.NETCore.App/8.0.6/libcoreclr.so", 0x4255000000, true)) {
             printf("  Loaded: libcoreclr.so\n");
             loaded_modules[module_count++] = mod;
         }
 
         mod = (so_module*)calloc(1, sizeof(so_module));
-        if (mod && load_so_from_file(mod, "assets/dotnet/shared/Microsoft.NETCore.App/8.0.6/libSystem.Native.so", 0x4256000000)) {
+        if (mod && load_so_from_file(mod, "assets/dotnet/shared/Microsoft.NETCore.App/8.0.6/libSystem.Native.so", 0x4256000000, true)) {
             printf("  Loaded: libSystem.Native.so\n");
             loaded_modules[module_count++] = mod;
         }
 
         mod = (so_module*)calloc(1, sizeof(so_module));
-        if (mod && load_so_from_file(mod, "assets/dotnet/shared/Microsoft.NETCore.App/8.0.6/libSystem.Globalization.Native.so", 0x4257000000)) {
+        if (mod && load_so_from_file(mod, "assets/dotnet/shared/Microsoft.NETCore.App/8.0.6/libSystem.Globalization.Native.so", 0x4257000000, true)) {
             printf("  Loaded: libSystem.Globalization.Native.so\n");
             loaded_modules[module_count++] = mod;
         }
 
         mod = (so_module*)calloc(1, sizeof(so_module));
-        if (mod && load_so_from_file(mod, "assets/dotnet/shared/Microsoft.NETCore.App/8.0.6/libSystem.IO.Compression.Native.so", 0x4258000000)) {
+        if (mod && load_so_from_file(mod, "assets/dotnet/shared/Microsoft.NETCore.App/8.0.6/libSystem.IO.Compression.Native.so", 0x4258000000, true)) {
             printf("  Loaded: libSystem.IO.Compression.Native.so\n");
             loaded_modules[module_count++] = mod;
         }
 
         mod = (so_module*)calloc(1, sizeof(so_module));
-        if (mod && load_so_from_file(mod, "assets/dotnet/shared/Microsoft.NETCore.App/8.0.6/libSystem.Security.Cryptography.Native.OpenSsl.so", 0x4259000000)) {
+        if (mod && load_so_from_file(mod, "assets/dotnet/shared/Microsoft.NETCore.App/8.0.6/libSystem.Security.Cryptography.Native.OpenSsl.so", 0x4259000000, true)) {
             printf("  Loaded: libSystem.Security.Cryptography.Native.OpenSsl.so\n");
             loaded_modules[module_count++] = mod;
         }
@@ -278,9 +295,9 @@ int main(int argc, char* argv[])
     printf("Loading libmain\n");
     so_module lmain = {};
     uintptr_t addr_lmain = 0x3200000000;
-    const char* path_lmain = "lib/arm64-v8a/libmain.so";
+    const char* path_lmain = BOGO_LIB_DIR "/libmain.so";
     // Newer Unity versions have no libmain.so: the Java side loads libunity.so directly.
-    bool haveLibmain = load_so_from_file(&lmain, path_lmain, addr_lmain);
+    bool haveLibmain = load_so_from_file(&lmain, path_lmain, addr_lmain, true);
     if (haveLibmain) {
         loaded_modules[module_count++] = &lmain;
     } else {
@@ -292,16 +309,16 @@ int main(int argc, char* argv[])
     so_module lposix = {};
     so_module lmnative = {};
     uintptr_t addr_lil2cpp = 0x3600000000;
-    const char* path_lil2cpp = "lib/arm64-v8a/libil2cpp.so";
-    if (!load_so_from_file(&lil2cpp, path_lil2cpp, addr_lil2cpp)) {
+    const char* path_lil2cpp = BOGO_LIB_DIR "/libil2cpp.so";
+    if (!load_so_from_file(&lil2cpp, path_lil2cpp, addr_lil2cpp, true)) {
         printf("il2cpp not found, trying libmono\n");
-        const char* path_mono = "lib/arm64-v8a/libmonobdwgc-2.0.so";
+        const char* path_mono = BOGO_LIB_DIR "/libmonobdwgc-2.0.so";
         if (!load_so_from_file(&lil2cpp, path_mono, addr_lil2cpp)) {
             return 1;
         }
         printf("Loading libMonoPosixHelper.so\n");
         uintptr_t addr_lposix = 0x3700000000;
-        const char* path_lposix = "lib/arm64-v8a/libMonoPosixHelper.so";
+        const char* path_lposix = BOGO_LIB_DIR "/libMonoPosixHelper.so";
         if (!load_so_from_file(&lposix, path_lposix, addr_lposix)) {
             return 1;
         }
@@ -309,7 +326,7 @@ int main(int argc, char* argv[])
 
         printf("Loading libmono-native.so\n");
         uintptr_t addr_lmnative = 0x3750000000;
-        const char* path_lmnative = "lib/arm64-v8a/libmono-native.so";
+        const char* path_lmnative = BOGO_LIB_DIR "/libmono-native.so";
         if (!load_so_from_file(&lmnative, path_lmnative, addr_lmnative)) {
             return 1;
         }
@@ -329,7 +346,7 @@ int main(int argc, char* argv[])
     printf("Loading libunity\n");
     so_module lunity = {};
     uintptr_t addr_lunity = 0x3800000000;
-    const char* path_lunity = "lib/arm64-v8a/libunity.so";
+    const char* path_lunity = BOGO_LIB_DIR "/libunity.so";
     if (!load_so_from_file(&lunity, path_lunity, addr_lunity)) {
         return 1;
     }
@@ -338,8 +355,8 @@ int main(int argc, char* argv[])
     printf("Loading libburst\n");
     so_module lburst = {};
     uintptr_t addr_lburst = 0x4000000000;
-    const char* path_lburst = "lib/arm64-v8a/lib_burst_generated.so";
-    if (!load_so_from_file(&lburst, path_lburst, addr_lburst)) {
+    const char* path_lburst = BOGO_LIB_DIR "/lib_burst_generated.so";
+    if (!load_so_from_file(&lburst, path_lburst, addr_lburst, true)) {
         printf("No libburst found\n");
     } else
         loaded_modules[module_count++] = &lburst;
@@ -347,10 +364,8 @@ int main(int argc, char* argv[])
     printf("Loading libUnityHelp\n");
     so_module lhelpers = {};
     uintptr_t addr_lhelpers = 0x4200000000;
-    const char* path_lhelpers = "lib/arm64-v8a/libUnityHelpers_Android.so";
-    if (!load_so_from_file(&lhelpers, path_lhelpers, addr_lhelpers)) {
-        printf("No libhelp found\n");
-    }
+    const char* path_lhelpers = BOGO_LIB_DIR "/libUnityHelpers_Android.so";
+    load_so_from_file(&lhelpers, path_lhelpers, addr_lhelpers, true);
     loaded_modules[module_count++] = &lhelpers;
 
     const char* directory = "assets/bin/Data/Managed/";
@@ -393,7 +408,7 @@ int main(int argc, char* argv[])
         auto mainLoad = nativeLoaderClass->getMethod("(Ljava/lang/String;)Z", "load");
 
         printf("calling com/unity3d/player/NativeLoader/load from libmain.so\n");
-        jvalue ret = mainLoad.invoke(frame.getJniEnv(), nativeLoaderClass, (JString) "lib/arm64-v8a");
+        jvalue ret = mainLoad.invoke(frame.getJniEnv(), nativeLoaderClass, (JString) BOGO_LIB_DIR);
         if (!ret.z) {
             printf("libmain.so:load returned false, game could not be loaded\n");
             return 1;
@@ -403,14 +418,12 @@ int main(int argc, char* argv[])
     auto il2cppJNI_OnLoad = (jint (*)(JavaVM* vm, void* reserved))(so_symbol(&lil2cpp, "JNI_OnLoad"));
     if (il2cppJNI_OnLoad) {
         printf("calling JNI_OnLoad from libil2cpp.so\n");
-        std::cout << &il2cppJNI_OnLoad << std::endl;
         il2cppJNI_OnLoad(&vm, nullptr);
     }
 
     auto unityJNI_OnLoad = (jint (*)(JavaVM* vm, void* reserved))(so_symbol(&lunity, "JNI_OnLoad"));
     if (unityJNI_OnLoad) {
         printf("calling JNI_OnLoad from libunity.so\n");
-        std::cout << &unityJNI_OnLoad << std::endl;
         unityJNI_OnLoad(&vm, nullptr);
     }
 
@@ -444,20 +457,60 @@ int main(int argc, char* argv[])
             if (so_load_library(name->c_str(), &vm))
                 printf("Preloaded %s\n", name->c_str());
             else
-                fprintf(stderr, "[libraries] preload: %s not found in lib/arm64-v8a\n", name->c_str());
+                fprintf(stderr, "[libraries] preload: %s not found in " BOGO_LIB_DIR "\n", name->c_str());
         }
     }
     stage("libraries loaded, starting Unity");
     auto activity = std::make_shared<jnivm::android::app::Activity>();
     LocalFrame frame2(vm);
-    if (auto initJni3 = unityClass->getMethod("(Landroid/content/Context;ILjava/lang/String;)V", "initJni")) {
-        // Newer Unity: initJni(Context, int, String). Meaning of the extra args is unknown; passing 0 and "".
-        printf("calling initJni(Context,int,String) from libunity.so\n");
-        initJni3.invoke(frame2.getJniEnv(), unityPlayerObj.get(), activity, 0, (JString) "");
-    } else {
-        auto unityInitJni = unityClass->getMethod("(Landroid/content/Context;)V", "initJni");
-        printf("calling initJni from libunity.so\n");
-        unityInitJni.invoke(frame2.getJniEnv(), unityPlayerObj.get(), activity);
+    {
+        // initJni is a native method libunity registers (RegisterNatives) in JNI_OnLoad. Which class carries it and
+        // with which signature depends on the Unity version: UnityPlayer in older and 7.x builds, one of the
+        // UnityPlayerFor... subclasses in some 6.x builds. Look it up by name instead of assuming either.
+        const char* initClasses[] = { "com/unity3d/player/UnityPlayer", "com/unity3d/player/UnityPlayerForActivityOrService",
+                                      "com/unity3d/player/UnityPlayerForGameActivity" };
+        jnivm::Method* initJni = nullptr;
+        std::string initClassName;
+        for (const char* cname : initClasses) {
+            JClass* c = vm.findClass(cname).get();
+            if (!c) continue;
+            std::lock_guard<std::mutex> lock(c->mtx);
+            for (auto& m : c->methods)
+                if (m->name == "initJni" && m->native) {
+                    initJni = m.get();
+                    initClassName = cname;
+                    break;
+                }
+            if (initJni) break;
+        }
+        if (!initJni) {
+            fprintf(stderr, "Error: libunity registered no native initJni on any known UnityPlayer class; this Unity version isn't supported yet.\n");
+            for (const char* cname : initClasses) {
+                JClass* c = vm.findClass(cname).get();
+                if (!c) continue;
+                std::lock_guard<std::mutex> lock(c->mtx);
+                fprintf(stderr, "Methods registered on %s (%zu):\n", cname, c->methods.size());
+                for (auto& m : c->methods)
+                    fprintf(stderr, "  %s %s%s\n", m->name.c_str(), m->signature.c_str(), m->native ? " [native]" : "");
+            }
+            return 1;
+        }
+        if (initJni->signature == "(Landroid/content/Context;ILjava/lang/String;)V") {
+            // Newer Unity: initJni(Context, int, String). Meaning of the extra args is unknown; passing 0 and "".
+            printf("calling initJni(Context,int,String) from libunity.so (%s)\n", initClassName.c_str());
+            initJni->invoke(frame2.getJniEnv(), unityPlayerObj.get(), activity, 0, (JString) "");
+        } else if (initJni->signature == "(Landroid/content/Context;I)V") {
+            // Unity 6.0: initJni(Context, int). As with the 3-argument form, the int's meaning isn't known; passing 0.
+            printf("calling initJni(Context,int) from libunity.so (%s)\n", initClassName.c_str());
+            initJni->invoke(frame2.getJniEnv(), unityPlayerObj.get(), activity, 0);
+        } else if (initJni->signature == "(Landroid/content/Context;)V" || initJni->signature == "(Landroid/content/Context;)Z") {
+            printf("calling initJni from libunity.so (%s)\n", initClassName.c_str());
+            initJni->invoke(frame2.getJniEnv(), unityPlayerObj.get(), activity);
+        } else {
+            fprintf(stderr, "Error: initJni on %s has signature %s, which the loader doesn't know how to call.\n", initClassName.c_str(),
+                    initJni->signature.c_str());
+            return 1;
+        }
     }
 
     // In another thread, start the event loop

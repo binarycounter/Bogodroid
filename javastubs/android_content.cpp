@@ -4,6 +4,7 @@ extern toml::table config;
 #include "android.h"
 #include "android_extra.h"
 #include "apk.h"
+#include "manifest.h"
 #include "baron/baron.h"
 #include "javac.h"
 #include "logging.h"
@@ -18,10 +19,9 @@ std::shared_ptr<jnivm::android::content::pm::PackageInfo>
 jnivm::android::content::pm::PackageManager::getPackageInfo(std::shared_ptr<FakeJni::JString> packageName, int number)
 {
     auto info = std::make_shared<jnivm::android::content::pm::PackageInfo>();
-    // Report the version from the config ([package] versionName) instead of the built-in "0.1".
-    std::string versionName = config["package"]["versionName"].value_or<std::string>("");
-    if (!versionName.empty())
-        info->versionName = (FakeJni::JString) versionName.c_str();
+    // [package] versionName/versionCode in the config win; otherwise the APK's AndroidManifest.xml; otherwise "0.1".
+    info->versionName = (FakeJni::JString) bogo_package_version_name("0.1").c_str();
+    info->versionCode = bogo_package_version_code();
     return info;
 }
 
@@ -379,7 +379,10 @@ jnivm::android::content::Context::getAssets()
 std::shared_ptr<jnivm::android::content::pm::ApplicationInfo>
 jnivm::android::content::Context::getApplicationInfo()
 {
-    return std::make_shared<jnivm::android::content::pm::ApplicationInfo>();
+    auto info = std::make_shared<jnivm::android::content::pm::ApplicationInfo>();
+    info->minSdkVersion = bogo_min_sdk_version();
+    info->targetSdkVersion = bogo_target_sdk_version();
+    return info;
 }
 
 std::shared_ptr<FakeJni::JObject>
@@ -420,7 +423,10 @@ jnivm::android::content::Context::getSystemService(std::shared_ptr<FakeJni::JStr
 std::shared_ptr<FakeJni::JString>
 jnivm::android::content::Context::getPackageName()
 {
-    return std::make_shared<FakeJni::JString>(config["package"]["packageName"].value_or<std::string>("package.name.not.defined"));
+    std::string name = config["package"]["packageName"].value_or<std::string>("");
+    if (name.empty())
+        name = bogo_manifest().packageName;
+    return std::make_shared<FakeJni::JString>(name.empty() ? "package.name.not.defined" : name);
 }
 
 std::shared_ptr<jnivm::android::content::pm::PackageManager>
@@ -592,10 +598,13 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::pm::ActivityInfo) { FakeJni::Co
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::pm::PackageInfo) { FakeJni::Constructor<PackageInfo> {} },
     { FakeJni::Field<&PackageInfo::versionName> {}, "versionName", FakeJni::JFieldID::PUBLIC },
+    { FakeJni::Field<&PackageInfo::versionCode> {}, "versionCode", FakeJni::JFieldID::PUBLIC },
     END_NATIVE_DESCRIPTOR
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::pm::ApplicationInfo) { FakeJni::Constructor<ApplicationInfo> {} },
     { FakeJni::Field<&ApplicationInfo::splitPublicSourceDirs> {}, "splitPublicSourceDirs", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Field<&ApplicationInfo::minSdkVersion> {}, "minSdkVersion", FakeJni::JFieldID::PUBLIC },
+    { FakeJni::Field<&ApplicationInfo::targetSdkVersion> {}, "targetSdkVersion", FakeJni::JFieldID::PUBLIC },
     END_NATIVE_DESCRIPTOR
 
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::content::pm::PackageManager) { FakeJni::Constructor<PackageManager> {} },

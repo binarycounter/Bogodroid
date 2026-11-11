@@ -1,3 +1,4 @@
+#include "abi.h"
 #include "javac.h"
 #include "../globals.h"
 #include "baron/baron.h"
@@ -51,7 +52,7 @@ std::shared_ptr<FakeJni::JString> jnivm::java::lang::ClassLoader::findLibrary(st
 {
     // Like Android: "foo" -> <libs>/libfoo.so. Unity 7 loads Burst this way ("_burst_generated" -> lib_burst_generated.so).
     std::string n = name ? name->c_str() : "";
-    for (std::string candidate : { "lib/arm64-v8a/lib" + n + ".so", "lib/arm64-v8a/" + n + ".so", "lib/arm64-v8a/" + n }) {
+    for (std::string candidate : { BOGO_LIB_DIR "/lib" + n + ".so", BOGO_LIB_DIR "/" + n + ".so", BOGO_LIB_DIR "/" + n }) {
         if (access(candidate.c_str(), R_OK) == 0) {
             char abs[PATH_MAX];
             std::string found = realpath(candidate.c_str(), abs) ? std::string(abs) : candidate;
@@ -719,8 +720,10 @@ void HookClassExtensions(FakeJni::Jvm* vm)
 
     // Class.getName
     classClass->HookInstanceFunction(&frame.getJniEnv(), "getName", [](jnivm::ENV* env, jnivm::Object* self) -> std::shared_ptr<FakeJni::JString> {
-        verbose("JBRIDGE", "getName for Class %s", self->getClass().getName().c_str());
-        return std::make_shared<FakeJni::JString>(self->getClass().getName());
+        // self is the Class object of the class asked about: its name is the class's own, not "java/lang/Class".
+        std::string name = dynamic_cast<jnivm::Class*>(self) ? static_cast<jnivm::Class*>(self)->getName() : self->getClass().getName();
+        verbose("JBRIDGE", "getName for Class %s", name.c_str());
+        return std::make_shared<FakeJni::JString>(name);
     });
 }
 

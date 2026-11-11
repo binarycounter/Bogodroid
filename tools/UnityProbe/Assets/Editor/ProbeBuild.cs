@@ -33,11 +33,13 @@ public static class ProbeBuild
     {
         string output = "Build/probe.apk";
         bool builtin = false;
+        string entry = "Activity"; // -probeEntry Activity | GameActivity
         string[] args = Environment.GetCommandLineArgs();
         for (int i = 0; i < args.Length - 1; i++)
         {
             if (args[i] == "-probeOut") output = args[i + 1];
             if (args[i] == "-probePipeline") builtin = args[i + 1] == "builtin";
+            if (args[i] == "-probeEntry") entry = args[i + 1];
         }
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(output)));
 
@@ -50,7 +52,7 @@ public static class ProbeBuild
         PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
         PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.Android, false);
         PlayerSettings.SetGraphicsAPIs(BuildTarget.Android, new[] { GraphicsDeviceType.OpenGLES3 });
-        PlayerSettings.Android.applicationEntry = AndroidApplicationEntry.Activity;
+        PlayerSettings.Android.applicationEntry = (AndroidApplicationEntry)Enum.Parse(typeof(AndroidApplicationEntry), entry);
         PlayerSettings.SetApplicationIdentifier(target, "com.GeoffWoollams.UnityProbe");
         EditorUserBuildSettings.buildAppBundle = false;
         EditorUserBuildSettings.androidBuildSystem = AndroidBuildSystem.Gradle;

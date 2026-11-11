@@ -8,6 +8,7 @@
 #   tools/buildprobe.sh
 # Env: UNITY=/path/to/Unity  (default: ~/Unity/Hub/Editor/<ProjectVersion>/Editor/Unity)
 #      SKIP_LOADER=1 / SKIP_UNITY=1  to skip step 1 / the Unity build (reuse the last APK)
+#      APK=<file>  the APK to package (default tools/UnityProbe/Build/probe.apk); with SKIP_UNITY=1 no Unity build is run
 # Close the Unity editor first: it holds a lock on the project.
 set -euo pipefail
 
@@ -25,7 +26,7 @@ PM=$TOOLS/portmaster
 PROBE=$PM/probe
 GAMEDATA=$PROBE/gamedata
 LIBCXX=lib/arm64-v8a/libc++_shared.so   # not part of the APK, but the loader needs it: taken from Unity's bundled NDK
-APK=$PROJECT/Build/probe.apk
+APK=${APK:-$PROJECT/Build/probe.apk}   # APK=<file> packages an APK built earlier (e.g. with -probeEntry GameActivity)
 
 if [[ -z "${SKIP_LOADER:-}" ]]; then
     echo "==> Building unityloader (debug)"

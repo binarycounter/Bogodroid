@@ -743,6 +743,7 @@ namespace android {
             public:
                 DEFINE_CLASS_NAME("android/content/pm/PackageInfo")
                 FakeJni::JString versionName = (FakeJni::JString) "0.1";
+                int versionCode = 0;
             };
 
             class ApplicationInfo : public FakeJni::JObject {
@@ -750,6 +751,9 @@ namespace android {
                 DEFINE_CLASS_NAME("android/content/pm/ApplicationInfo")
 
                 std::shared_ptr<jnivm::Array<FakeJni::JString>> splitPublicSourceDirs = std::make_shared<jnivm::Array<FakeJni::JString>>();
+                // From the game's AndroidManifest.xml (see platform/common/manifest.h); Unity logs and branches on these.
+                int minSdkVersion = 0;
+                int targetSdkVersion = 0;
             };
 
             class PackageManager : public FakeJni::JObject {

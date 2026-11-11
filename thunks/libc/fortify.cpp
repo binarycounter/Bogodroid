@@ -311,17 +311,20 @@ extern "C" void ABI_ATTR __strcpy_chk_fail_impl(size_t dst_buf_size) {
   __fortify_fatal("strcpy: prevented write past end of %zu-byte buffer", dst_buf_size);
 }
 
+extern ABI_ATTR size_t strlcat_impl(char *, const char *, size_t);
+extern ABI_ATTR size_t strlcpy_impl(char *, const char *, size_t);
+
 size_t ABI_ATTR __strlcat_chk_impl(char* dst, const char* src,
                      size_t supplied_size, size_t dst_len_from_compiler) {
   __check_buffer_access("strlcat", "write into", supplied_size, dst_len_from_compiler);
-  return strlcat(dst, src, supplied_size);
+  return strlcat_impl(dst, src, supplied_size);
 }
 
 size_t ABI_ATTR __strlcpy_chk_impl(char* dst, const char* src,
                      size_t supplied_size, size_t dst_len_from_compiler) {
   __check_buffer_access("strlcpy", "write into", supplied_size, dst_len_from_compiler);
   
-  return strlcpy(dst, src, supplied_size);
+  return strlcpy_impl(dst, src, supplied_size);
 }
 
 size_t ABI_ATTR __strlen_chk_impl(const char* s, size_t s_len) {

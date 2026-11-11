@@ -1,10 +1,10 @@
-# Bogodroid NEO — Unity 7.0 fork
+# Bogodroid
 
-This is a fork of [Bogodroid NEO](https://github.com/binarycounter/Bogodroid/tree/neo) that adds support for **Unity 7.0 (7000.x)** games.
+Bogodroid is a wrapper environment for the native libraries of ARM Android apps, so that those libraries (or whole apps and games) can run on ARM Linux handhelds. The focus is the Unity engine. 
 
-It was done to get [Kye](https://playkye.com) running on ARM64 Linux handhelds such as the **R36S**. The [Kye PortMaster zip](https://playkye.com/dl/?type=portmaster) is a complete, working example of how the `unityloader` binary, its config file and the game files fit together. It's worth downloading to see a real port.
+This is a fork of [Bogodroid NEO](https://github.com/binarycounter/Bogodroid/tree/neo) that adds support for **Unity 6.0, 6.6 and 7.0** games. Bogodroid is heavily based on [JohnnyOnFlame/gmloader-next](https://github.com/JohnnyonFlame/gmloader-next) and [ChristopherHX/libjnivm](https://github.com/ChristopherHX/libjnivm).
 
-Bogodroid is an experimental wrapper environment for the native libraries of ARM Android apps, so that those libraries (or whole apps and games) can run on ARM Linux handhelds. The focus is the Unity engine. It is heavily based on [JohnnyOnFlame/gmloader-next](https://github.com/JohnnyonFlame/gmloader-next) and [ChristopherHX/libjnivm](https://github.com/ChristopherHX/libjnivm).
+This fork was made to get [Kye](https://playkye.com) running on ARM64 Linux handhelds such as the **R36S**. The [Kye PortMaster zip](https://playkye.com/dl/?type=portmaster) is a complete, working example of how the `unityloader` binary, its config file and the game files fit together. It's worth downloading to see a real port.
 
 The idea is to:
 - load the libraries and patch them at runtime
@@ -17,18 +17,17 @@ It won't run every app out of the box: it's a framework and starting point for p
 
 # What the Unity build needs
 
-Build the game for Android with these Player Settings:
+Build the game for Android as an **ARM64 IL2CPP APK** (not an App Bundle / `.aab`). Everything else in Player Settings is up to you: both Activity and GameActivity entry points, any render pipeline, stripping, colour space and Development builds all work.
 
-| Setting | Value |
+The one graphics requirement: **OpenGLES3 must be in the Graphics APIs list**. *Auto Graphics API* is fine, and Vulkan can be listed alongside it, but the loader only provides OpenGL ES.
+
+| Unity version | Supported |
 |---|---|
-| Scripting Backend | **IL2CPP** |
-| Target Architectures | **ARM64** only |
-| Graphics APIs | **OpenGLES3** only (untick *Auto Graphics API*; Vulkan isn't supported) |
-| Application Entry Point | **Activity** (GameActivity isn't supported) |
-| Build output | an **APK** (not an App Bundle / `.aab`) |
-| Render pipeline | URP works. The Built-in pipeline also works, but in Unity 7 it is only a fallback that is off by default. |
+| 6.0 (6000.0) | ✅ |
+| 6.6 (6000.6) | ✅ |
+| 7.0 (7000.0) | ✅ (developed against 7000.0.0a16) |
 
-Managed code stripping, Linear/Gamma colour space and Development builds all work. Unity 7.0 support was developed against **7000.0.0a16**; older Unity versions should keep working as before (see *Ports in progress*).
+Older Unity versions should keep working as before.
 
 # Building
 
@@ -64,10 +63,25 @@ mygame/
   unityloader
   mygame.toml
   gamedata/
-    base.apk                           # the game's APK, unedited
+    mygame.apk                         # the game's APK, unedited, any name (only one .apk in this folder)
     lib/arm64-v8a/libc++_shared.so     # not in the APK: copy it from the Unity NDK (see tools/buildprobe.sh)
     usr/share/zoneinfo/tzdata          # time zones for Unity: python3 tools/make_android_tzdata.py <this path>
 ```
+
+The config file is optional. Run `./unityloader mygame.toml`, or just `./unityloader` to use `game.toml` if it exists. Every key has a default, so an empty file, an unreadable one or none at all still loads a game laid out as above:
+
+| Setting | Default |
+|---|---|
+| `[paths] game_files` | `./gamedata/` if it exists, else the folder the loader is started from |
+| `[paths] apk` | the one `.apk` file in `game_files`, whatever it's called (an error if there are several) |
+| `[paths] android_files`, `android_external_files` | `conf/` next to where the loader is started (created) |
+| `[paths] android_cache` | `cache/` next to where the loader is started (created) |
+| `[package] ...` | read from the APK's `AndroidManifest.xml` |
+| `[device] splash` | `splash.bmp` next to where the loader is started, if present |
+| `[device] displayWidth/Height` | the real screen size, fullscreen |
+| `[input] controller` | `true` |
+
+A file that fails to parse is reported and ignored, not fatal. The example below spells out the layout above (the defaults):
 
 ```toml
 [paths]
@@ -82,6 +96,8 @@ android_obb_dirs=["./gamedata/"]
 android_source_dirs=["./gamedata/"]
 
 [package]
+# Optional overrides. Without them, packageName, versionName, versionCode, minSdkVersion and targetSdkVersion
+# are read from the AndroidManifest.xml inside [paths] apk.
 packageName="com.company.game"
 versionName="1.0.0"
 mainIntentBundle = { unity = "" }
@@ -116,7 +132,7 @@ quit_grace_ms = 300      # After the game asks to quit, wait this long, then exi
 features = ["android.hardware.gamepad"]  # Android system features the game is told exist (none by default).
 
 [input]
-controller = true
+controller = true         # Gamepad support (default true).
 swap_ab = true            # Swap A<->B (default true: Nintendo-style labels). false = Xbox layout.
 swap_xy = true            # Swap X<->Y (default true).
 back_button = "select"    # What the pad's Back/Select button sends: "select", "back" (Android Back key) or "both".
@@ -177,8 +193,6 @@ Tested on an R36S (Rockchip RK3326, Mali-G31, ArkOS) with Unity 7000.0.0a16 IL2C
 - **Compute-shader effects** depend on the GPU. On the Mali-G31, for example, PPv2's MSVO Ambient Occlusion and the debug monitors aren't supported.
 
 **Untested**
-- The Mono scripting backend on Unity 7 (Mono works on older Unity, see *Ports in progress*).
-- Unity 7 releases other than 7000.0.0a16, and devices other than the R36S.
 - Anything online: leaderboards, cloud saves, remote config, ads and analytics uploads.
 
 # The compatibility probe (`tools/buildprobe.sh`)
@@ -189,7 +203,7 @@ As new Unity versions come out, they use more of Android than the loader impleme
 tools/buildprobe.sh
 ```
 
-It needs Unity 7000.0.0a16 installed through Unity Hub with Android Build Support, plus Docker for the loader. Close the Unity editor first, because it locks the project.
+It needs Unity 7 installed through Unity Hub with Android Build Support, plus Docker for the loader. Close the Unity editor first, because it locks the project.
 
 The script builds a debug `unityloader`, builds the probe's small native test plugin (`tools/UnityProbe/NativePlugin/`) with Unity's NDK, builds the probe APK with Unity in batch mode, and packages everything as a PortMaster port in `tools/portmaster/probe.zip`. `SKIP_LOADER=1` or `SKIP_UNITY=1` reuse the previous loader or APK.
 

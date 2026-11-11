@@ -1,3 +1,4 @@
+#include "abi.h"
 #include <algorithm>
 #include <vector>
 /* so_util.c -- utils to load and hook .so modules
@@ -507,10 +508,20 @@ void so_relocate_rel(so_module* mod, const Rel* rel)
                     *ptr += link;
                 else
                     *ptr = link;
+            } else if ((sym->st_info >> 4) == 2 /* STB_WEAK */
+                       && type != R_ARM_JUMP_SLOT && type != R_AARCH64_JUMP_SLOT) {
+                // An undefined weak symbol (e.g. a thread_local init function, _ZTH...) is allowed to be absent:
+                // the code checks for null. Resolve it to null like a real dynamic linker, and don't report it.
+                if (type == R_AARCH64_ABS64)
+                    *ptr = (uintptr_t)addend;
+                else if (type != R_ARM_ABS32) // R_ARM_ABS32 keeps its implicit addend in place
+                    *ptr = 0;
             } else {
                 if (type == R_ARM_JUMP_SLOT || type == R_AARCH64_JUMP_SLOT)
                     *ptr = (uintptr_t)&plt0_stub;
-                warning("Missing: %s (%p, %p)\n", mod->dynstr + sym->st_name, ptr, (void*)*ptr);
+                // An optional (weak) import that's absent is normal; calling it still hits the stub.
+                if ((sym->st_info >> 4) != 2 /* STB_WEAK */)
+                    warning("Missing: %s (%p, %p)\n", mod->dynstr + sym->st_name, ptr, (void*)*ptr);
             }
         }
         break;
@@ -876,7 +887,7 @@ namespace {
         if (name.find('/') != std::string::npos && access(name.c_str(), R_OK) == 0)
             return name;
         std::string base = so_basename(name);
-        std::string candidates[] = { "lib/arm64-v8a/" + base, "lib/arm64-v8a/lib" + base + ".so" };
+        std::string candidates[] = { BOGO_LIB_DIR "/" + base, BOGO_LIB_DIR "/lib" + base + ".so" };
         for (auto& c : candidates)
             if (access(c.c_str(), R_OK) == 0)
                 return c;
@@ -933,7 +944,7 @@ namespace {
     }
 }
 
-bool load_so_from_file(so_module *mod, const char *filename, uintptr_t addr);
+bool load_so_from_file(so_module *mod, const char *filename, uintptr_t addr, bool optional = false);
 
 so_module* so_load_library(const char* name, void* java_vm)
 {

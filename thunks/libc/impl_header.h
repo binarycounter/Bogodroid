@@ -109,6 +109,7 @@ extern ABI_ATTR int sscanf_impl(const char *, const char *, ...);
 extern ABI_ATTR int vprintf_impl(const char *, va_list);
 extern ABI_ATTR size_t strlcat_impl(char *, const char *, size_t);
 extern ABI_ATTR size_t strlcpy_impl(char *, const char *, size_t);
+extern ABI_ATTR void arc4random_buf_impl(void *, size_t);
 extern ABI_ATTR int swprintf_impl(wchar_t *, size_t, const wchar_t *, ...);
 extern "C" ABI_ATTR char * asctime64_impl(const struct tm *);
 extern "C" ABI_ATTR char * asctime64_r_impl(const struct tm *, char *);

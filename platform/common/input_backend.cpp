@@ -33,7 +33,7 @@ InputBackend& InputBackend::instance()
 
 InputBackend::InputBackend()
 {
-    input_enable_controller = config["input"]["controller"].value_or<bool>(false);
+    input_enable_controller = config["input"]["controller"].value_or<bool>(true);
     input_mouse_touch_mode = config["input"]["touch_mode"].value_or<bool>(false);
     input_mouse_accurate_mode = config["input"]["accurate_mode"].value_or<bool>(false);
     input_swap_ab = config["input"]["swap_ab"].value_or<bool>(true);

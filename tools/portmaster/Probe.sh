@@ -39,6 +39,6 @@ chmod a+x "$GAMEDIR/unityloader"
 pm_platform_helper "$GAMEDIR/unityloader"
 
 export BOGODROID_VERBOSE=1
-"$GAMEDIR/unityloader" probe.toml > "$PWD/run.txt" 2>&1
+"$GAMEDIR/unityloader" > "$PWD/run.txt" 2>&1
 
 pm_finish
