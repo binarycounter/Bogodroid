@@ -1,0 +1,743 @@
+#include "toml++/toml.hpp"
+extern toml::table config;
+
+#include "android.h"
+#include "android_extra.h"
+#include "display_info.h"
+#include "baron/baron.h"
+#include "javac.h"
+#include "logging.h"
+#include <fstream>
+#include <input_backend.h>
+#include <inttypes.h>
+#include <pthread.h>
+
+///// Display
+
+int jnivm::android::view::Display::getDisplayId()
+{
+    return 1;
+}
+
+int jnivm::android::view::Display::getRotation()
+{
+    return config["device"]["displayRotation"].value_or<int>(0);
+}
+
+int jnivm::android::view::Display::getWidth()
+{
+    return display_get_width();
+}
+
+int jnivm::android::view::Display::getHeight()
+{
+    return display_get_height();
+}
+
+float jnivm::android::view::Display::getRefreshRate()
+{
+    return config["device"]["displayRefreshRate"].value_or<float>(60);
+}
+
+long jnivm::android::view::Display::getAppVsyncOffsetNanos() { return 0; }
+long jnivm::android::view::Display::getPresentationDeadlineNanos() { return 0; }
+
+void jnivm::android::view::Display::getRealMetrics(std::shared_ptr<jnivm::android::util::DisplayMetrics> metrics)
+{
+    metrics->widthPixels = display_get_width();
+    metrics->heightPixels = display_get_height();
+    metrics->densityDpi = config["device"]["displayDpi"].value_or<int>(100);
+}
+
+std::shared_ptr<jnivm::Array<jnivm::android::view::DisplayMode>> jnivm::android::view::Display::getSupportedModes()
+{
+    verbose("JBRIDGE", "App requests Display Modes.... ");
+    auto array = std::make_shared<FakeJni::JArray<jnivm::android::view::DisplayMode>>(1);
+    (*array)[0] = std::make_shared<jnivm::android::view::DisplayMode>();
+    return array;
+}
+
+///// Display$Mode
+
+int jnivm::android::view::DisplayMode::getPhysicalWidth()
+{
+    return display_get_width();
+}
+
+int jnivm::android::view::DisplayMode::getPhysicalHeight()
+{
+    return display_get_height();
+}
+
+float jnivm::android::view::DisplayMode::getRefreshRate()
+{
+    return config["device"]["displayRefreshRate"].value_or<float>(60);
+}
+
+///// InputDevice
+
+int jnivm::android::view::InputDevice::getSources()
+{
+    return this->source;
+}
+
+int jnivm::android::view::InputDevice::getId()
+{
+    return this->id;
+}
+
+int jnivm::android::view::InputDevice::getVendorId()
+{
+    return this->vendor;
+}
+
+int jnivm::android::view::InputDevice::getProductId()
+{
+    return this->product;
+}
+
+std::shared_ptr<FakeJni::JString> jnivm::android::view::InputDevice::getName()
+{
+    return this->name;
+}
+
+std::shared_ptr<FakeJni::JString> jnivm::android::view::InputDevice::getDescriptorString()
+{
+    return this->name;
+}
+
+bool jnivm::android::view::InputDevice::isVirtual()
+{
+    return false;
+}
+
+std::shared_ptr<jnivm::java::util::List> jnivm::android::view::InputDevice::getMotionRanges()
+{
+    verbose("InputDevice", "getMotionRanges() called for device %d. Returning %zu ranges.", id, motionRanges.size());
+    auto list = std::make_shared<jnivm::java::util::ArrayList>();
+    for (const auto& range : motionRanges) {
+        list->add(range);
+    }
+    return list;
+}
+
+std::shared_ptr<jnivm::android::view::InputDevice> jnivm::android::view::InputDevice::getDevice(int device)
+{
+    return InputBackend::instance().getDevice(device);
+}
+
+std::shared_ptr<FakeJni::JArray<int>> jnivm::android::view::InputDevice::getDeviceIds()
+{
+    return InputBackend::instance().getDeviceIds();
+}
+
+void jnivm::android::view::InputDevice::addMotionRange(int axis, int src, float min, float max, float flat, float fuzz)
+{
+    motionRanges.push_back(std::make_shared<MotionRange>(axis, src, min, max, flat, fuzz));
+}
+
+///// InputEvent
+
+long jnivm::android::view::InputEvent::getEventTime()
+{
+    return this->timestamp;
+}
+
+std::shared_ptr<jnivm::android::view::InputDevice> jnivm::android::view::InputEvent::getDevice()
+{
+    return this->device;
+}
+
+int jnivm::android::view::InputEvent::getDeviceId()
+{
+    return this->device.get()->getId();
+}
+
+int jnivm::android::view::InputEvent::getSource()
+{
+    return this->device.get()->getSources();
+}
+
+///// KeyEvent
+
+int jnivm::android::view::KeyEvent::getKeyCode()
+{
+    return this->keyCode;
+}
+
+int jnivm::android::view::KeyEvent::getMetaState()
+{
+    return this->state;
+}
+
+int jnivm::android::view::KeyEvent::getAction()
+{
+    return this->action;
+}
+
+long jnivm::android::view::KeyEvent::getEventTime()
+{
+    return this->timestamp;
+}
+
+///// MotionEvent
+
+namespace {
+using jnivm::android::view::MotionEvent;
+// Valid pointer entry for pointerIndex, or null (legacy single-pointer events have no entries).
+const MotionEvent::Pointer* pointerAt(const MotionEvent& e, int pointerIndex)
+{
+    if (pointerIndex >= 0 && pointerIndex < (int)e.pointers.size())
+        return &e.pointers[pointerIndex];
+    return nullptr;
+}
+}
+
+int jnivm::android::view::MotionEvent::getPointerCount()
+{
+    // Touch events have one entry per finger; mouse and joystick events always have exactly one "pointer".
+    return pointers.empty() ? 1 : (int)pointers.size();
+}
+
+int jnivm::android::view::MotionEvent::getPointerId(int pointerIndex)
+{
+    auto p = pointerAt(*this, pointerIndex);
+    return p ? p->id : 0;
+}
+
+int jnivm::android::view::MotionEvent::getHistorySize()
+{
+    // We don't generate historical data, so this is always 0.
+    return 0;
+}
+
+float jnivm::android::view::MotionEvent::getAxisValue(int axis, int pointerIndex)
+{
+    if (auto p = pointerAt(*this, pointerIndex)) {
+        if (axis == AXIS_X)
+            return p->x;
+        if (axis == AXIS_Y)
+            return p->y;
+        if (axis == AXIS_PRESSURE)
+            return p->pressure;
+        if (axis == AXIS_SIZE)
+            return p->size;
+        if (axis == AXIS_TOUCH_MAJOR || axis == AXIS_TOUCH_MINOR)
+            return getTouchMajor(pointerIndex);
+        if (axis == AXIS_ORIENTATION)
+            return 0.0f;
+    }
+    auto it = axisValues.find(axis);
+    return (it != axisValues.end()) ? it->second : 0.0f;
+}
+
+int jnivm::android::view::MotionEvent::getToolType(int pointerIndex)
+{
+    if (auto p = pointerAt(*this, pointerIndex))
+        return p->toolType;
+    return TOOL_TYPE_MOUSE;
+}
+
+float jnivm::android::view::MotionEvent::getX(int pointerIndex)
+{
+    if (auto p = pointerAt(*this, pointerIndex))
+        return p->x;
+    return this->x;
+}
+
+float jnivm::android::view::MotionEvent::getY(int pointerIndex)
+{
+    if (auto p = pointerAt(*this, pointerIndex))
+        return p->y;
+    return this->y;
+}
+
+float jnivm::android::view::MotionEvent::getPressure(int pointerIndex)
+{
+    if (auto p = pointerAt(*this, pointerIndex))
+        return p->pressure;
+    // Mouse: 1.0 while a button is down, 0 otherwise (what Android reports).
+    return buttonState ? 1.0f : 0.0f;
+}
+
+float jnivm::android::view::MotionEvent::getSize(int pointerIndex)
+{
+    if (auto p = pointerAt(*this, pointerIndex))
+        return p->size;
+    return 0.0f;
+}
+
+float jnivm::android::view::MotionEvent::getTouchMajor(int pointerIndex)
+{
+    // Contact area in pixels; we only know the normalized size, so scale it by the shorter screen side.
+    auto p = pointerAt(*this, pointerIndex);
+    return p ? p->size * 320.0f : 0.0f;
+}
+
+float jnivm::android::view::MotionEvent::getTouchMinor(int pointerIndex) { return getTouchMajor(pointerIndex); }
+float jnivm::android::view::MotionEvent::getOrientation(int pointerIndex) { return 0.0f; }
+float jnivm::android::view::MotionEvent::getXPrecision() { return 1.0f; }
+float jnivm::android::view::MotionEvent::getYPrecision() { return 1.0f; }
+
+float jnivm::android::view::MotionEvent::getHistoricalX(int pointerIndex, int pos) { return getX(pointerIndex); }
+float jnivm::android::view::MotionEvent::getHistoricalY(int pointerIndex, int pos) { return getY(pointerIndex); }
+float jnivm::android::view::MotionEvent::getHistoricalAxisValue(int axis, int pointerIndex, int pos) { return getAxisValue(axis, pointerIndex); }
+long jnivm::android::view::MotionEvent::getHistoricalEventTime(int pos) { return this->timestamp; }
+
+long jnivm::android::view::MotionEvent::getEventTime()
+{
+    return this->timestamp;
+}
+
+long jnivm::android::view::MotionEvent::getDownTime()
+{
+    return downTime ? downTime : this->timestamp;
+}
+
+int jnivm::android::view::MotionEvent::getButtonState()
+{
+    return this->buttonState;
+}
+
+int jnivm::android::view::MotionEvent::getAction()
+{
+    return this->action;
+}
+
+int jnivm::android::view::MotionEvent::getActionMasked()
+{
+    return this->action & ACTION_MASK;
+}
+
+int jnivm::android::view::MotionEvent::getActionIndex()
+{
+    return (this->action & ACTION_POINTER_INDEX_MASK) >> ACTION_POINTER_INDEX_SHIFT;
+}
+
+int jnivm::android::view::MotionEvent::getActionButton() { return 0; }
+int jnivm::android::view::MotionEvent::getFlags() { return 0; }
+int jnivm::android::view::MotionEvent::getEdgeFlags() { return 0; }
+int jnivm::android::view::MotionEvent::getClassification() { return 0; } // CLASSIFICATION_NONE
+int jnivm::android::view::MotionEvent::getDisplayId() { return 0; }
+
+std::shared_ptr<FakeJni::JString> jnivm::android::view::MotionEvent::axisToString(int axis)
+{
+    return std::make_shared<FakeJni::JString>("An Axis");
+}
+
+std::shared_ptr<jnivm::android::view::MotionEvent> jnivm::android::view::MotionEvent::obtain(std::shared_ptr<MotionEvent> other)
+{
+    if (!other)
+        return nullptr;
+    // Create a new MotionEvent by copying the data from the other one.
+    auto newEvent = std::make_shared<MotionEvent>(other->device, other->action, other->x, other->y);
+    newEvent->axisValues = other->axisValues;
+    newEvent->buttonState = other->buttonState;
+    newEvent->pointers = other->pointers;
+    newEvent->downTime = other->downTime;
+    newEvent->timestamp = other->timestamp;
+    return newEvent;
+    return other;
+}
+
+///// KeyCharacterMap
+
+// --- Singleton implementation for our dummy map ---
+static std::shared_ptr<jnivm::android::view::KeyCharacterMap> gDummyMap;
+static pthread_once_t gDummyMapOnce = PTHREAD_ONCE_INIT;
+
+static void create_dummy_map_once()
+{
+    gDummyMap = std::shared_ptr<jnivm::android::view::KeyCharacterMap>(new jnivm::android::view::KeyCharacterMap());
+}
+
+// --- Method Implementations ---
+
+std::shared_ptr<jnivm::android::view::KeyCharacterMap> jnivm::android::view::KeyCharacterMap::load(int deviceId)
+{
+    // Always return the same shared, dummy instance, regardless of device ID.
+    pthread_once(&gDummyMapOnce, create_dummy_map_once);
+    return gDummyMap;
+}
+
+int jnivm::android::view::KeyCharacterMap::get(int keyCode, int metaState)
+{
+
+    return 97; // For testing lets just always return lowercase a
+}
+
+///// Window
+
+void jnivm::android::view::Window::setFlags(int flag1, int flag2)
+{
+    verbose("JBRIDGE", "Window.setFlags %d - %d", flag1, flag2);
+}
+
+std::shared_ptr<jnivm::android::view::View>
+jnivm::android::view::Window::getDecorView()
+{
+    return std::make_shared<jnivm::android::view::View>();
+}
+
+///// View
+
+std::shared_ptr<jnivm::android::view::Display>
+jnivm::android::view::View::getDisplay()
+{
+    return std::make_shared<jnivm::android::view::Display>();
+}
+
+int jnivm::android::view::View::getSystemUiVisibility()
+{
+    return jnivm::android::view::View::SYSTEM_UI_FLAG_FULLSCREEN && SYSTEM_UI_FLAG_HIDE_NAVIGATION;
+}
+
+void jnivm::android::view::View::setSystemUiVisibility(int visibility)
+{
+}
+
+///// Choreographer
+
+static std::shared_ptr<jnivm::android::view::Choreographer> gChoreographerInstance;
+static pthread_once_t gChoreographerOnce = PTHREAD_ONCE_INIT;
+
+static void create_global_choreographer_once()
+{
+    gChoreographerInstance = std::shared_ptr<jnivm::android::view::Choreographer>(new jnivm::android::view::Choreographer());
+}
+
+std::shared_ptr<jnivm::android::view::Choreographer> jnivm::android::view::Choreographer::getInstance()
+{
+    pthread_once(&gChoreographerOnce, create_global_choreographer_once);
+    return gChoreographerInstance;
+}
+
+jnivm::android::view::Choreographer::Choreographer()
+{
+
+    mHandlerThread = std::make_shared<os::HandlerThread>(std::make_shared<FakeJni::JString>("Choreographer"));
+    mHandlerThread->start();
+
+    mLooper = mHandlerThread->getLooper();
+    mHandler = std::make_shared<os::Handler>(mLooper);
+
+    pthread_mutex_init(&mCallbacksMutex, nullptr);
+    mLastVSyncTimeNanos.store(std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now().time_since_epoch())
+            .count());
+
+    verbose("Choreographer", "Global Instance created with its own HandlerThread.");
+
+    mHandler->post(java::lang::LambdaRunnable::Create([this]() {
+        this->watchdogLoop();
+    }));
+}
+
+jnivm::android::view::Choreographer::~Choreographer()
+{
+    if (mHandlerThread) {
+        mHandlerThread->quit(); // This will stop the looper and thus the watchdog.
+        mHandlerThread->join();
+    }
+    pthread_mutex_destroy(&mCallbacksMutex);
+}
+
+// The watchdog loop, now implemented as a recurring Handler task.
+void jnivm::android::view::Choreographer::watchdogLoop()
+{
+    const long long vsyncThresholdNanos = 16'000'000LL; // 1 second
+
+    long long now = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now().time_since_epoch())
+                        .count();
+
+    long long lastSync = mLastVSyncTimeNanos.load();
+
+    if (now - lastSync > vsyncThresholdNanos) {
+        //verbose("Choreographer", "VSync stall detected. Injecting fallback frame.");
+        // We are already on the handler thread, so we can call dispatch directly.
+        dispatchFrameCallbacks(false);
+    }
+
+    // Schedule the next check in 100ms.
+    mHandler->postDelayed(java::lang::LambdaRunnable::Create([this]() {
+        this->watchdogLoop();
+    }),
+        2);
+}
+
+void jnivm::android::view::Choreographer::postFrameCallback(std::shared_ptr<FrameCallback> callback)
+{
+    if (!callback)
+        return;
+    pthread_mutex_lock(&mCallbacksMutex);
+    //verbose("Choreographer", "[Thread: %" PRIxPTR "] [Instance: %p] postFrameCallback ENTER. Queue size before: %zu",
+    //    (uintptr_t)pthread_self(), this, mCallbacks.size());
+    mCallbacks.push_back(callback);
+    //verbose("Choreographer", "[Thread: %" PRIxPTR "] [Instance: %p] postFrameCallback EXIT. Queue size after: %zu",
+    //    (uintptr_t)pthread_self(), this, mCallbacks.size());
+    pthread_mutex_unlock(&mCallbacksMutex);
+}
+
+// signalVSync is the entry point for eglSwapBuffers.
+void jnivm::android::view::Choreographer::signalVSync()
+{
+    // Post the work to our handler thread to ensure all dispatches are serialized.
+    mHandler->post(java::lang::LambdaRunnable::Create([this]() {
+        this->dispatchFrameCallbacks(true);
+    }));
+}
+
+// The core dispatch logic, with the critical isRealVSync flag.
+void jnivm::android::view::Choreographer::dispatchFrameCallbacks(bool isRealVSync)
+{
+    long long now = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now().time_since_epoch())
+                        .count();
+
+    // Only a real vsync signal updates the master timestamp.
+    if (isRealVSync) {
+        mLastVSyncTimeNanos.store(now);
+    }
+
+    std::vector<std::shared_ptr<FrameCallback>> callbacksToRun;
+    //verbose("Choreographer", "[Thread: %" PRIxPTR "] [Instance: %p] dispatch ENTER (isRealVSync: %s). Queue size before swap: %zu",
+    //    (uintptr_t)pthread_self(), this, isRealVSync ? "true" : "false", mCallbacks.size());
+    pthread_mutex_lock(&mCallbacksMutex);
+    mCallbacks.swap(callbacksToRun);
+    pthread_mutex_unlock(&mCallbacksMutex);
+
+    //verbose("Choreographer", "[Thread: %" PRIxPTR "] [Instance: %p] dispatch EXIT. Callbacks to run: %zu. Queue size after swap: %zu",
+    //    (uintptr_t)pthread_self(), this, callbacksToRun.size(), mCallbacks.size());
+
+    if (callbacksToRun.empty()) {
+        //verbose("Choreographer", "No callbacks to dispatch (isRealVSync: %s)", isRealVSync ? "true" : "false");
+        return;
+    }
+
+    // verbose("Choreographer", "Dispatching %zu callbacks (isRealVSync: %s)",
+    //     callbacksToRun.size(), isRealVSync ? "true" : "false");
+
+    // We are on the handler thread, so we can execute the callbacks directly and synchronously.
+    for (const auto& callback : callbacksToRun) {
+        callback->doFrame(now);
+    }
+}
+
+///// ContextThemeWrapper
+
+std::shared_ptr<jnivm::android::content::res::Resources> jnivm::android::view::ContextThemeWrapper::getResources()
+{
+    return std::make_shared<jnivm::android::content::res::Resources>();
+}
+
+///// View Descriptors
+
+bool jnivm::android::view::Display::isHdr() { return false; }
+bool jnivm::android::view::Display::isWideColorGamut() { return false; }
+
+BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::Display) { FakeJni::Constructor<Display> {} },
+    { FakeJni::Function<&Display::getDisplayId> {}, "getDisplayId", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Display::getRotation> {}, "getRotation", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Display::getAppVsyncOffsetNanos> {}, "getAppVsyncOffsetNanos", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Display::getPresentationDeadlineNanos> {}, "getPresentationDeadlineNanos", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Display::getWidth> {}, "getWidth", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Display::getHeight> {}, "getHeight", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Display::getRefreshRate> {}, "getRefreshRate", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Display::getRealMetrics> {}, "getRealMetrics", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Display::getSupportedModes> {}, "getSupportedModes", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Display::isHdr> {}, "isHdr", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Display::isWideColorGamut> {}, "isWideColorGamut", FakeJni::JMethodID::PUBLIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::DisplayMode) { FakeJni::Constructor<DisplayMode> {} },
+    { FakeJni::Function<&DisplayMode::getPhysicalWidth> {}, "getPhysicalWidth", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&DisplayMode::getPhysicalHeight> {}, "getPhysicalHeight", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&DisplayMode::getRefreshRate> {}, "getRefreshRate", FakeJni::JMethodID::PUBLIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::Surface) { FakeJni::Constructor<Surface> {} },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::InputDevice) { FakeJni::Constructor<InputDevice> {} },
+    { FakeJni::Function<&InputDevice::getSources> {}, "getSources", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&InputDevice::getId> {}, "getId", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&InputDevice::getProductId> {}, "getProductId", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&InputDevice::getVendorId> {}, "getVendorId", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&InputDevice::getName> {}, "getName", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&InputDevice::getDescriptorString> {}, "getDescriptor", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&InputDevice::isVirtual> {}, "isVirtual", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&InputDevice::getMotionRanges> {}, "getMotionRanges", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&InputDevice::getVibrator> {}, "getVibrator", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&InputDevice::getDevice> {}, "getDevice", FakeJni::JMethodID::STATIC },
+    { FakeJni::Function<&InputDevice::getDeviceIds> {}, "getDeviceIds", FakeJni::JMethodID::STATIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::InputEvent) { FakeJni::Constructor<InputEvent, std::shared_ptr<jnivm::android::view::InputDevice>> {} },
+    { FakeJni::Function<&InputEvent::getEventTime> {}, "getEventTime", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&InputEvent::getDevice> {}, "getDevice", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&InputEvent::getDeviceId> {}, "getDeviceId", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&InputEvent::getSource> {}, "getSource", FakeJni::JMethodID::PUBLIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::KeyEvent) { FakeJni::Constructor<KeyEvent, std::shared_ptr<jnivm::android::view::InputDevice>, int, int, int> {} },
+
+    { FakeJni::Function<&KeyEvent::getKeyCode> {}, "getKeyCode", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&KeyEvent::getAction> {}, "getAction", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&KeyEvent::getMetaState> {}, "getMetaState", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&KeyEvent::getEventTime> {}, "getEventTime", FakeJni::JMethodID::PUBLIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::MotionRange) { FakeJni::Constructor<MotionRange, int, int, float, float, float, float> {} },
+    { FakeJni::Function<&MotionRange::getAxis> {}, "getAxis", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionRange::getSource> {}, "getSource", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionRange::getMin> {}, "getMin", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionRange::getMax> {}, "getMax", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionRange::getFlat> {}, "getFlat", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionRange::getFuzz> {}, "getFuzz", FakeJni::JMethodID::PUBLIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::MotionEvent) { FakeJni::Constructor<MotionEvent, std::shared_ptr<jnivm::android::view::InputDevice>, int, int, int> {} },
+    { FakeJni::Function<&MotionEvent::getEventTime> {}, "getEventTime", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getDownTime> {}, "getDownTime", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getPointerCount> {}, "getPointerCount", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getPointerId> {}, "getPointerId", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getActionIndex> {}, "getActionIndex", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getActionButton> {}, "getActionButton", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getFlags> {}, "getFlags", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getEdgeFlags> {}, "getEdgeFlags", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getClassification> {}, "getClassification", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getDisplayId> {}, "getDisplayId", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getPressure> {}, "getPressure", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getSize> {}, "getSize", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getTouchMajor> {}, "getTouchMajor", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getTouchMinor> {}, "getTouchMinor", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getOrientation> {}, "getOrientation", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getXPrecision> {}, "getXPrecision", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getYPrecision> {}, "getYPrecision", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getHistoricalX> {}, "getHistoricalX", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getHistoricalY> {}, "getHistoricalY", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getHistoricalAxisValue> {}, "getHistoricalAxisValue", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getHistoricalEventTime> {}, "getHistoricalEventTime", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getHistorySize> {}, "getHistorySize", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getAxisValue> {}, "getAxisValue", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getToolType> {}, "getToolType", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getButtonState> {}, "getButtonState", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getAction> {}, "getAction", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getActionMasked> {}, "getActionMasked", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getX> {}, "getX", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::getY> {}, "getY", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&MotionEvent::axisToString> {}, "axisToString", FakeJni::JMethodID::STATIC },
+    { FakeJni::Function<&MotionEvent::obtain> {}, "obtain", FakeJni::JMethodID::STATIC },
+
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::KeyCharacterMap) { FakeJni::Constructor<KeyCharacterMap> {} },
+    { FakeJni::Function<&KeyCharacterMap::load> {}, "load", FakeJni::JMethodID::STATIC },
+    { FakeJni::Function<&KeyCharacterMap::get> {}, "get", FakeJni::JMethodID::PUBLIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::Window) { FakeJni::Constructor<Window> {} },
+    { FakeJni::Function<&Window::setFlags> {}, "setFlags", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Window::getDecorView> {}, "getDecorView", FakeJni::JMethodID::PUBLIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::View) { FakeJni::Constructor<View> {} },
+    { FakeJni::Field<&View::SYSTEM_UI_FLAG_IMMERSIVE_STICKY> {}, "SYSTEM_UI_FLAG_IMMERSIVE_STICKY", FakeJni::JFieldID::STATIC },
+    { FakeJni::Field<&View::SYSTEM_UI_FLAG_LAYOUT_STABLE> {}, "SYSTEM_UI_FLAG_LAYOUT_STABLE", FakeJni::JFieldID::STATIC },
+    { FakeJni::Field<&View::SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN> {}, "SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN", FakeJni::JFieldID::STATIC },
+    { FakeJni::Field<&View::SYSTEM_UI_FLAG_HIDE_NAVIGATION> {}, "SYSTEM_UI_FLAG_HIDE_NAVIGATION", FakeJni::JFieldID::STATIC },
+    { FakeJni::Field<&View::SYSTEM_UI_FLAG_FULLSCREEN> {}, "SYSTEM_UI_FLAG_FULLSCREEN", FakeJni::JFieldID::STATIC },
+    { FakeJni::Field<&View::SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION> {}, "SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION", FakeJni::JFieldID::STATIC },
+    { FakeJni::Function<&View::getDisplay> {}, "getDisplay", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&View::getSystemUiVisibility> {}, "getSystemUiVisibility", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&View::setSystemUiVisibility> {}, "setSystemUiVisibility", FakeJni::JMethodID::PUBLIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::SurfaceView) { FakeJni::Constructor<SurfaceView> {} },
+    { FakeJni::Function<&InputDevice::getDevice> {}, "getDevice", FakeJni::JMethodID::STATIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::Choreographer) { FakeJni::Function<&Choreographer::getInstance> {}, "getInstance", FakeJni::JMethodID::STATIC },
+    { FakeJni::Function<&Choreographer::postFrameCallback> {}, "postFrameCallback", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Choreographer::dispatchFrameCallbacks> {}, "dispatchFrameCallbacks", FakeJni::JMethodID::PUBLIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::Choreographer::FrameCallback) { FakeJni::Function<&FrameCallback::doFrame> {}, "doFrame", FakeJni::JMethodID::PUBLIC },
+    END_NATIVE_DESCRIPTOR
+
+    BEGIN_NATIVE_DESCRIPTOR(jnivm::android::view::ContextThemeWrapper) { FakeJni::Constructor<ContextThemeWrapper> {} },
+    { FakeJni::Function<&ContextThemeWrapper::getResources> {}, "getResources", FakeJni::JMethodID::PUBLIC },
+    END_NATIVE_DESCRIPTOR
+
+///// AlertDialog$Builder
+
+jnivm::android::app::AlertDialogBuilder::AlertDialogBuilder(std::shared_ptr<jnivm::android::content::Context> context)
+{
+}
+
+std::shared_ptr<jnivm::android::app::AlertDialogBuilder> jnivm::android::app::AlertDialogBuilder::setTitle(std::shared_ptr<jnivm::CharSequence> title)
+{
+    if (auto str = title->toString()) {
+        warning("AlertDialog title: %s\n", str->c_str());
+    }
+    return std::static_pointer_cast<jnivm::android::app::AlertDialogBuilder>(shared_from_this());
+}
+
+std::shared_ptr<jnivm::android::app::AlertDialogBuilder> jnivm::android::app::AlertDialogBuilder::setMessage(std::shared_ptr<jnivm::CharSequence> message)
+{
+    if (auto str = message->toString()) {
+        warning("AlertDialog message: %s\n", str->c_str());
+    }
+    return std::static_pointer_cast<jnivm::android::app::AlertDialogBuilder>(shared_from_this());
+}
+
+std::shared_ptr<jnivm::android::app::AlertDialogBuilder> jnivm::android::app::AlertDialogBuilder::setPositiveButton(std::shared_ptr<jnivm::CharSequence> text, std::shared_ptr<jnivm::android::app::DialogInterfaceOnClickListener> listener)
+{
+    return std::static_pointer_cast<jnivm::android::app::AlertDialogBuilder>(shared_from_this());
+}
+
+std::shared_ptr<jnivm::android::app::AlertDialogBuilder> jnivm::android::app::AlertDialogBuilder::setNegativeButton(std::shared_ptr<jnivm::CharSequence> text, std::shared_ptr<jnivm::android::app::DialogInterfaceOnClickListener> listener)
+{
+    return std::static_pointer_cast<jnivm::android::app::AlertDialogBuilder>(shared_from_this());
+}
+
+std::shared_ptr<jnivm::android::app::AlertDialogBuilder> jnivm::android::app::AlertDialogBuilder::setOnCancelListener(std::shared_ptr<jnivm::android::app::DialogInterfaceOnCancelListener> listener)
+{
+    return std::static_pointer_cast<jnivm::android::app::AlertDialogBuilder>(shared_from_this());
+}
+
+std::shared_ptr<jnivm::android::app::AlertDialogBuilder> jnivm::android::app::AlertDialogBuilder::setView(std::shared_ptr<jnivm::android::view::View> view)
+{
+    return std::static_pointer_cast<jnivm::android::app::AlertDialogBuilder>(shared_from_this());
+}
+
+std::shared_ptr<jnivm::android::app::AlertDialog> jnivm::android::app::AlertDialogBuilder::show()
+{
+    return std::make_shared<jnivm::android::app::AlertDialog>();
+}
+
+BEGIN_NATIVE_DESCRIPTOR(jnivm::android::app::DialogInterface)
+    { FakeJni::Constructor<DialogInterface> {} },
+END_NATIVE_DESCRIPTOR
+
+BEGIN_NATIVE_DESCRIPTOR(jnivm::android::app::DialogInterfaceOnClickListener)
+END_NATIVE_DESCRIPTOR
+
+BEGIN_NATIVE_DESCRIPTOR(jnivm::android::app::DialogInterfaceOnCancelListener)
+END_NATIVE_DESCRIPTOR
+
+BEGIN_NATIVE_DESCRIPTOR(jnivm::android::app::AlertDialog)
+    { FakeJni::Constructor<AlertDialog> {} },
+END_NATIVE_DESCRIPTOR
+
+BEGIN_NATIVE_DESCRIPTOR(jnivm::android::app::AlertDialogBuilder)
+    { FakeJni::Constructor<AlertDialogBuilder, std::shared_ptr<jnivm::android::content::Context>> {} },
+    { FakeJni::Function<&AlertDialogBuilder::setTitle> {}, "setTitle", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&AlertDialogBuilder::setMessage> {}, "setMessage", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&AlertDialogBuilder::setPositiveButton> {}, "setPositiveButton", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&AlertDialogBuilder::setNegativeButton> {}, "setNegativeButton", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&AlertDialogBuilder::setOnCancelListener> {}, "setOnCancelListener", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&AlertDialogBuilder::setView> {}, "setView", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&AlertDialogBuilder::show> {}, "show", FakeJni::JMethodID::PUBLIC },
+END_NATIVE_DESCRIPTOR

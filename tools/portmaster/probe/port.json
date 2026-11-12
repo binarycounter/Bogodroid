@@ -1,0 +1,33 @@
+{
+  "version": 4,
+  "name": "probe.zip",
+  "items": [
+    "Probe.sh",
+    "probe"
+  ],
+  "items_opt": [],
+  "attr": {
+    "title": "Unity Probe",
+    "porter": [
+      "Geoff Woollams"
+    ],
+    "desc": "A probe to gather data for Bogodroid development",
+    "desc_md": null,
+    "inst": "Ready to run.",
+    "inst_md": null,
+    "genres": [
+      "other"
+    ],
+    "image": null,
+    "rtr": true,
+    "exp": false,
+    "runtime": [],
+    "store": [],
+    "availability": "full",
+    "reqs": [],
+    "arch": [
+      "aarch64"
+    ],
+    "min_glibc": ""
+  }
+}

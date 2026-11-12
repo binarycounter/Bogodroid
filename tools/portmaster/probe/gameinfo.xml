@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<gameList>
+  <game>
+    <path>./Probe.sh</path>
+    <name>Unity Probe</name>
+    <desc>A probe to gather data for Bogodroid development</desc>
+    <releasedate>20261110T000000</releasedate>
+    <developer>Geoff Woollams</developer>
+    <publisher>Geoff Woollams</publisher>
+    <genre>Other</genre>
+    <image>./probe/cover.png</image>
+  </game>
+</gameList>

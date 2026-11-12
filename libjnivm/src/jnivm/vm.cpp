@@ -1,3 +1,5 @@
+#include <cstdio>
+#include <cstdlib>
 #include <jnivm.h>
 #ifdef _WIN32
 #define pthread_self() GetCurrentThreadId()
@@ -70,6 +72,14 @@ bool HasBaseClass(JNIEnv *env, Class* cl, Class* c2) {
 	return false;
 }
 jboolean IsAssignableFrom(JNIEnv *env, jclass c1, jclass c2) {
+	//Debugging TODO: Figure out why String is not assignable to Object. String missing baseclass? Bug?
+	auto&& clazz1 = JNITypes<std::shared_ptr<jnivm::Class>>::JNICast(ENV::FromJNIEnv(env), c1);
+	auto&& clazz2 = JNITypes<std::shared_ptr<jnivm::Class>>::JNICast(ENV::FromJNIEnv(env), c2);
+	if(strcmp(clazz1.get()->getName().c_str(), "java/lang/String") == 0 && strcmp(clazz2.get()->getName().c_str(), "java/lang/Object") == 0)
+	{
+		printf("[JNIVM] Override: String is assignable to Object. (Silly hack)\n");
+		return true; 
+	}
 	return HasBaseClass(env, JNITypes<std::shared_ptr<jnivm::Class>>::JNICast(ENV::FromJNIEnv(env), c1).get(), JNITypes<std::shared_ptr<jnivm::Class>>::JNICast(ENV::FromJNIEnv(env), c2).get());
 };
 jobject ToReflectedField(JNIEnv * env, jclass c, jfieldID fid, jboolean isStatic) {
@@ -244,7 +254,11 @@ jclass GetObjectClass(JNIEnv *env, jobject jo) {
 	return jo ? JNITypes<std::shared_ptr<jnivm::Class>>::ToJNIType(ENV::FromJNIEnv(env), JNITypes<std::shared_ptr<jnivm::Object>>::JNICast(ENV::FromJNIEnv(env), jo)->getClassInternal(ENV::FromJNIEnv(env))) : env->FindClass("Invalid");
 };
 jboolean IsInstanceOf(JNIEnv *env, jobject jo, jclass cl) {
-	printf("[JNIVM] Is %s an instance of %s? - %d\n",JNITypes<std::shared_ptr<jnivm::Object>>::JNICast(ENV::FromJNIEnv(env), jo).get()->getClass().getName().c_str(),JNITypes<std::shared_ptr<jnivm::Class>>::JNICast(ENV::FromJNIEnv(env), cl).get()->getClass().getName().c_str(),  jo && IsAssignableFrom(env, GetObjectClass(env, jo), cl));
+	static const bool verboseJni = getenv("BOGODROID_VERBOSE") != nullptr;
+	if (verboseJni) printf("[JNIVM] Is %s an instance of %s? - %d\n",
+		JNITypes<std::shared_ptr<jnivm::Object>>::JNICast(ENV::FromJNIEnv(env), jo).get()->getClass().getName().c_str(),
+		JNITypes<std::shared_ptr<jnivm::Class>>::JNICast(ENV::FromJNIEnv(env), cl).get()->getName().c_str(),
+		jo && IsAssignableFrom(env, GetObjectClass(env, jo), cl));
 	return jo && IsAssignableFrom(env, GetObjectClass(env, jo), cl);
 };
 
@@ -269,6 +283,7 @@ jint RegisterNatives(JNIEnv *env, jclass c, const JNINativeMethod *method, jint 
 			ss << "Class \"" << clazz->nativeprefix << "\" registred native method: " << method->name << " signature: " << method->signature;
 			LOG("JNIVM", "%s", ss.str().data());
 #endif
+			if (getenv("BOGODROID_VERBOSE")) fprintf(stderr, "[RegisterNatives] %s: %s %s\n", clazz->nativeprefix.c_str(), method->name, method->signature);
 			auto m = std::make_shared<Method>();
 			m->name = method->name;
 			m->signature = method->signature;
@@ -530,6 +545,7 @@ void VM::initialize() {
 	env->GetClass<Object>("java/lang/Object");
 	env->GetClass<Class>("java/lang/Class");
 	env->GetClass<String>("java/lang/String");
+	env->GetClass<CharSequence>("java/lang/CharSequence");
 	env->GetClass<ByteBuffer>("java/nio/ByteBuffer");
 	env->GetClass<Throwable>("java/lang/Throwable");
 	env->GetClass<Method>("java/lang/reflect/Method");

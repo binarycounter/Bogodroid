@@ -1,5 +1,6 @@
 #ifndef JNIVM_VM_H_1
 #define JNIVM_VM_H_1
+#include <string>
 #include <memory>
 #include <mutex>
 #include <vector>

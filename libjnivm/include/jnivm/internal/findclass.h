@@ -1,5 +1,6 @@
 #pragma once
 #include <jni.h>
+#include <string>
 #include <memory>
 
 namespace jnivm {

@@ -48,13 +48,19 @@ void jnivm::ReleaseArrayElements(JNIEnv *, typename JNITypes<T>::Array a, T *car
 
 template <class T>
 void jnivm::GetArrayRegion(JNIEnv *env, typename JNITypes<T>::Array a, jsize start, jsize len, T * buf) {
-    auto ja = JNITypes<std::shared_ptr<Array<T>>>::JNICast(ENV::FromJNIEnv(env), a);
+    auto ja = a ? JNITypes<std::shared_ptr<Array<T>>>::JNICast(ENV::FromJNIEnv(env), a) : nullptr;
+    // Real JNI would crash or throw here; raising a Java exception is kinder than a segfault when a stubbed method
+    // handed the app a null array.
+    if (!ja) { env->ThrowNew(nullptr, "java.lang.NullPointerException"); return; }
+    if (start < 0 || len < 0 || (size_t)start + (size_t)len > (size_t)ja->getSize()) { env->ThrowNew(nullptr, "java.lang.ArrayIndexOutOfBoundsException"); return; }
     memcpy(buf, ja->getArray() + start, sizeof(T)* len);
 }
 
 template <class T>
 void jnivm::SetArrayRegion(JNIEnv *env, typename JNITypes<T>::Array a, jsize start, jsize len, const T * buf) {
-    auto ja = JNITypes<std::shared_ptr<Array<T>>>::JNICast(ENV::FromJNIEnv(env), a);
+    auto ja = a ? JNITypes<std::shared_ptr<Array<T>>>::JNICast(ENV::FromJNIEnv(env), a) : nullptr;
+    if (!ja) { env->ThrowNew(nullptr, "java.lang.NullPointerException"); return; }
+    if (start < 0 || len < 0 || (size_t)start + (size_t)len > (size_t)ja->getSize()) { env->ThrowNew(nullptr, "java.lang.ArrayIndexOutOfBoundsException"); return; }
     memcpy(ja->getArray() + start, buf, sizeof(T)* len);
 }
 
