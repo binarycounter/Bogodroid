@@ -3,6 +3,7 @@
 #include "../globals.h"
 #include "baron/baron.h"
 #include "logging.h"
+#include "breadcrumbs.h"
 #include "so_util.h"
 #include "java_security.h"
 #include <stdexcept>
@@ -44,6 +45,10 @@ std::shared_ptr<jnivm::java::lang::Boolean> jnivm::java::lang::Boolean::valueOf(
 
 jnivm::java::lang::ClassLoader::ClassLoader(jnivm::Object* obj)
 {
+    if (!obj) {
+        verbose("JBRIDGE", "New Classloader for a null object");
+        return;
+    }
     verbose("JBRIDGE", "New Classloader for class %s", obj->getClass().getName().c_str());
     this->clazz = obj->clazz;
 };
@@ -73,24 +78,36 @@ jnivm::java::lang::StringBuilder::StringBuilder()
 
 std::shared_ptr<jnivm::java::lang::StringBuilder> jnivm::java::lang::StringBuilder::append(std::shared_ptr<FakeJni::JString> str_to_append)
 {
-    str = str.append(str_to_append.get()->c_str());
-    return std::shared_ptr<jnivm::java::lang::StringBuilder>(this);
+    // StringBuilder.append(null) appends "null"
+    str = str.append(str_to_append ? str_to_append->c_str() : "null");
+    // Hand out the shared_ptr that already owns us. (Wrapping 'this' in a fresh shared_ptr created a second
+    // owner of the same object, which was freed twice.)
+    try {
+        return std::static_pointer_cast<jnivm::java::lang::StringBuilder>(shared_from_this());
+    } catch (const std::bad_weak_ptr&) {
+        return nullptr;
+    }
 }
 
 std::shared_ptr<FakeJni::JString> jnivm::java::lang::StringBuilder::toString()
 {
     verbose("JBRIDGE", "toString: %s", str.c_str());
-    return std::shared_ptr<FakeJni::JString>(&str);
+    // A copy: a shared_ptr that 'owned' the member would delete it (and the builder's storage) when released.
+    return std::make_shared<FakeJni::JString>(str);
 }
 
 ///// InputStream
 
 jnivm::java::io::InputStream::InputStream(std::shared_ptr<FakeJni::JString> filename)
 {
-    verbose("JBRIDGE", "IOStream opening file %s", filename.get()->c_str());
-    std::ifstream* file = new std::ifstream(filename.get()->c_str(), std::ios::binary);
+    if (!filename) {
+        verbose("JBRIDGE", "IOStream opened with a null file name");
+        return;
+    }
+    verbose("JBRIDGE", "IOStream opening file %s", filename->c_str());
+    std::ifstream* file = new std::ifstream(filename->c_str(), std::ios::binary);
     if (!file->is_open()) {
-        verbose("JBRIDGE", "IOStream ERROR on file %s", filename.get()->c_str());
+        verbose("JBRIDGE", "IOStream ERROR on file %s", filename->c_str());
     }
     this->ok = file->is_open();
     this->file = file;
@@ -118,7 +135,7 @@ int jnivm::java::io::InputStream::read(
         return -1;
     }
 
-    if (offset < 0 || length < 0 || offset + length > buffer->getSize()) {
+    if (offset < 0 || length < 0 || (long long)offset + length > (long long)buffer->getSize()) {
         // Java: IndexOutOfBoundsException
         return -1;
     }
@@ -177,22 +194,47 @@ std::shared_ptr<FakeJni::JString> jnivm::java::io::File::toString()
 ///// Thread
 #include <chrono>
 #include <thread>
-jnivm::java::lang::Thread::Thread(std::shared_ptr<FakeJni::JString> name) { }
+jnivm::java::lang::Thread::Thread(std::shared_ptr<FakeJni::JString> name)
+{
+    if (name)
+        this->name = name->c_str();
+}
 jnivm::java::lang::Thread::Thread(std::shared_ptr<Runnable> runnable)
 {
     // This constructor isn't strictly needed for HandlerThread but is good to have
 }
 
+jnivm::java::lang::Thread::~Thread()
+{
+    // A std::thread that is still joinable when destroyed calls std::terminate().
+    if (native_thread.joinable()) {
+        if (native_thread.get_id() == std::this_thread::get_id())
+            native_thread.detach(); // last reference dropped by the thread itself
+        else
+            native_thread.join();
+    }
+}
+
 void jnivm::java::lang::Thread::start()
 {
+    if (native_thread.joinable())
+        return; // already started (Java throws IllegalThreadStateException)
+    // The thread keeps this object alive while it runs: the game may drop its reference to a started Thread.
+    std::shared_ptr<Thread> self;
+    try {
+        self = std::dynamic_pointer_cast<Thread>(shared_from_this());
+    } catch (const std::bad_weak_ptr&) {
+        // not owned by a shared_ptr; the caller has to keep it alive
+    }
     // The start method now creates a std::thread that executes our
     // private, JNI-safe entry point.
-    native_thread = std::thread(&Thread::_thread_entry_point, this);
+    native_thread = std::thread([self, this]() { this->_thread_entry_point(); });
 }
 
 void jnivm::java::lang::Thread::_thread_entry_point()
 {
     // This is the "wrapper" that runs on the new thread.
+    bogo_breadcrumb("thread start", name.c_str());
     JNIEnv* env = nullptr;
     int result = vm.AttachCurrentThread(&env, nullptr);
     if (result != JNI_OK || !env) {
@@ -214,6 +256,7 @@ void jnivm::java::lang::Thread::_thread_entry_point()
     }
 
     // The run() method has finished. Detach the thread before it exits.
+    bogo_breadcrumb("thread exit", name.c_str());
     vm.DetachCurrentThread();
 }
 
@@ -226,7 +269,11 @@ void jnivm::java::lang::Thread::run()
 void jnivm::java::lang::Thread::join()
 {
     if (native_thread.joinable()) {
-        native_thread.join();
+        // Joining yourself deadlocks (std::system_error); can happen when the last reference is dropped on the thread.
+        if (native_thread.get_id() == std::this_thread::get_id())
+            native_thread.detach();
+        else
+            native_thread.join();
     }
 }
 
@@ -274,7 +321,7 @@ jnivm::java::lang::reflect::FakeMethod::FakeMethod(std::shared_ptr<FakeJni::JStr
 
 std::shared_ptr<FakeJni::JString> jnivm::java::lang::reflect::FakeMethod::toString()
 {
-    verbose("JBRIDGE", "Reflect: Returning Method name %s", this->method_name.get()->c_str());
+    verbose("JBRIDGE", "Reflect: Returning Method name %s", this->method_name ? this->method_name->c_str() : "(null)");
     return this->method_name;
 }
 

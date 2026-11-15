@@ -7,9 +7,11 @@ extern toml::table config;
 #include "baron/baron.h"
 #include "javac.h"
 #include "logging.h"
+#include "breadcrumbs.h"
 #include <fstream>
 #include <input_backend.h>
 #include <inttypes.h>
+#include <algorithm>
 #include <pthread.h>
 
 ///// Display
@@ -44,6 +46,8 @@ long jnivm::android::view::Display::getPresentationDeadlineNanos() { return 0; }
 
 void jnivm::android::view::Display::getRealMetrics(std::shared_ptr<jnivm::android::util::DisplayMetrics> metrics)
 {
+    if (!metrics)
+        return;
     metrics->widthPixels = display_get_width();
     metrics->heightPixels = display_get_height();
     metrics->densityDpi = config["device"]["displayDpi"].value_or<int>(100);
@@ -150,12 +154,12 @@ std::shared_ptr<jnivm::android::view::InputDevice> jnivm::android::view::InputEv
 
 int jnivm::android::view::InputEvent::getDeviceId()
 {
-    return this->device.get()->getId();
+    return this->device ? this->device->getId() : -1;
 }
 
 int jnivm::android::view::InputEvent::getSource()
 {
-    return this->device.get()->getSources();
+    return this->device ? this->device->getSources() : 0;
 }
 
 ///// KeyEvent
@@ -445,21 +449,37 @@ jnivm::android::view::Choreographer::~Choreographer()
 // The watchdog loop, now implemented as a recurring Handler task.
 void jnivm::android::view::Choreographer::watchdogLoop()
 {
-    const long long vsyncThresholdNanos = 16'000'000LL; // 1 second
+    // On Android the Choreographer fires once per display refresh (60 Hz), whether or not the game renders. Here a
+    // frame is signalled by eglSwapBuffers; when the game renders slower than that (or not at all, e.g. while
+    // loading) this watchdog stands in for the missing refreshes. It used to fire whenever the last *real* frame
+    // was over 16 ms ago, i.e. every 2 ms check, so a game below 60 fps got ~400-500 callbacks a second instead of
+    // 60: wasted CPU and battery on a handheld, and bogus refresh timing for Unity's frame pacing. Measured from the
+    // last dispatch of either kind, it now stays at the display rate.
+    const long long refreshNanos = 16'666'667LL; // 60 Hz
 
     long long now = std::chrono::duration_cast<std::chrono::nanoseconds>(
         std::chrono::steady_clock::now().time_since_epoch())
                         .count();
 
-    long long lastSync = mLastVSyncTimeNanos.load();
+    long long last = std::max(mLastVSyncTimeNanos.load(), mLastDispatchNanos);
 
-    if (now - lastSync > vsyncThresholdNanos) {
-        //verbose("Choreographer", "VSync stall detected. Injecting fallback frame.");
+    if (now - last > refreshNanos) {
         // We are already on the handler thread, so we can call dispatch directly.
         dispatchFrameCallbacks(false);
     }
 
-    // Schedule the next check in 100ms.
+    // A line every 30 s with the callback rate, so frame pacing can be checked in any log.
+    if (mStatsSinceNanos == 0)
+        mStatsSinceNanos = now;
+    if (now - mStatsSinceNanos >= 30'000'000'000LL) {
+        double secs = (now - mStatsSinceNanos) / 1e9;
+        printf("[CHOREOGRAPHER] %.0f frame callbacks/s over the last %.0f s (%.0f/s from rendered frames, %.0f/s fallback)\n",
+            (mStatsReal + mStatsFallback) / secs, secs, mStatsReal / secs, mStatsFallback / secs);
+        mStatsReal = mStatsFallback = 0;
+        mStatsSinceNanos = now;
+    }
+
+    // Check again in 2 ms.
     mHandler->postDelayed(java::lang::LambdaRunnable::Create([this]() {
         this->watchdogLoop();
     }),
@@ -499,6 +519,7 @@ void jnivm::android::view::Choreographer::dispatchFrameCallbacks(bool isRealVSyn
     if (isRealVSync) {
         mLastVSyncTimeNanos.store(now);
     }
+    mLastDispatchNanos = now;
 
     std::vector<std::shared_ptr<FrameCallback>> callbacksToRun;
     //verbose("Choreographer", "[Thread: %" PRIxPTR "] [Instance: %p] dispatch ENTER (isRealVSync: %s). Queue size before swap: %zu",
@@ -514,13 +535,28 @@ void jnivm::android::view::Choreographer::dispatchFrameCallbacks(bool isRealVSyn
         //verbose("Choreographer", "No callbacks to dispatch (isRealVSync: %s)", isRealVSync ? "true" : "false");
         return;
     }
+    if (isRealVSync)
+        mStatsReal++;
+    else
+        mStatsFallback++;
 
     // verbose("Choreographer", "Dispatching %zu callbacks (isRealVSync: %s)",
     //     callbacksToRun.size(), isRealVSync ? "true" : "false");
 
     // We are on the handler thread, so we can execute the callbacks directly and synchronously.
     for (const auto& callback : callbacksToRun) {
-        callback->doFrame(now);
+        if (!callback)
+            continue;
+        // One failing callback must not abort the rest of the frame (or kill the Choreographer thread).
+        try {
+            callback->doFrame(now);
+        } catch (const std::exception& e) {
+            bogo_breadcrumb("choreographer: frame callback threw", e.what());
+            verbose("Choreographer", "Exception in frame callback: %s", e.what());
+        } catch (...) {
+            bogo_breadcrumb("choreographer: frame callback threw");
+            verbose("Choreographer", "Unknown exception in frame callback");
+        }
     }
 }
 

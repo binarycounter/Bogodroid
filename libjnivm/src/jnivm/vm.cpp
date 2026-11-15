@@ -56,9 +56,16 @@ jobject ToReflectedMethod(JNIEnv * env, jclass c, jmethodID mid, jboolean isStat
 };
 jclass GetSuperclass(JNIEnv * env, jclass c) {
 	auto&& cl = JNITypes<std::shared_ptr<jnivm::Class>>::JNICast(ENV::FromJNIEnv(env), c);
-	return cl->baseclasses ? (jclass)(cl->baseclasses(ENV::FromJNIEnv(env))[0]).get() : nullptr;
+	if(!cl || !cl->baseclasses) {
+		return nullptr;
+	}
+	auto bases = cl->baseclasses(ENV::FromJNIEnv(env));
+	return bases.empty() ? nullptr : (jclass)bases[0].get();
 };
 bool HasBaseClass(JNIEnv *env, Class* cl, Class* c2) {
+	if(!cl || !c2) {
+		return false;
+	}
 	if(cl == c2) {
 		return true;
 	}
@@ -75,6 +82,9 @@ jboolean IsAssignableFrom(JNIEnv *env, jclass c1, jclass c2) {
 	//Debugging TODO: Figure out why String is not assignable to Object. String missing baseclass? Bug?
 	auto&& clazz1 = JNITypes<std::shared_ptr<jnivm::Class>>::JNICast(ENV::FromJNIEnv(env), c1);
 	auto&& clazz2 = JNITypes<std::shared_ptr<jnivm::Class>>::JNICast(ENV::FromJNIEnv(env), c2);
+	if(!clazz1 || !clazz2) {
+		return false; // a null class (e.g. a failed FindClass) is assignable to nothing
+	}
 	if(strcmp(clazz1.get()->getName().c_str(), "java/lang/String") == 0 && strcmp(clazz2.get()->getName().c_str(), "java/lang/Object") == 0)
 	{
 		printf("[JNIVM] Override: String is assignable to Object. (Silly hack)\n");
@@ -255,7 +265,7 @@ jclass GetObjectClass(JNIEnv *env, jobject jo) {
 };
 jboolean IsInstanceOf(JNIEnv *env, jobject jo, jclass cl) {
 	static const bool verboseJni = getenv("BOGODROID_VERBOSE") != nullptr;
-	if (verboseJni) printf("[JNIVM] Is %s an instance of %s? - %d\n",
+	if (verboseJni && jo && cl) printf("[JNIVM] Is %s an instance of %s? - %d\n",
 		JNITypes<std::shared_ptr<jnivm::Object>>::JNICast(ENV::FromJNIEnv(env), jo).get()->getClass().getName().c_str(),
 		JNITypes<std::shared_ptr<jnivm::Class>>::JNICast(ENV::FromJNIEnv(env), cl).get()->getName().c_str(),
 		jo && IsAssignableFrom(env, GetObjectClass(env, jo), cl));
@@ -271,6 +281,9 @@ jboolean IsInstanceOf(JNIEnv *env, jobject jo, jclass cl) {
 #include "internal/array.hpp"
 
 jint RegisterNatives(JNIEnv *env, jclass c, const JNINativeMethod *method, jint i) {
+	if(!method || i < 0) {
+		return -1;
+	}
 	auto&& clazz = JNITypes<std::shared_ptr<jnivm::Class>>::JNICast(ENV::FromJNIEnv(env), c);
 	if(!clazz) {
 		LOG("JNIVM", "RegisterNatives failed, class is nullptr");
@@ -312,11 +325,19 @@ jint UnregisterNatives(JNIEnv *env, jclass c) {
 };
 
 jint MonitorEnter(JNIEnv *env, jobject o) {
-	JNITypes<std::shared_ptr<jnivm::Object>>::JNICast(ENV::FromJNIEnv(env), o)->lock.lock.lock();
+	auto obj = JNITypes<std::shared_ptr<jnivm::Object>>::JNICast(ENV::FromJNIEnv(env), o);
+	if(!obj) {
+		return -1; // Java would throw a NullPointerException
+	}
+	obj->lock.lock.lock();
 	return 0;
 };
 jint MonitorExit(JNIEnv *env, jobject o) {
-	JNITypes<std::shared_ptr<jnivm::Object>>::JNICast(ENV::FromJNIEnv(env), o)->lock.lock.unlock();
+	auto obj = JNITypes<std::shared_ptr<jnivm::Object>>::JNICast(ENV::FromJNIEnv(env), o);
+	if(!obj) {
+		return -1;
+	}
+	obj->lock.lock.unlock();
 	return 0;
 }
 
@@ -486,18 +507,23 @@ jnivm::VM::VM(bool skipInit, bool ReturnNull) : ninterface(ReturnNull ? GetNativ
 			[](JavaVM *vm, JNIEnv **penv, void * args) -> jint {
 #ifdef EnableJNIVMGC
 				auto&& nvm = *VM::FromJavaVM(vm);
-				std::lock_guard<std::mutex> lock(nvm.mtx);
+				std::lock_guard<std::mutex> lock(nvm.envmtx);
 				auto&& nenv = nvm.jnienvs[pthread_self()];
 				if(!nenv) {
-					nenv = nvm.CreateEnv();
+					try {
+						nenv = nvm.CreateEnv();
+					} catch(...) {
+						// An exception must not unwind through the game's native frames.
+						nvm.jnienvs.erase(pthread_self());
+						return JNI_ERR;
+					}
 				}
 				if(penv) {
 					*penv = nenv->GetJNIEnv();
 				}
 #else
 				if(penv) {
-					std::lock_guard<std::mutex> lock((VM::FromJavaVM(vm)))->mtx);
-					*penv = (VM::FromJavaVM(vm)))->GetJNIEnv();
+					*penv = VM::FromJavaVM(vm)->GetJNIEnv();
 				}
 #endif
 				return JNI_OK;
@@ -505,7 +531,7 @@ jnivm::VM::VM(bool skipInit, bool ReturnNull) : ninterface(ReturnNull ? GetNativ
 			[](JavaVM *vm) -> jint {
 #ifdef EnableJNIVMGC
 				auto&& nvm = *VM::FromJavaVM(vm);
-				std::lock_guard<std::mutex> lock(nvm.mtx);
+				std::lock_guard<std::mutex> lock(nvm.envmtx);
 				auto fe = nvm.jnienvs.end();
 				auto f = nvm.jnienvs.find(pthread_self());
 				if(f != fe) {
@@ -519,8 +545,7 @@ jnivm::VM::VM(bool skipInit, bool ReturnNull) : ninterface(ReturnNull ? GetNativ
 #ifdef EnableJNIVMGC
 					return vm->AttachCurrentThread((JNIEnv**)penv, nullptr);
 #else
-					std::lock_guard<std::mutex> lock((VM::FromJavaVM(vm)))->mtx);
-					*penv = (VM::FromJavaVM(vm)))->GetJNIEnv();
+					*penv = VM::FromJavaVM(vm)->GetJNIEnv();
 #endif
 				}
 				return JNI_OK;
@@ -541,7 +566,11 @@ jnivm::VM::VM(bool skipInit, bool ReturnNull) : ninterface(ReturnNull ? GetNativ
 jnivm::VM::VM() : VM(false) {};
 
 void VM::initialize() {
-	auto env = jnienvs[pthread_self()] = CreateEnv();
+	std::shared_ptr<ENV> env;
+	{
+		std::lock_guard<std::mutex> lock(envmtx);
+		env = jnienvs[pthread_self()] = CreateEnv();
+	}
 	env->GetClass<Object>("java/lang/Object");
 	env->GetClass<Class>("java/lang/Class");
 	env->GetClass<String>("java/lang/String");
@@ -563,8 +592,19 @@ JNIEnv *VM::GetJNIEnv() {
 }
 
 const std::shared_ptr<ENV>& VM::GetEnv() {
+	std::lock_guard<std::mutex> lock(envmtx);
 #ifdef EnableJNIVMGC
-	return jnienvs[pthread_self()];
+	// Threads that never called AttachCurrentThread (e.g. loader-created
+	// looper threads) get an env on demand instead of a null one.
+	auto&& nenv = jnienvs[pthread_self()];
+	if(!nenv) {
+		try {
+			nenv = CreateEnv();
+		} catch(const std::exception& e) {
+			LOG("JNIVM", "GetEnv: couldn't create an env for this thread: %s", e.what());
+		}
+	}
+	return nenv;
 #else
 	return jnienvs.begin()->second;
 #endif

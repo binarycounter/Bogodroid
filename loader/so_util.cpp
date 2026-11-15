@@ -690,6 +690,8 @@ void so_relocate_all(so_module* mod)
 
 uintptr_t so_resolve_link(so_module* mod, const char* symbol)
 {
+    if (symbol == NULL)
+        return 0; // dlsym(handle, NULL)
     if (symbol != NULL && strlen(symbol) >= 3 && symbol[0] == 'g' && symbol[1] == 'l' && symbol[2] != 'a') {
         size_t new_len = strlen("glad_") + strlen(symbol) + 1;
         char* glad_symbol = (char*)malloc(new_len);
@@ -697,6 +699,7 @@ uintptr_t so_resolve_link(so_module* mod, const char* symbol)
             strcpy(glad_symbol, "glad_");
             strcat(glad_symbol, symbol);
             uintptr_t new_addr = so_resolve_link(nullptr, glad_symbol);
+            free(glad_symbol); // was leaked on every GL symbol lookup
             if(new_addr)
                 return new_addr;
         }

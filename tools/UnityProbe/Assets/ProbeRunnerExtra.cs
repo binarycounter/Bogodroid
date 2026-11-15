@@ -147,8 +147,11 @@ public partial class ProbeRunner
     [System.Runtime.InteropServices.DllImport("probeplugin")] static extern int probe_plugin_add(int a, int b);
     [System.Runtime.InteropServices.DllImport("probeplugin")] static extern int probe_plugin_state();
 
-    // libprobeplugin.so (tools/UnityProbe/NativePlugin): loaded on demand through P/Invoke (dlopen: dependencies and
-    // constructor, no JNI_OnLoad), then System.loadLibrary must call its JNI_OnLoad.
+    // libprobeplugin.so (tools/UnityProbe/NativePlugin): loaded on demand through P/Invoke (its dependency and
+    // constructor must come with it), and JNI_OnLoad must have run once System.loadLibrary was called.
+    // Whether the P/Invoke load already ran JNI_OnLoad depends on how the engine loads plugins: Unity 7 goes through
+    // Java's UnityPlayer.loadLibrary (= System.loadLibrary on Android), which does call it, so that is reported but
+    // not judged.
     string ProbeNativePlugin()
     {
         int sum = probe_plugin_add(2, 3);           // 2 + 3 + 42 from libprobedep.so
@@ -157,8 +160,8 @@ public partial class ProbeRunner
             system.CallStatic("loadLibrary", "probeplugin");
         int after = probe_plugin_state();
         bool constructed = (before & 1) != 0, jniBefore = (before & 2) != 0, jniAfter = (after & 2) != 0;
-        string detail = "add=" + sum + " constructor=" + constructed + " JNI_OnLoad after dlopen=" + jniBefore + ", after loadLibrary=" + jniAfter;
-        if (sum != 47 || !constructed || jniBefore || !jniAfter) throw new Exception("unexpected: " + detail);
+        string detail = "add=" + sum + " constructor=" + constructed + " JNI_OnLoad after P/Invoke load=" + jniBefore + ", after loadLibrary=" + jniAfter;
+        if (sum != 47 || !constructed || !jniAfter) throw new Exception("unexpected: " + detail);
         return detail;
     }
 

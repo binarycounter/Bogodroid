@@ -16,6 +16,10 @@
 #include <fcntl.h>
 #include <sys/wait.h>
 #include "javac.h"
+#include "breadcrumbs.h"
+#include <sys/prctl.h>
+#include <sys/syscall.h>
+#include <string.h>
 
 void print_native_callbacks(ANativeActivity nActivity)
 {
@@ -37,9 +41,42 @@ void print_native_callbacks(ANativeActivity nActivity)
     printf("onLowMemory: %p\n", (void*)nActivity.callbacks->onLowMemory);
 }
 
+#ifndef BOGO_GIT_REV
+#define BOGO_GIT_REV "unknown"
+#endif
+const char* bogo_build_id()
+{
+    return BOGO_GIT_REV " (" __DATE__ " " __TIME__ ")";
+}
+
+static void write_str(const char* s)
+{
+    (void)!write(STDERR_FILENO, s, strlen(s));
+}
+
 void segfault_handler(int signal) {
     void *array[50];  // Array to store stack trace addresses
     size_t size;
+
+    // Which thread died, when, and what the loader was doing just before: the native frames alone often can't say.
+    // Plain write()s of preformatted text: this runs in a signal handler.
+    {
+        char name[32] = "?";
+        prctl(PR_GET_NAME, (unsigned long)name, 0, 0, 0);
+        char num[24];
+        write_str("=== unityloader crash report ===\nbuild: ");
+        write_str(bogo_build_id());
+        write_str("\nthread: ");
+        write_str(name);
+        write_str(" (tid ");
+        snprintf(num, sizeof(num), "%ld", (long)syscall(SYS_gettid));
+        write_str(num);
+        write_str(")\nuptime ms: ");
+        snprintf(num, sizeof(num), "%ld", bogo_uptime_ms());
+        write_str(num);
+        write_str("\n");
+        bogo_breadcrumbs_dump(STDERR_FILENO);
+    }
 
     // Get the stack trace
     size = backtrace(array, 50);

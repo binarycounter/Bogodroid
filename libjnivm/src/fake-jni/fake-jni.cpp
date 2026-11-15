@@ -48,11 +48,19 @@ FakeJni::Env &FakeJni::JniEnvContext::getJniEnv() {
 }
 
 std::shared_ptr<jnivm::Class> FakeJni::Jvm::findClass(const char *name) {
-    return jnivm::InternalFindClass(jnivm::VM::GetEnv().get(), name, true);
+    auto&& env = jnivm::VM::GetEnv();
+    if(!env) {
+        return nullptr;
+    }
+    return jnivm::InternalFindClass(env.get(), name, true);
 }
 
 jobject FakeJni::Jvm::createGlobalReference(std::shared_ptr<jnivm::Object> obj) {
-    return jnivm::VM::GetEnv()->GetJNIEnv()->NewGlobalRef((jobject)obj.get());
+    auto&& env = jnivm::VM::GetEnv();
+    if(!env) {
+        return nullptr;
+    }
+    return env->GetJNIEnv()->NewGlobalRef((jobject)obj.get());
 }
 
 #ifndef RTLD_LAZY

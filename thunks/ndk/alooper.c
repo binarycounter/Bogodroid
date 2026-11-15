@@ -41,8 +41,15 @@ ALooper* ALooper_prepare(int opts) {
     ALooper* looper = (ALooper*)pthread_getspecific(looper_key);
     if (!looper) {
         looper = malloc(sizeof(ALooper));
-        looper->epoll_fd = epoll_create1(0);
-        looper->wake_fd = eventfd(0, EFD_NONBLOCK);
+        if (!looper) return NULL;
+        looper->epoll_fd = epoll_create1(EPOLL_CLOEXEC);
+        looper->wake_fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+        if (looper->epoll_fd < 0 || looper->wake_fd < 0) {
+            if (looper->epoll_fd >= 0) close(looper->epoll_fd);
+            if (looper->wake_fd >= 0) close(looper->wake_fd);
+            free(looper);
+            return NULL;
+        }
         looper->refcount = 1;
         pthread_mutex_init(&looper->mutex, NULL);
         looper->fd_entries = NULL;
@@ -63,12 +70,14 @@ ALooper* ALooper_forThread() {
 }
 
 void ALooper_acquire(ALooper* looper) {
+    if (!looper) return;
     pthread_mutex_lock(&looper->mutex);
     looper->refcount++;
     pthread_mutex_unlock(&looper->mutex);
 }
 
 void ALooper_release(ALooper* looper) {
+    if (!looper) return;
     pthread_mutex_lock(&looper->mutex);
     if (--looper->refcount == 0) {
         close(looper->epoll_fd);
@@ -134,6 +143,8 @@ int ALooper_addFd(ALooper* looper, int fd, int ident, int events,
     looper->fd_entries = new_entry;
 
     if (epoll_ctl(looper->epoll_fd, EPOLL_CTL_ADD, fd, &ev) == -1) {
+        // Unlink the entry again before freeing it, or the list would keep a dangling head.
+        looper->fd_entries = new_entry->next;
         free(new_entry);
         pthread_mutex_unlock(&looper->mutex);
         return -1;
@@ -144,6 +155,7 @@ int ALooper_addFd(ALooper* looper, int fd, int ident, int events,
 }
 
 int ALooper_removeFd(ALooper* looper, int fd) {
+    if (!looper) return -1;
     pthread_mutex_lock(&looper->mutex);
     
     FdEntry** entry_ptr = &looper->fd_entries;
@@ -164,6 +176,7 @@ int ALooper_removeFd(ALooper* looper, int fd) {
 }
 
 void ALooper_wake(ALooper* looper) {
+    if (!looper) return;
     uint64_t value = 1;
     (void)! write(looper->wake_fd, &value, sizeof(value));
 }
@@ -185,39 +198,46 @@ static int process_events(ALooper* looper, int timeout_ms,
     }
 
     int result = ALOOPER_POLL_TIMEOUT;
-    pthread_mutex_lock(&looper->mutex);
-    
+
     for (int i = 0; i < num_events; i++) {
         int fd = events[i].data.fd;
-        FdEntry* entry = looper->fd_entries;
-        
-        while (entry) {
-            if (entry->fd == fd) {
-                int android_events = 0;
-                uint32_t epoll_ev = events[i].events;
-                
-                if (epoll_ev & EPOLLIN) android_events |= ALOOPER_EVENT_INPUT;
-                if (epoll_ev & EPOLLOUT) android_events |= ALOOPER_EVENT_OUTPUT;
-                if (epoll_ev & EPOLLERR) android_events |= ALOOPER_EVENT_ERROR;
-                if (epoll_ev & EPOLLHUP) android_events |= ALOOPER_EVENT_HANGUP;
+        uint32_t epoll_ev = events[i].events;
 
-                if (entry->callback) {
-                    int cb_result = entry->callback(fd, android_events, entry->data);
-                    if (!cb_result) ALooper_removeFd(looper, fd);
-                    result = ALOOPER_POLL_CALLBACK;
-                } else {
-                    if (out_fd) *out_fd = fd;
-                    if (out_events) *out_events = android_events;
-                    if (out_data) *out_data = entry->data;
-                    result = entry->ident;
-                }
+        // Copy the entry out under the lock; the callback runs unlocked because it may add/remove fds itself.
+        int found = 0, ident = 0;
+        ALooper_callbackFunc callback = NULL;
+        void* data = NULL;
+        pthread_mutex_lock(&looper->mutex);
+        for (FdEntry* entry = looper->fd_entries; entry; entry = entry->next) {
+            if (entry->fd == fd) {
+                found = 1;
+                ident = entry->ident;
+                callback = entry->callback;
+                data = entry->data;
                 break;
             }
-            entry = entry->next;
+        }
+        pthread_mutex_unlock(&looper->mutex);
+        if (!found) continue;
+
+        int android_events = 0;
+        if (epoll_ev & EPOLLIN) android_events |= ALOOPER_EVENT_INPUT;
+        if (epoll_ev & EPOLLOUT) android_events |= ALOOPER_EVENT_OUTPUT;
+        if (epoll_ev & EPOLLERR) android_events |= ALOOPER_EVENT_ERROR;
+        if (epoll_ev & EPOLLHUP) android_events |= ALOOPER_EVENT_HANGUP;
+
+        if (callback) {
+            int cb_result = callback(fd, android_events, data);
+            if (!cb_result) ALooper_removeFd(looper, fd);
+            result = ALOOPER_POLL_CALLBACK;
+        } else {
+            if (out_fd) *out_fd = fd;
+            if (out_events) *out_events = android_events;
+            if (out_data) *out_data = data;
+            result = ident;
         }
     }
-    
-    pthread_mutex_unlock(&looper->mutex);
+
     return result;
 }
 

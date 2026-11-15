@@ -95,6 +95,7 @@ add_executable(${CMAKE_PROJECT_NAME}
     javastubs/gplay.cpp
     platform/common/toml_include.cpp
     platform/common/debug_utils.cpp
+    platform/common/breadcrumbs.cpp
     platform/common/config.cpp
     platform/common/input_backend.cpp
     platform/common/display_info.cpp
@@ -145,6 +146,14 @@ target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC
     ${CMAKE_SOURCE_DIR}/javastubs
     ${PROJ_SOURCE_DIR}/javastubs
 )
+
+# Git revision for logs and crash reports ("unknown" when not built from a checkout)
+execute_process(COMMAND git -c safe.directory=* -C ${CMAKE_SOURCE_DIR} describe --always --dirty
+                OUTPUT_VARIABLE BOGO_GIT_REV OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+if(NOT BOGO_GIT_REV)
+    set(BOGO_GIT_REV "unknown")
+endif()
+set_source_files_properties(platform/common/debug_utils.cpp PROPERTIES COMPILE_DEFINITIONS BOGO_GIT_REV="${BOGO_GIT_REV}")
 
 # --- Build Type Specific Definitions ---
 target_compile_definitions(${CMAKE_PROJECT_NAME} PUBLIC 

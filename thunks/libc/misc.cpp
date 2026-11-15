@@ -6,9 +6,11 @@
 #include <string>
 #include <vector>
 #include <algorithm>
+#include <mutex>
 
 #include "platform.h"
 #include "logging.h"
+#include "breadcrumbs.h"
 #include "so_util.h"
 #include <dirent.h>
 #include <errno.h>
@@ -142,6 +144,7 @@ extern "C" ABI_ATTR void _exit_impl(int status)
 // IL2CPP's globalization code (System.Globalization.Native) dlopens the system ICU and probes versioned
 // symbols (u_getVersion_NN). On Android that's provided by the OS; here we hand it the host's ICU.
 static std::vector<void*> g_host_icu_handles;
+static std::mutex g_host_icu_mutex; // dlopen/dlsym come from any thread
 
 static void* open_host_icu(const char* prefix)
 {
@@ -159,7 +162,10 @@ static void* open_host_icu(const char* prefix)
         }
         globfree(&g);
     }
-    if (h) g_host_icu_handles.push_back(h);
+    if (h) {
+        std::lock_guard<std::mutex> lock(g_host_icu_mutex);
+        g_host_icu_handles.push_back(h);
+    }
     bogo_log("Host ICU %s -> %p\n", prefix, h);
     return h;
 }
@@ -176,19 +182,24 @@ extern "C" ABI_ATTR void* dlopen_impl(const char* filename, int flags)
     }
 
     bogo_log("Guest called dlopen for %s\n", filename);
+    bogo_breadcrumb("dlopen", filename);
 
     if (filename == NULL)
         return NULL;
 
     char resolved1[PATH_MAX];
     char resolved2[PATH_MAX];
-    realpath(filename, resolved1);
+    // A path that doesn't resolve (not there yet, or just a library name) is compared as given; the buffer
+    // would otherwise be uninitialised.
+    if (!realpath(filename, resolved1))
+        snprintf(resolved1, sizeof(resolved1), "%s", filename);
 
     so_module* head = so_get_head();
     while(head)
     {
         bogo_log("Checking %s\n", head->path);
-        realpath(head->path, resolved2);
+        if (!realpath(head->path, resolved2))
+            snprintf(resolved2, sizeof(resolved2), "%s", head->path);
         if (strcmp(resolved1, resolved2) == 0)
             return head;
         head = head->next;
@@ -224,8 +235,13 @@ extern "C" ABI_ATTR int dladdr_impl(const void* addr, Dl_info* info)
 extern "C" ABI_ATTR void* dlsym_impl(void* handle, const char* name)
 {
 
-    if (std::find(g_host_icu_handles.begin(), g_host_icu_handles.end(), handle) != g_host_icu_handles.end())
-        return dlsym(handle, name);
+    if (!name)
+        return NULL;
+    {
+        std::lock_guard<std::mutex> lock(g_host_icu_mutex);
+        if (std::find(g_host_icu_handles.begin(), g_host_icu_handles.end(), handle) != g_host_icu_handles.end())
+            return dlsym(handle, name);
+    }
 
     void* addr = (void*)so_resolve_link((so_module*)handle, name);
     bogo_log("dlsym(%p, %s) = 0x%p\n", handle, name, addr);
@@ -269,29 +285,29 @@ extern "C" ABI_ATTR int* __errno_impl(void)
 
 extern "C" ABI_ATTR int __android_log_write_impl(int prio, const char* tag, const char* text)
 {
-    char andlog[2048] = {};
-    warning("[+%5ldms] LOG[%s]: %s\n", bogo_uptime_ms(), tag, text);
+    warning("[+%5ldms] LOG[%s]: %s\n", bogo_uptime_ms(), tag ? tag : "?", text ? text : "");
     return 1;
 }
 
 extern "C" ABI_ATTR int __android_log_print_impl(int prio, const char* tag, const char* fmt, ...)
 {
-    char andlog[2048] = {};
+    char andlog[2048];
+    andlog[0] = 0;
     va_list va;
     va_start(va, fmt);
-    warning("[+%5ldms] LOG[%s]: ", bogo_uptime_ms(), tag);
-    int r = vsnprintf(andlog, 2047, fmt, va);
-    warning("%s\n", andlog);
+    int r = fmt ? vsnprintf(andlog, sizeof(andlog), fmt, va) : 0;
     va_end(va);
+    // One write: the tag and the text used to be two, which interleave when several threads log at once.
+    warning("[+%5ldms] LOG[%s]: %s\n", bogo_uptime_ms(), tag ? tag : "?", andlog);
     return r;
 }
 
 extern "C" ABI_ATTR int __android_log_vprint_impl(int prio, const char* tag, const char* fmt, va_list va)
 {
-    char andlog[2048] = {};
-    warning("[+%5ldms] LOG[%s]: ", bogo_uptime_ms(), tag);
-    int r = vsnprintf(andlog, 2047, fmt, va);
-    warning("%s\n", andlog);
+    char andlog[2048];
+    andlog[0] = 0;
+    int r = fmt ? vsnprintf(andlog, sizeof(andlog), fmt, va) : 0;
+    warning("[+%5ldms] LOG[%s]: %s\n", bogo_uptime_ms(), tag ? tag : "?", andlog);
     return r;
 }
 
@@ -335,6 +351,8 @@ std::string bogo_host_time_zone()
 extern "C" ABI_ATTR int __system_property_get_impl(const char* name, char* value)
 {
     // Mono/IL2CPP's TimeZoneInfo.Local asks for this to pick the local zone out of Android's tzdata file.
+    if (!value)
+        return 0;
     if (name && strcmp(name, "persist.sys.timezone") == 0) {
         std::string tz = bogo_host_time_zone();
         strncpy(value, tz.c_str(), 91); // PROP_VALUE_MAX is 92 including the terminator
@@ -367,7 +385,7 @@ ABI_ATTR int scandirat_impl(int fd, const char* dir,
         const struct bionic_dirent**))
 {
     char* clean_path = clean_jar_path(dir);
-    struct dirent** namelist_r;
+    struct dirent** namelist_r = NULL;
     struct bionic_dirent** result;
     struct bionic_dirent* filter_r;
 
@@ -375,18 +393,28 @@ ABI_ATTR int scandirat_impl(int fd, const char* dir,
     size_t nItems = 0;
 
     int res = scandirat(fd, clean_path, &namelist_r, NULL, NULL);
+    free(clean_path); // malloc'd by clean_jar_path()
 
     if (res > 0 && namelist_r != NULL) {
-        result = (bionic_dirent**)malloc(res * sizeof(struct bionic_dirent));
-        if (!result)
+        // The glibc listing is only a source to copy from; it is freed on every way out below.
+        auto free_source = [&]() {
+            for (int k = 0; k < res; k++)
+                free(namelist_r[k]);
+            free(namelist_r);
+        };
+        result = (bionic_dirent**)malloc(res * sizeof(struct bionic_dirent*));
+        if (!result) {
+            free_source();
             return -1;
+        }
 
         for (i = 0; i < res; i++) {
             filter_r = (bionic_dirent*)malloc(sizeof(struct bionic_dirent));
             if (!filter_r) {
-                while (i-- > 0)
-                    free(result[i]);
+                while (nItems > 0) // only the entries that were kept hold memory
+                    free(result[--nItems]);
                 free(result);
+                free_source();
                 return -1;
             }
 
@@ -395,8 +423,8 @@ ABI_ATTR int scandirat_impl(int fd, const char* dir,
             filter_r->d_reclen = namelist_r[i]->d_reclen;
             filter_r->d_type = namelist_r[i]->d_type;
 
-            strcpy(filter_r->d_name, namelist_r[i]->d_name);
-            filter_r->d_name[sizeof(namelist_r[i]->d_name) - 1] = '\0';
+            strncpy(filter_r->d_name, namelist_r[i]->d_name, sizeof(filter_r->d_name) - 1);
+            filter_r->d_name[sizeof(filter_r->d_name) - 1] = '\0';
 
             if (filter != NULL && !(*filter)(filter_r)) { // apply filter
                 free(filter_r);
@@ -410,6 +438,7 @@ ABI_ATTR int scandirat_impl(int fd, const char* dir,
             qsort(result, nItems, sizeof(struct bionic_dirent*), (__compar_fn_t)compar);
 
         *namelist = result;
+        free_source();
     } else {
         return res;
     }

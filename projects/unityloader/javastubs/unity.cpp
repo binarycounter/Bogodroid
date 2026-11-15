@@ -10,6 +10,7 @@
 #include "baron/baron.h"
 #include "jnibridge.h"
 #include "logging.h"
+#include "localrefs.h"
 
 ///// UnityPlayer
 std::shared_ptr<jnivm::android::app::Activity> jnivm::com::unity3d::player::UnityPlayer::currentActivity = nullptr;
@@ -22,6 +23,8 @@ bool jnivm::com::unity3d::player::UnityPlayerActivity::injectEvent(std::shared_p
     verbose("UnityPlayerActivity", "Injecting input event into native engine.");
 
     FakeJni::LocalFrame frame(vm);
+    // Input events arrive many times a second; drop the references each one creates (see localrefs.h).
+    LocalRefScope localRefs(frame.getJniEnv());
 
     auto unityPlayerClass = vm.findClass("com/unity3d/player/UnityPlayer").get();
     if (!unityPlayerClass) {
@@ -116,10 +119,10 @@ std::shared_ptr<jnivm::java::lang::reflect::Constructor> jnivm::com::unity3d::pl
 
 std::shared_ptr<jnivm::java::lang::reflect::Method> jnivm::com::unity3d::player::ReflectionHelper::getMethodID(std::shared_ptr<jnivm::java::lang::Class> clazz, std::shared_ptr<FakeJni::JString> methodName, std::shared_ptr<FakeJni::JString> signature, bool isStatic)
 {
-    if(clazz == nullptr)
+    if(clazz == nullptr || methodName == nullptr)
         return nullptr;
 
-    const char* name = methodName.get()->c_str();
+    const char* name = methodName->c_str();
     const char* sig;
 
     // Method 1: Search for matching methods in class by name only (bail out if there is ambiguity due to duplicates)
@@ -138,15 +141,19 @@ std::shared_ptr<jnivm::java::lang::reflect::Method> jnivm::com::unity3d::player:
             pending.erase(pending.begin());
             if (!c || !seen.insert(c.get()).second)
                 continue;
-            for(std::shared_ptr<Method> method : c->methods)
             {
-                if(strcmp(method->name.c_str(), name) != 0)
-                    continue;
-                sameName.push_back(method);
-                if(foundMethod == nullptr)
-                    foundMethod=method;
-                else if(foundMethod->signature != method->signature)
-                    duplicate=true;
+                // Natives get registered from other threads (RegisterNatives); don't iterate under their feet.
+                std::lock_guard<std::mutex> lock(c->mtx);
+                for(std::shared_ptr<Method> method : c->methods)
+                {
+                    if(!method || strcmp(method->name.c_str(), name) != 0)
+                        continue;
+                    sameName.push_back(method);
+                    if(foundMethod == nullptr)
+                        foundMethod=method;
+                    else if(foundMethod->signature != method->signature)
+                        duplicate=true;
+                }
             }
             if (c->baseclasses)
                 for (auto& b : c->baseclasses(env))
@@ -175,7 +182,7 @@ std::shared_ptr<jnivm::java::lang::reflect::Method> jnivm::com::unity3d::player:
     else if (strcmp("getClass", name) == 0)
         sig = "()Ljava/lang/Class;";
     else
-        sig = signature.get()->c_str();
+        sig = signature ? signature->c_str() : "";
 
     auto method = std::shared_ptr<Method>(
         (Method*)clazz->getMethod(sig, name),
@@ -228,27 +235,38 @@ std::shared_ptr<jnivm::java::lang::Class> unity_field_declaring_class(const jniv
 
 std::shared_ptr<jnivm::java::lang::reflect::Field> jnivm::com::unity3d::player::ReflectionHelper::getFieldID(std::shared_ptr<jnivm::java::lang::Class> clazz, std::shared_ptr<FakeJni::JString> fieldName, std::shared_ptr<FakeJni::JString> signature, bool isStatic)
 {
-    const char* name = fieldName.get()->c_str();
+    if (clazz == nullptr || fieldName == nullptr)
+        return nullptr;
+    const char* name = fieldName->c_str();
     const char* sig;
 
     if (strcmp("currentActivity", name) == 0 && strcmp(clazz->getName().c_str(), "com/unity3d/player/UnityPlayer") == 0)
         sig = "Lcom/unity3d/player/UnityPlayerActivity;";
     else
-        sig = signature.get()->c_str();
+        sig = signature ? signature->c_str() : "";
 
     // UnityPlayer.currentActivity is registered as android/app/Activity; Unity 7 asks for it as UnityPlayerActivity.
     // Match by name alone: getFieldSignature() then hands back the registered type, which the later
     // GetStaticFieldID lookup accepts.
     const bool anyType = strcmp("currentActivity", name) == 0 && strcmp(clazz->getName().c_str(), "com/unity3d/player/UnityPlayer") == 0;
-    for (auto field : clazz->fields) {
-        if (field->name == name && (anyType || field->type == sig)) {
-            {
-                std::lock_guard<std::mutex> lock(g_fieldOwnersMutex);
-                g_fieldOwners[field.get()] = clazz;
+    std::shared_ptr<jnivm::Field> match;
+    {
+        std::lock_guard<std::mutex> lock(clazz->mtx);
+        for (auto& field : clazz->fields) {
+            if (field && field->name == name && (anyType || field->type == sig)) {
+                match = field;
+                break;
             }
-            verbose("UnityReflection", "getFieldID(%s, %s, %s, %d) = %p \n", clazz->getName().c_str(), fieldName.get()->c_str(), sig, isStatic, field);
-            return field;
         }
+    }
+    if (match) {
+        {
+            std::lock_guard<std::mutex> lock(g_fieldOwnersMutex);
+            g_fieldOwners[match.get()] = clazz;
+        }
+        // (was passing the shared_ptr itself to a %p varargs slot)
+        verbose("UnityReflection", "getFieldID(%s, %s, %s, %d) = %p \n", clazz->getName().c_str(), fieldName->c_str(), sig, isStatic, (void*)match.get());
+        return match;
     }
 
     verbose("UnityReflection", "getFieldID(%s, %s, %s, %d) = null \n", clazz->getName().c_str(), fieldName.get()->c_str(), sig, isStatic);
@@ -267,8 +285,8 @@ std::shared_ptr<jnivm::Object> jnivm::com::unity3d::player::ReflectionHelper::ne
     if (interface == nullptr)
         return nullptr;
     verbose("UnityReflection", "newProxyInstance(%p, %ld, %s) \n", player.get(), nativeHandle, interface.get()->getName().c_str());
-    // Same proxy type JNIBridge.newInterfaceProxy hands out: native callbacks arrive through JNIBridge.invoke.
-    return std::make_shared<jnivm::bitter::jnibridge::JNIBridgeProxy>(nativeHandle, std::set<std::string>{interface->getName()});
+    // A C# AndroidJavaProxy: its methods are called back through ReflectionHelper.nativeProxyInvoke, not JNIBridge.
+    return std::make_shared<jnivm::bitter::jnibridge::JNIBridgeProxy>(nativeHandle, std::set<std::string>{interface->getName()}, true);
 }
 
 std::shared_ptr<jnivm::Object> jnivm::com::unity3d::player::ReflectionHelper::createInvocationError(long nativeHandle, bool toggle)

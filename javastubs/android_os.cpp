@@ -5,6 +5,7 @@ extern toml::table config;
 #include "baron/baron.h"
 #include "javac.h"
 #include "logging.h"
+#include "breadcrumbs.h"
 #include <fstream>
 #include <unistd.h>
 #include <pthread.h>
@@ -114,12 +115,17 @@ jnivm::android::os::Looper::Looper()
     pthread_mutex_init(&mQueueMutex, nullptr);
     // Prepare the underlying native ALooper for this thread
     nativeLooper = ALooper_prepare(0);
+    // The native looper is released by its thread's TLS destructor; hold our own reference so that Handlers
+    // on other threads can't wake (write to the fd of) a looper that was freed when its thread ended.
+    if (nativeLooper)
+        ALooper_acquire(nativeLooper);
 }
 
 jnivm::android::os::Looper::~Looper()
 {
     pthread_mutex_destroy(&mQueueMutex);
-    // ALooper_release is handled by the ALooper's own TLS destructor
+    if (nativeLooper)
+        ALooper_release(nativeLooper);
 }
 
 void jnivm::android::os::Looper::prepare()
@@ -167,6 +173,9 @@ void jnivm::android::os::Looper::loop()
             if (nextPollTimeout < 0) {
                 nextPollTimeout = 0; // Message is already due, don't block
             }
+            if (nextPollTimeout > 0x7fffffffLL) {
+                nextPollTimeout = 0x7fffffffLL; // don't wrap around when narrowing to int
+            }
         }
         pthread_mutex_unlock(&mQueueMutex);
 
@@ -192,24 +201,34 @@ void jnivm::android::os::Looper::loop()
                 break; // No more due messages
             }
 
-            bool handled = false;
-            // First, see if the Handler has a specific Callback object.
-            // This takes precedence over everything else.
-            if (message->target && message->target->mCallback) {
-                handled = message->target->mCallback->handleMessage(message);
-            }
-
-            // If the message was not handled by the Handler's Callback,
-            // dispatch it to the appropriate target.
-            if (!handled) {
-                if (message->callback) {
-                    // This is a message from Handler::post(), run the Runnable.
-                    message->callback->run();
-                } else if (message->target) {
-                    // This is a message from Handler::sendMessage(), call the Handler's
-                    // own handleMessage method.
-                    message->target->handleMessage(message);
+            // A throwing callback must not take the whole looper thread down (for the Choreographer that would
+            // silently stop all frame callbacks), so each message is dispatched on its own.
+            try {
+                bool handled = false;
+                // First, see if the Handler has a specific Callback object.
+                // This takes precedence over everything else.
+                if (message->target && message->target->mCallback) {
+                    handled = message->target->mCallback->handleMessage(message);
                 }
+
+                // If the message was not handled by the Handler's Callback,
+                // dispatch it to the appropriate target.
+                if (!handled) {
+                    if (message->callback) {
+                        // This is a message from Handler::post(), run the Runnable.
+                        message->callback->run();
+                    } else if (message->target) {
+                        // This is a message from Handler::sendMessage(), call the Handler's
+                        // own handleMessage method.
+                        message->target->handleMessage(message);
+                    }
+                }
+            } catch (const std::exception& e) {
+                bogo_breadcrumb("looper: message handler threw", e.what());
+                verbose("Looper", "Exception in message handler: %s", e.what());
+            } catch (...) {
+                bogo_breadcrumb("looper: message handler threw");
+                verbose("Looper", "Unknown exception in message handler");
             }
             // The message shared_ptr goes out of scope and is automatically recycled.
         }
@@ -218,8 +237,7 @@ void jnivm::android::os::Looper::loop()
 
 void jnivm::android::os::Looper::quit()
 {
-    if (!mQuitting) {
-        mQuitting = true;
+    if (!mQuitting.exchange(true)) {
         // Wake up the looper so it can check the mQuitting flag and exit.
         if (nativeLooper) {
             ALooper_wake(nativeLooper);
@@ -270,20 +288,17 @@ void jnivm::android::os::Message::recycle()
 void jnivm::android::os::Message::sendToTarget()
 {
     if (target) {
-        // 'this' is a raw pointer here. We need a shared_ptr to pass.
-        // This is tricky. The caller (the game code) holds the shared_ptr.
-        // The best approach is to have the JNI layer pass the shared_ptr.
-        // Assuming your JNI bridge can do that:
-        target->sendMessage(std::static_pointer_cast<jnivm::android::os::Message>(shared_from_this())); // If Message derives from std::enable_shared_from_this
-
-        // A simpler, safer approach if you can't use shared_from_this:
-        // The game code must call handler->sendMessage(message), not message->sendToTarget().
-        // For your shim, you can probably just have the JNI layer do that translation.
-        // For now, let's implement it with a warning:
-        if (target) {
-            // WARNING: This assumes the shared_ptr for this message still exists somewhere!
-            target->sendMessage(std::shared_ptr<jnivm::android::os::Message>(this, [](jnivm::android::os::Message*) { /* no-op deleter */ }));
+        // Queue this message exactly once, through the shared_ptr that owns it. (This used to send it a second
+        // time through a non-owning shared_ptr, which delivered every message twice and could leave a
+        // dangling pointer in the queue once the message was recycled.)
+        std::shared_ptr<jnivm::android::os::Message> self;
+        try {
+            self = std::static_pointer_cast<jnivm::android::os::Message>(shared_from_this());
+        } catch (const std::bad_weak_ptr&) {
+            verbose("Message", "sendToTarget on a message that isn't owned by a shared_ptr; dropped");
+            return;
         }
+        target->sendMessage(self);
     }
 }
 
@@ -354,7 +369,8 @@ bool jnivm::android::os::Handler::sendMessageAtTime(std::shared_ptr<jnivm::andro
 
     // Always wake the looper. It needs to re-evaluate its sleep time,
     // especially if this new message is earlier than the one it was waiting for.
-    ALooper_wake(mLooper->nativeLooper);
+    if (mLooper->nativeLooper)
+        ALooper_wake(mLooper->nativeLooper);
 
     return true;
 }
@@ -392,7 +408,12 @@ void jnivm::android::os::HandlerThread::run()
     // This is the code that executes on the new background thread.
 
     // 1. Prepare a Looper for this thread.
-    jnivm::android::os::Looper::prepare();
+    try {
+        jnivm::android::os::Looper::prepare();
+    } catch (const std::exception& e) {
+        verbose("HandlerThread", "Looper.prepare failed: %s", e.what());
+        return;
+    }
 
     // 2. Lock, notify the waiting main thread that the looper is ready, and store it.
     {
@@ -402,7 +423,9 @@ void jnivm::android::os::HandlerThread::run()
     }
 
     // 3. Start the message processing loop. This will block until quit() is called.
-    mLooper->loop();
+    std::shared_ptr<jnivm::android::os::Looper> looper = jnivm::android::os::Looper::myLooper();
+    if (looper)
+        looper->loop();
 }
 
 std::shared_ptr<jnivm::android::os::Looper> jnivm::android::os::HandlerThread::getLooper()
@@ -418,7 +441,14 @@ std::shared_ptr<jnivm::android::os::Looper> jnivm::android::os::HandlerThread::g
 
 bool jnivm::android::os::HandlerThread::quit()
 {
-    std::shared_ptr<jnivm::android::os::Looper> looper = getLooper();
+    // Don't block forever when the thread never started (or failed to create its looper), e.g. when a
+    // HandlerThread is destroyed before start() was called.
+    std::shared_ptr<jnivm::android::os::Looper> looper;
+    {
+        std::unique_lock<std::mutex> lock(mMutex);
+        mCv.wait_for(lock, std::chrono::milliseconds(500), [this] { return mLooper != nullptr; });
+        looper = mLooper;
+    }
     if (looper) {
         looper->quit();
         return true;
@@ -488,7 +518,7 @@ BEGIN_NATIVE_DESCRIPTOR(jnivm::android::os::Build) { FakeJni::Constructor<Build>
     BEGIN_NATIVE_DESCRIPTOR(jnivm::android::os::Message) { FakeJni::Constructor<Message> {} },
     { FakeJni::Field<&Message::what> {}, "what", FakeJni::JFieldID::PUBLIC },
     { FakeJni::Function<&Message::obtain> {}, "obtain", FakeJni::JMethodID::STATIC },
-    { FakeJni::Function<&Message::recycle> {}, "recycle", FakeJni::JMethodID::PUBLIC },
+    { FakeJni::Function<&Message::recycleFromJava> {}, "recycle", FakeJni::JMethodID::PUBLIC },
     { FakeJni::Function<&Message::sendToTarget> {}, "sendToTarget", FakeJni::JMethodID::PUBLIC },
     END_NATIVE_DESCRIPTOR
 

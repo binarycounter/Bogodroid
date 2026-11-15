@@ -31,6 +31,7 @@ toml::table config;
 #include "alooper.h"
 
 #include "debug_utils.h"
+#include "breadcrumbs.h"
 #include "egl_sdl.h"
 #include "glad.h"
 #include "glad_egl.h"
@@ -97,6 +98,17 @@ extern EGLSurface egl_surface;
 
 bool llcompat = true;
 
+// loaded_modules has a fixed size; a Mono game can ship more managed assemblies than that, so don't run off the end.
+static void register_module(int& count, so_module* m)
+{
+    const int capacity = (int)(sizeof(loaded_modules) / sizeof(loaded_modules[0])) - 1; // keep the NULL terminator
+    if (count >= capacity) {
+        fprintf(stderr, "Warning: too many modules (limit %d); not tracking one\n", capacity);
+        return;
+    }
+    loaded_modules[count++] = m;
+}
+
 Baron::Jvm vm;
 
 #pragma GCC push_options
@@ -133,7 +145,7 @@ int main(int argc, char* argv[])
     {
         char cwd[512] = "?";
         if (!getcwd(cwd, sizeof(cwd))) cwd[0] = '?';
-        fprintf(stderr, "unityloader built %s %s, cwd=%s\n", __DATE__, __TIME__, cwd);
+        fprintf(stderr, "unityloader %s, cwd=%s\n", bogo_build_id(), cwd);
         for (int i = 0; i < argc; i++) fprintf(stderr, "  argv[%d]=%s\n", i, argv[i]);
         atexit([]() { fprintf(stderr, "unityloader: process exiting (atexit)\n"); });
     }
@@ -194,6 +206,10 @@ int main(int argc, char* argv[])
     InitJNIBinding(&vm);
 
     JClass* unityClass = vm.findClass("com/unity3d/player/UnityPlayer").get();
+    if (!unityClass) {
+        fprintf(stderr, "Error: com/unity3d/player/UnityPlayer isn't registered with the VM\n");
+        return 1;
+    }
 
     auto unityActivity = std::make_shared<jnivm::com::unity3d::player::UnityPlayerActivity>();
     auto unityPlayer = std::make_shared<jnivm::com::unity3d::player::UnityPlayer>();
@@ -214,7 +230,7 @@ int main(int argc, char* argv[])
     if (!load_so_from_file(&lcpp, path_lcpp, addr_lcpp)) {
         printf("libc++_shared.so not found; the game may bring its own C++ runtime\n");
     }
-    loaded_modules[module_count++] = &lcpp;
+    register_module(module_count, &lcpp);
 
     so_module lbootstrap = {};
     uintptr_t addr_lbootstrap = 0x4200000000;
@@ -226,63 +242,63 @@ int main(int argc, char* argv[])
     if (llcompat) {
         printf("LemonLoader Compat active, loading libBootstrap.so and libdobby.so\n");
         load_so_from_file(&ldobby, path_ldobby, addr_ldobby, true);
-        loaded_modules[module_count++] = &ldobby;
+        register_module(module_count, &ldobby);
 
         load_so_from_file(&lbootstrap, path_lbootstrap, addr_lbootstrap, true);
-        loaded_modules[module_count++] = &lbootstrap;
+        register_module(module_count, &lbootstrap);
 
         so_module* mod = (so_module*)calloc(1, sizeof(so_module));
         if (mod && load_so_from_file(mod, BOGO_LIB_DIR "/libcrypto.so", 0x4251000000, true)) {
             printf("  Loaded: libcrypto.so\n");
-            loaded_modules[module_count++] = mod;
+            register_module(module_count, mod);
         }
 
         mod = (so_module*)calloc(1, sizeof(so_module));
         if (mod && load_so_from_file(mod, BOGO_LIB_DIR "/libssl.so", 0x4252000000, true)) {
             printf("  Loaded: libssl.so\n");
-            loaded_modules[module_count++] = mod;
+            register_module(module_count, mod);
         }
 
         mod = (so_module*)calloc(1, sizeof(so_module));
         if (mod && load_so_from_file(mod, "assets/dotnet/host/fxr/8.0.6/libhostfxr.so", 0x4253000000, true)) {
             printf("  Loaded: libhostfxr.so\n");
-            loaded_modules[module_count++] = mod;
+            register_module(module_count, mod);
         }
 
         mod = (so_module*)calloc(1, sizeof(so_module));
         if (mod && load_so_from_file(mod, "assets/dotnet/shared/Microsoft.NETCore.App/8.0.6/libhostpolicy.so", 0x4254000000, true)) {
             printf("  Loaded: libhostpolicy.so\n");
-            loaded_modules[module_count++] = mod;
+            register_module(module_count, mod);
         }
 
         mod = (so_module*)calloc(1, sizeof(so_module));
         if (mod && load_so_from_file(mod, "assets/dotnet/shared/Microsoft.NETCore.App/8.0.6/libcoreclr.so", 0x4255000000, true)) {
             printf("  Loaded: libcoreclr.so\n");
-            loaded_modules[module_count++] = mod;
+            register_module(module_count, mod);
         }
 
         mod = (so_module*)calloc(1, sizeof(so_module));
         if (mod && load_so_from_file(mod, "assets/dotnet/shared/Microsoft.NETCore.App/8.0.6/libSystem.Native.so", 0x4256000000, true)) {
             printf("  Loaded: libSystem.Native.so\n");
-            loaded_modules[module_count++] = mod;
+            register_module(module_count, mod);
         }
 
         mod = (so_module*)calloc(1, sizeof(so_module));
         if (mod && load_so_from_file(mod, "assets/dotnet/shared/Microsoft.NETCore.App/8.0.6/libSystem.Globalization.Native.so", 0x4257000000, true)) {
             printf("  Loaded: libSystem.Globalization.Native.so\n");
-            loaded_modules[module_count++] = mod;
+            register_module(module_count, mod);
         }
 
         mod = (so_module*)calloc(1, sizeof(so_module));
         if (mod && load_so_from_file(mod, "assets/dotnet/shared/Microsoft.NETCore.App/8.0.6/libSystem.IO.Compression.Native.so", 0x4258000000, true)) {
             printf("  Loaded: libSystem.IO.Compression.Native.so\n");
-            loaded_modules[module_count++] = mod;
+            register_module(module_count, mod);
         }
 
         mod = (so_module*)calloc(1, sizeof(so_module));
         if (mod && load_so_from_file(mod, "assets/dotnet/shared/Microsoft.NETCore.App/8.0.6/libSystem.Security.Cryptography.Native.OpenSsl.so", 0x4259000000, true)) {
             printf("  Loaded: libSystem.Security.Cryptography.Native.OpenSsl.so\n");
-            loaded_modules[module_count++] = mod;
+            register_module(module_count, mod);
         }
 
         auto lemonBootJNI_OnLoad = (jint (*)(JavaVM* vm, void* reserved))(so_symbol(&lbootstrap, "JNI_OnLoad"));
@@ -299,7 +315,7 @@ int main(int argc, char* argv[])
     // Newer Unity versions have no libmain.so: the Java side loads libunity.so directly.
     bool haveLibmain = load_so_from_file(&lmain, path_lmain, addr_lmain, true);
     if (haveLibmain) {
-        loaded_modules[module_count++] = &lmain;
+        register_module(module_count, &lmain);
     } else {
         printf("No libmain.so found, assuming newer Unity (libunity.so is loaded directly)\n");
     }
@@ -322,7 +338,7 @@ int main(int argc, char* argv[])
         if (!load_so_from_file(&lposix, path_lposix, addr_lposix)) {
             return 1;
         }
-        loaded_modules[module_count++] = &lposix;
+        register_module(module_count, &lposix);
 
         printf("Loading libmono-native.so\n");
         uintptr_t addr_lmnative = 0x3750000000;
@@ -330,13 +346,13 @@ int main(int argc, char* argv[])
         if (!load_so_from_file(&lmnative, path_lmnative, addr_lmnative)) {
             return 1;
         }
-        loaded_modules[module_count++] = &lmnative;
+        register_module(module_count, &lmnative);
 
         so_dynamic_libraries[4] = symtable_monobridge;
         so_dynamic_libraries[5] = NULL;
         monobridge_init(&lil2cpp);
     }
-    loaded_modules[module_count++] = &lil2cpp;
+    register_module(module_count, &lil2cpp);
 
 #ifdef IL2CPP_TRACE
     if(config["debug"]["log_il2cpp"].value_or<bool>(false))
@@ -350,7 +366,7 @@ int main(int argc, char* argv[])
     if (!load_so_from_file(&lunity, path_lunity, addr_lunity)) {
         return 1;
     }
-    loaded_modules[module_count++] = &lunity;
+    register_module(module_count, &lunity);
 
     printf("Loading libburst\n");
     so_module lburst = {};
@@ -359,14 +375,14 @@ int main(int argc, char* argv[])
     if (!load_so_from_file(&lburst, path_lburst, addr_lburst, true)) {
         printf("No libburst found\n");
     } else
-        loaded_modules[module_count++] = &lburst;
+        register_module(module_count, &lburst);
 
     printf("Loading libUnityHelp\n");
     so_module lhelpers = {};
     uintptr_t addr_lhelpers = 0x4200000000;
     const char* path_lhelpers = BOGO_LIB_DIR "/libUnityHelpers_Android.so";
     load_so_from_file(&lhelpers, path_lhelpers, addr_lhelpers, true);
-    loaded_modules[module_count++] = &lhelpers;
+    register_module(module_count, &lhelpers);
 
     const char* directory = "assets/bin/Data/Managed/";
     DIR* d = opendir(directory);
@@ -388,7 +404,7 @@ int main(int argc, char* argv[])
         so_module* mod = (so_module*)calloc(1, sizeof(so_module));
         if (mod && load_so_from_file(mod, path, (uintptr_t)NULL)) {
             printf("  Loaded: %s\n", entry->d_name);
-            loaded_modules[module_count++] = mod;
+            register_module(module_count, mod);
         } else {
             fprintf(stderr, "  Failed to load: %s\n", path);
             free(mod); // It is safe to call free() on a NULL pointer
@@ -404,8 +420,16 @@ int main(int argc, char* argv[])
         }
 
         JClass* nativeLoaderClass = vm.findClass("com/unity3d/player/NativeLoader").get();
+        if (!nativeLoaderClass) {
+            fprintf(stderr, "Error: com/unity3d/player/NativeLoader isn't known to the VM; can't load libmain.so\n");
+            return 1;
+        }
         LocalFrame frame(vm);
         auto mainLoad = nativeLoaderClass->getMethod("(Ljava/lang/String;)Z", "load");
+        if (!mainLoad) {
+            fprintf(stderr, "Error: NativeLoader.load(String) isn't registered\n");
+            return 1;
+        }
 
         printf("calling com/unity3d/player/NativeLoader/load from libmain.so\n");
         jvalue ret = mainLoad.invoke(frame.getJniEnv(), nativeLoaderClass, (JString) BOGO_LIB_DIR);
@@ -427,7 +451,13 @@ int main(int argc, char* argv[])
         unityJNI_OnLoad(&vm, nullptr);
     }
 
+    // The input thread starts before Unity has initialised (the first nativeRender below does all of that, and takes
+    // seconds). An event injected into the half-built engine crashed it (null pointer in its memory manager), so
+    // input is held back until that first render has returned, as Android's UnityPlayer does with its surface.
+    static std::atomic<bool> inputReady{ false };
     backend.setKeyCallback([unityActivity](std::shared_ptr<jnivm::android::view::KeyEvent> event) {
+        if (!inputReady)
+            return;
         unityActivity->injectEvent(event);
     });
 
@@ -438,11 +468,13 @@ int main(int argc, char* argv[])
         backend.setFocusCallback([](bool focused) { focusState = focused ? 1 : 0; });
 
     backend.setMotionCallback([unityActivity](std::shared_ptr<jnivm::android::view::MotionEvent> event) {
+        if (!inputReady)
+            return;
         unityActivity->injectEvent(event);
     });
 
     // Debug: list everything libunity registered on UnityPlayer (names + signatures), to find signature changes between Unity versions.
-    if (getenv("BOGODROID_VERBOSE")) {
+    if (unityClass && getenv("BOGODROID_VERBOSE")) {
         std::lock_guard<std::mutex> lock(unityClass->mtx);
         fprintf(stderr, "Methods registered on com/unity3d/player/UnityPlayer (%zu):\n", unityClass->methods.size());
         for (auto& m : unityClass->methods)
@@ -531,6 +563,10 @@ int main(int argc, char* argv[])
         }
     }
     auto unityNRecreateGfxState = playerClass->getMethod("(ILandroid/view/Surface;)V", "nativeRecreateGfxState");
+    if (!unityNRecreateGfxState) {
+        fprintf(stderr, "Error: libunity registered no nativeRecreateGfxState(int, Surface); this Unity version isn't supported yet.\n");
+        return 1;
+    }
     printf("calling nativeRecreateGfxState from libunity.so\n");
     auto surface = std::make_shared<jnivm::android::view::Surface>();
     LocalFrame frame3(vm);
@@ -543,25 +579,43 @@ int main(int argc, char* argv[])
     }
 
     auto unityNSendSurfaceChangedEvent = playerClass->getMethod("()V", "nativeSendSurfaceChangedEvent");
+    if (!unityNSendSurfaceChangedEvent) {
+        fprintf(stderr, "Error: libunity registered no nativeSendSurfaceChangedEvent\n");
+        return 1;
+    }
     printf("calling nativeSendSurfaceChangedEvent from libunity.so\n");
     unityNSendSurfaceChangedEvent.invoke(frame3.getJniEnv(), unityPlayerObj.get());
 
     gdb_break_here();
 
     auto unityNResume = playerClass->getMethod("()V", "nativeResume");
+    if (!unityNResume) {
+        fprintf(stderr, "Error: libunity registered no nativeResume\n");
+        return 1;
+    }
     printf("calling nativeResume from libunity.so\n");
     unityNResume.invoke(frame3.getJniEnv(), unityPlayerObj.get());
 
     auto unityNFocusChanged = playerClass->getMethod("(Z)V", "nativeFocusChanged");
+    if (!unityNFocusChanged) {
+        fprintf(stderr, "Error: libunity registered no nativeFocusChanged\n");
+        return 1;
+    }
     printf("calling nativeFocusChanged from libunity.so\n");
     unityNFocusChanged.invoke(frame3.getJniEnv(), unityPlayerObj.get(), true);
 
     auto unityNRender = playerClass->getMethod("()Z", "nativeRender");
+    if (!unityNRender) {
+        fprintf(stderr, "Error: libunity registered no nativeRender\n");
+        return 1;
+    }
     printf("calling nativeRender from libunity.so\n");
     auto ret3 = unityNRender.invoke(frame3.getJniEnv(), unityPlayerObj.get());
 
     printf("NativeRender returned %d, Entering loop...\n", ret3.z);
     stage("first nativeRender returned, entering render loop");
+    bogo_breadcrumb("render loop entered");
+    inputReady = true;
 
     constexpr auto frame_duration = std::chrono::milliseconds(15);
     // The app has created new threads and is happily doing its thing, we just do nothing for now. Eventually, this will be a SDL based event loop for controller input.

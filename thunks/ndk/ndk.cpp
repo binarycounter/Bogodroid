@@ -38,15 +38,20 @@ ABI_ATTR int32_t AConfiguration_getMnc(AConfiguration *aconfig)
 }
 ABI_ATTR void AConfiguration_getLanguage(AConfiguration *aconfig, char *outLanguage)
 {
+    if (!outLanguage)
+        return;
     const char *lang = config["device"]["language"].value_or("en");
-    outLanguage[0] = lang[0];
-    outLanguage[1] = lang[1];
+    // Two characters, even if the configured string is shorter (don't read past its terminator)
+    outLanguage[0] = lang[0] ? lang[0] : 'e';
+    outLanguage[1] = (lang[0] && lang[1]) ? lang[1] : 'n';
 }
 ABI_ATTR void AConfiguration_getCountry(AConfiguration *aconfig, char *outCountry)
 {
+    if (!outCountry)
+        return;
     const char *country = config["device"]["country"].value_or("US");
-    outCountry[0] = country[0];
-    outCountry[1] = country[1];
+    outCountry[0] = country[0] ? country[0] : 'U';
+    outCountry[1] = (country[0] && country[1]) ? country[1] : 'S';
 }
 ABI_ATTR int32_t AConfiguration_getOrientation(AConfiguration *aconfig)
 {

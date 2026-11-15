@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <semaphore.h>
+#include <sched.h>
+#include <unistd.h>
 
 #include "platform.h"
 #include "thunk_pthread.h"
@@ -40,25 +42,95 @@ ABI_ATTR void* pthread_getspecific_impl(pthread_key_t key)
     return pthread_getspecific(key);
 }
 
+// The pointer slot sits inside the guest's pthread_mutex_t / pthread_cond_t, whose bionic definition only needs
+// 4-byte alignment. ARM64 acquire/release atomics (and __atomic_* in general) fault (SIGBUS) on a misaligned
+// address, plain loads and stores don't, so the slot is accessed with memcpy plus explicit fences.
+// Naturally aligned slots (the usual case) get real atomics; a misaligned one falls back to memcpy and fences.
+template <class T>
+static inline T slot_load(T* p)
+{
+    if (((uintptr_t)p & (sizeof(T) - 1)) == 0)
+        return __atomic_load_n(p, __ATOMIC_ACQUIRE);
+    T v;
+    memcpy(&v, p, sizeof(v));
+    __atomic_thread_fence(__ATOMIC_ACQUIRE);
+    return v;
+}
+template <class T>
+static inline void slot_store(T* p, T v)
+{
+    if (((uintptr_t)p & (sizeof(T) - 1)) == 0) {
+        __atomic_store_n(p, v, __ATOMIC_RELEASE);
+        return;
+    }
+    __atomic_thread_fence(__ATOMIC_RELEASE);
+    memcpy(p, &v, sizeof(v));
+}
+
+// Bionic mutexes/conds are plain structs the guest may initialise statically (all zero, or a type code for
+// recursive / error-checking mutexes). Here the first 8 bytes hold a pointer to a real glibc object that is
+// created on first use. That lazy creation has to be atomic, or two threads racing on the first lock each
+// create their own mutex and the "mutual exclusion" silently stops excluding anything.
+static pthread_mutex_t g_lazy_init_lock = PTHREAD_MUTEX_INITIALIZER;
+
+// Static initialiser values of bionic's recursive / error-checking mutexes live in the pointer slot.
+#define BIONIC_MUTEX_RECURSIVE_INIT 0x4000
+#define BIONIC_MUTEX_ERRORCHECK_INIT 0x8000
+
+static pthread_mutex_t* mutex_create(const pthread_mutexattr_t* attr)
+{
+    pthread_mutex_t* m = (pthread_mutex_t*)calloc(1, sizeof(pthread_mutex_t));
+    if (!m)
+        return NULL;
+    if (pthread_mutex_init(m, attr) != 0)
+    {
+        free(m);
+        return NULL;
+    }
+    return m;
+}
+
+// Returns the real mutex behind a guest mutex, creating it if this is the first use. NULL on failure.
+static pthread_mutex_t* mutex_get(pthread_mutex_t** uid)
+{
+    pthread_mutex_t* m = slot_load(uid);
+    if ((uintptr_t)m > 0x10000)
+        return m;
+
+    pthread_mutex_lock(&g_lazy_init_lock);
+    m = slot_load(uid);
+    if ((uintptr_t)m <= 0x10000)
+    {
+        pthread_mutexattr_t attr;
+        const pthread_mutexattr_t* pattr = NULL;
+        if ((uintptr_t)m == BIONIC_MUTEX_RECURSIVE_INIT || (uintptr_t)m == BIONIC_MUTEX_ERRORCHECK_INIT)
+        {
+            pthread_mutexattr_init(&attr);
+            pthread_mutexattr_settype(&attr, (uintptr_t)m == BIONIC_MUTEX_RECURSIVE_INIT ? PTHREAD_MUTEX_RECURSIVE : PTHREAD_MUTEX_ERRORCHECK);
+            pattr = &attr;
+        }
+        m = mutex_create(pattr);
+        if (pattr)
+            pthread_mutexattr_destroy(&attr);
+        if (m)
+            slot_store(uid, m);
+    }
+    pthread_mutex_unlock(&g_lazy_init_lock);
+    return m;
+}
+
 ABI_ATTR int pthread_mutex_init_impl(BIONIC_pthread_mutex_t *_uid, pthread_mutexattr_t **mutexattr)
 {
     pthread_mutex_t **uid = (pthread_mutex_t**)_uid;
+    if (uid < (pthread_mutex_t**)0x1000)
+        return EINVAL;
 
-    pthread_mutexattr_t *attr = mutexattr ? *mutexattr : NULL; 
-    pthread_mutex_t *m = (pthread_mutex_t *)calloc(1, sizeof(pthread_mutex_t));
-    *m = PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutexattr_t *attr = mutexattr ? *mutexattr : NULL;
+    pthread_mutex_t *m = mutex_create(attr);
     if (!m)
-        return -1;
+        return ENOMEM;
 
-    int ret = pthread_mutex_init(m, attr);
-    if (ret < 0)
-    {
-        free(m);
-        return -1;
-    }
-
-    *uid = m;
-
+    slot_store(uid, m);
     return 0;
 }
 
@@ -66,11 +138,12 @@ ABI_ATTR int pthread_mutex_destroy_impl(BIONIC_pthread_mutex_t *_uid)
 {
     pthread_mutex_t **uid = (pthread_mutex_t**)_uid;
 
-    if (uid && *uid && (uintptr_t)*uid > 0x8000)
+    pthread_mutex_t* m = uid ? slot_load(uid) : NULL;
+    if ((uintptr_t)m > 0x10000)
     {
-        pthread_mutex_destroy(*uid);
-        free(*uid);
-        *uid = NULL;
+        pthread_mutex_destroy(m);
+        free(m);
+        slot_store(uid, (pthread_mutex_t*)NULL);
     }
     return 0;
 }
@@ -82,27 +155,23 @@ ABI_ATTR int pthread_mutex_lock_impl(BIONIC_pthread_mutex_t *_uid)
     if (uid < (pthread_mutex_t**)0x1000)
         return -1;
 
-    if (!*uid)
-        pthread_mutex_init_impl(_uid, NULL);
-    
-    return pthread_mutex_lock(*uid);
+    pthread_mutex_t* m = mutex_get(uid);
+    if (!m)
+        return ENOMEM;
+    return pthread_mutex_lock(m);
 }
 
 ABI_ATTR int pthread_mutex_unlock_impl(BIONIC_pthread_mutex_t *_uid)
 {
     pthread_mutex_t **uid = (pthread_mutex_t**)_uid;
 
-    int ret = 0;
     if (uid < (pthread_mutex_t**)0x1000)
         return -1;
 
-    if (!*uid)
-        ret = pthread_mutex_init_impl(_uid, NULL);
-
-    if (ret < 0)
-        return ret;
-    
-    return pthread_mutex_unlock(*uid);
+    pthread_mutex_t* m = mutex_get(uid);
+    if (!m)
+        return ENOMEM;
+    return pthread_mutex_unlock(m);
 }
 
 ABI_ATTR int pthread_mutex_trylock_impl(BIONIC_pthread_mutex_t *_uid)
@@ -113,68 +182,83 @@ ABI_ATTR int pthread_mutex_trylock_impl(BIONIC_pthread_mutex_t *_uid)
     if (uid < (pthread_mutex_t**)0x1000)
         return EINVAL; // Return a proper errno value
 
-    // Lazy initialization: if the handle is null, create the underlying Glibc mutex
-    if (!*uid)
+    pthread_mutex_t* m = mutex_get(uid);
+    if (!m)
+        return ENOMEM;
+    return pthread_mutex_trylock(m);
+}
+
+static pthread_cond_t* cond_create(const pthread_condattr_t* attr)
+{
+    pthread_cond_t* c = (pthread_cond_t*)calloc(1, sizeof(pthread_cond_t));
+    if (!c)
+        return NULL;
+    if (pthread_cond_init(c, attr) != 0)
     {
-        int ret = pthread_mutex_init_impl(_uid, NULL);
-        if (ret != 0)
-        {
-            // If init fails, return the error. EBUSY is a possible return here
-            // if the mutex is locked, but it shouldn't be during init.
-            return ret;
-        }
+        free(c);
+        return NULL;
     }
-    
-    // Dereference the handle to get the real Glibc mutex and call the function
-    return pthread_mutex_trylock(*uid);
+    return c;
+}
+
+// Same lazy, race-free creation as for mutexes (static PTHREAD_COND_INITIALIZER is all zero).
+static pthread_cond_t* cond_get(pthread_cond_t** cnd)
+{
+    pthread_cond_t* c = slot_load(cnd);
+    if ((uintptr_t)c > 0x10000)
+        return c;
+
+    pthread_mutex_lock(&g_lazy_init_lock);
+    c = slot_load(cnd);
+    if ((uintptr_t)c <= 0x10000)
+    {
+        c = cond_create(NULL);
+        if (c)
+            slot_store(cnd, c);
+    }
+    pthread_mutex_unlock(&g_lazy_init_lock);
+    return c;
 }
 
 ABI_ATTR int pthread_cond_init_impl(pthread_cond_t **cnd, const int *condattr)
 {
-    pthread_cond_t *c = (pthread_cond_t *)calloc(1, sizeof(pthread_cond_t));
+    if (!cnd)
+        return EINVAL;
+    // Bionic and glibc encode the clock (monotonic vs. realtime) the same way in the attribute, so pass it on:
+    // otherwise a timed wait with a CLOCK_MONOTONIC deadline is read as a realtime one and returns immediately.
+    pthread_cond_t *c = cond_create((const pthread_condattr_t*)condattr);
     if (!c)
-        return -1;
+        return ENOMEM;
 
-    *c = (pthread_cond_t)PTHREAD_COND_INITIALIZER;
-    int ret = pthread_cond_init(c, NULL);
-    if (ret < 0)
-    {
-        free(c);
-        return -1;
-    }
-
-    *cnd = c;
+    slot_store(cnd, c);
 
     return 0;
 }
 
 ABI_ATTR int pthread_cond_broadcast_impl(pthread_cond_t **cnd)
 {
-    if (!*cnd)
-    {
-        if (pthread_cond_init_impl(cnd, NULL) < 0)
-            return -1;
-    }
-    return pthread_cond_broadcast(*cnd);
+    pthread_cond_t* c = cond_get(cnd);
+    if (!c)
+        return ENOMEM;
+    return pthread_cond_broadcast(c);
 }
 
 ABI_ATTR int pthread_cond_signal_impl(pthread_cond_t **cnd)
 {
-    if (!*cnd)
-    {
-        if (pthread_cond_init_impl(cnd, NULL) < 0)
-            return -1;
-    };
-    return pthread_cond_signal(*cnd);
+    pthread_cond_t* c = cond_get(cnd);
+    if (!c)
+        return ENOMEM;
+    return pthread_cond_signal(c);
 }
 
 ABI_ATTR int pthread_cond_destroy_impl(pthread_cond_t **cnd)
 {
-    if (cnd && *cnd)
+    pthread_cond_t* c = cnd ? slot_load(cnd) : NULL;
+    if ((uintptr_t)c > 0x10000)
     {
-        pthread_cond_destroy(*cnd);
-        free(*cnd);
-        *cnd = NULL;
+        pthread_cond_destroy(c);
+        free(c);
+        slot_store(cnd, (pthread_cond_t*)NULL);
     }
     return 0;
 }
@@ -182,33 +266,62 @@ ABI_ATTR int pthread_cond_destroy_impl(pthread_cond_t **cnd)
 ABI_ATTR int pthread_cond_wait_impl(pthread_cond_t **cnd, BIONIC_pthread_mutex_t *_mtx)
 {
     pthread_mutex_t **mtx = (pthread_mutex_t**)_mtx;
-    
-    if (!*cnd)
-    {
-        if (pthread_cond_init_impl(cnd, NULL) < 0)
-            return -1;
-    }
-    return pthread_cond_wait(*cnd, *mtx);
+
+    pthread_cond_t* c = cond_get(cnd);
+    pthread_mutex_t* m = mtx ? mutex_get(mtx) : NULL;
+    if (!c || !m)
+        return EINVAL;
+    return pthread_cond_wait(c, m);
 }
 
 ABI_ATTR int pthread_cond_timedwait_impl(pthread_cond_t **cnd, BIONIC_pthread_mutex_t *_mtx, const struct timespec *t)
 {
     pthread_mutex_t **mtx = (pthread_mutex_t**)_mtx;
 
-    if (!*cnd)
-    {
-        if (pthread_cond_init_impl(cnd, NULL) < 0)
-            return -1;
-    }
-    return pthread_cond_timedwait(*cnd, *mtx, t);
+    pthread_cond_t* c = cond_get(cnd);
+    pthread_mutex_t* m = mtx ? mutex_get(mtx) : NULL;
+    if (!c || !m || !t)
+        return EINVAL;
+    return pthread_cond_timedwait(c, m, t);
 }
+
+// Bionic's pthread_once states
+#define ONCE_NOT_STARTED 0
+#define ONCE_UNDERWAY 1
+#define ONCE_COMPLETE 2
 
 ABI_ATTR int pthread_once_impl(volatile int *once_control, void (*init_routine)(void))
 {
+    static thread_local volatile int* t_running = nullptr; // the once this thread is currently initialising
+
     if (!once_control || !init_routine)
-        return -1;
-    if (__sync_lock_test_and_set(once_control, 1) == 0)
+        return EINVAL;
+
+    if (__atomic_load_n(once_control, __ATOMIC_ACQUIRE) == ONCE_COMPLETE)
+        return 0;
+
+    int expected = ONCE_NOT_STARTED;
+    if (__atomic_compare_exchange_n(once_control, &expected, ONCE_UNDERWAY, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE))
+    {
+        volatile int* outer = t_running;
+        t_running = once_control;
         (*init_routine)();
+        t_running = outer;
+        __atomic_store_n(once_control, ONCE_COMPLETE, __ATOMIC_RELEASE);
+        return 0;
+    }
+
+    // Someone else is running the initialiser: wait for it to finish, otherwise we'd use half-initialised state.
+    // (A recursive call from inside the initialiser itself returns immediately instead of deadlocking.)
+    if (t_running == once_control)
+        return 0;
+    for (int spins = 0; __atomic_load_n(once_control, __ATOMIC_ACQUIRE) != ONCE_COMPLETE; spins++)
+    {
+        if (spins < 100)
+            sched_yield();
+        else
+            usleep(200);
+    }
     return 0;
 }
 
@@ -216,24 +329,38 @@ ABI_ATTR int pthread_once_impl(volatile int *once_control, void (*init_routine)(
 
 ABI_ATTR int pthread_mutexattr_init_impl(pthread_mutexattr_t **attr_ptr)
 {
+    if (!attr_ptr)
+        return EINVAL;
     pthread_mutexattr_t *attr = (pthread_mutexattr_t*)calloc(1, sizeof(pthread_mutexattr_t));
+    if (!attr)
+        return ENOMEM;
     int r = pthread_mutexattr_init(attr);
+    if (r != 0)
+    {
+        free(attr);
+        return r;
+    }
     *attr_ptr = attr;
 
-    return r;
+    return 0;
 }
 
 ABI_ATTR int pthread_mutexattr_settype_impl(pthread_mutexattr_t **attr_ptr, int kind)
 {
+    if (!attr_ptr || !*attr_ptr)
+        return EINVAL;
     int ret = pthread_mutexattr_settype(*attr_ptr, kind);
     return ret;
 }
 
 ABI_ATTR int pthread_mutexattr_destroy_impl(pthread_mutexattr_t **attr_ptr)
 {
+    if (!attr_ptr || !*attr_ptr)
+        return 0;
     int ret = pthread_mutexattr_destroy(*attr_ptr);
+    free(*attr_ptr); // allocated in pthread_mutexattr_init_impl
+    *attr_ptr = NULL;
     return ret;
-    //free(attr_ptr);
 }
 
 ABI_ATTR int pthread_join_impl(pthread_t th, void **thread_return)
@@ -248,59 +375,25 @@ int pthread_create_impl(pthread_t *thread, const BIONIC_pthread_attr_t *bionic_a
 {
     // If the caller provided NULL for the attributes, we do the same.
     // This tells the real pthread_create to use default attributes.
-    if (true || bionic_attr == NULL) {
+    if (bionic_attr == NULL) {
         return pthread_create(thread, NULL, entry, arg);
     }
 
-    // --- Translation Step ---
-    // The caller provided attributes, so we must translate them from our
-    // Bionic struct to a real, opaque glibc attribute object.
-
-    int result;
-    pthread_attr_t glibc_attr; // The real, opaque glibc struct.
-
-    // 1. Initialize the glibc attribute object.
-    if ((result = pthread_attr_init(&glibc_attr)) != 0) {
-        return result; // Return the error code from init.
+    // Only the parts of the attributes that matter for resource use are carried over: the detach state (a thread
+    // the game expects to be detached would otherwise keep its stack forever after it exits) and a sane stack size.
+    // The explicit stack address, guard size and scheduling are deliberately left at the defaults.
+    {
+        pthread_attr_t ga;
+        if (pthread_attr_init(&ga) != 0)
+            return pthread_create(thread, NULL, entry, arg);
+        if (bionic_attr->flags & PTHREAD_ATTR_FLAG_DETACHED)
+            pthread_attr_setdetachstate(&ga, PTHREAD_CREATE_DETACHED);
+        if (bionic_attr->stack_base == NULL && bionic_attr->stack_size >= 16384 && bionic_attr->stack_size <= (256u << 20))
+            pthread_attr_setstacksize(&ga, bionic_attr->stack_size);
+        int r = pthread_create(thread, &ga, entry, arg);
+        pthread_attr_destroy(&ga);
+        return r;
     }
-
-    // 2. Translate each attribute from the Bionic struct to the glibc object
-    //    using the REAL glibc pthread_attr_set* functions.
-
-    // Stack attributes
-    if (bionic_attr->stack_base != NULL) {
-        pthread_attr_setstack(&glibc_attr, bionic_attr->stack_base, bionic_attr->stack_size);
-    } else if (bionic_attr->stack_size > 0) {
-        pthread_attr_setstacksize(&glibc_attr, bionic_attr->stack_size);
-    }
-
-    // Guard size
-    if (bionic_attr->guard_size > 0) {
-        pthread_attr_setguardsize(&glibc_attr, bionic_attr->guard_size);
-    }
-
-    // Detach state
-    int detach_state = (bionic_attr->flags & PTHREAD_ATTR_FLAG_DETACHED)
-                           ? PTHREAD_CREATE_DETACHED
-                           : PTHREAD_CREATE_JOINABLE;
-    pthread_attr_setdetachstate(&glibc_attr, detach_state);
-
-    // Scheduling policy and priority
-    if (bionic_attr->sched_policy != 0) { // Assuming 0 is the default/unset state
-        pthread_attr_setschedpolicy(&glibc_attr, bionic_attr->sched_policy);
-        struct sched_param param;
-        param.sched_priority = bionic_attr->sched_priority;
-        pthread_attr_setschedparam(&glibc_attr, &param);
-    }
-
-    // 3. Call the REAL pthread_create with the fully configured glibc attribute object.
-    result = pthread_create(thread, &glibc_attr, entry, arg);
-
-    // 4. Clean up the temporary glibc attribute object as required by the API.
-    pthread_attr_destroy(&glibc_attr);
-
-    // 5. Return the result of the create call.
-    return result;
 }
 
 ABI_ATTR int pthread_getattr_np_impl(pthread_t thread, BIONIC_pthread_attr_t *bionic_attr) {

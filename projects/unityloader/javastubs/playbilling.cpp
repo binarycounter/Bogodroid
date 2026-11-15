@@ -35,7 +35,7 @@ void BillingClient::startConnection(std::shared_ptr<FakeJni::JObject> listener)
         return;
     }
     std::shared_ptr<jnivm::java::lang::Object> result = BillingResult::unavailable();
-    jnivm::bitter::jnibridge::JNIBridge::invoke(proxy->nativeHandle, "com/android/billingclient/api/BillingClientStateListener",
+    proxy->callInterface("com/android/billingclient/api/BillingClientStateListener",
         "onBillingSetupFinished", "(Lcom/android/billingclient/api/BillingResult;)V", result);
 }
 

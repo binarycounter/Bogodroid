@@ -41,6 +41,8 @@ namespace jnivm {
         JNINativeInterface ninterface;
         // Map of all jni threads and local stuff by thread id
         std::unordered_map<pthread_t, std::shared_ptr<ENV>> jnienvs;
+        // Guards jnienvs (separate from mtx so GetEnv is safe to call while mtx is held)
+        std::mutex envmtx;
     protected:
         void OverrideJNIInvokeInterface(const JNIInvokeInterface& iinterface);
         // If you override this, you have to use the contructor with skipInit=true and call VM::initialize in your derived Class

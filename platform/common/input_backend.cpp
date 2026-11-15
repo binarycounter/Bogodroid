@@ -164,7 +164,7 @@ void InputBackend::sendTouchEvent(int action, long eventTime)
 {
     if (!onMotion || fingers.empty())
         return;
-    auto event = std::make_shared<jnivm::android::view::MotionEvent>(devices[INPUT_ID_TOUCH], action, fingers[0].x, fingers[0].y);
+    auto event = std::make_shared<jnivm::android::view::MotionEvent>(getDevice(INPUT_ID_TOUCH), action, fingers[0].x, fingers[0].y);
     event->timestamp = eventTime;
     event->downTime = touchDownTime;
     for (auto& f : fingers) {
@@ -244,6 +244,9 @@ void InputBackend::runEventLoop()
     while (running) {
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
+            // The callbacks call into the game (JNI); an exception escaping this detached thread would terminate
+            // the whole process, so swallow it and keep polling.
+            try {
             switch (e.type) {
             case SDL_QUIT:
                 // Window closed / quit requested by the OS: shut the game down instead of just killing input.
@@ -258,10 +261,10 @@ void InputBackend::runEventLoop()
                 int action = (e.type == SDL_KEYDOWN) ? jnivm::android::view::KeyEvent::ACTION_DOWN : jnivm::android::view::KeyEvent::ACTION_UP;
                 int keyCode = InputBackend::toAndroidKeycode(e.key.keysym.scancode);
 
-                auto keyEvent = std::make_shared<jnivm::android::view::KeyEvent>(devices[INPUT_ID_KEYBOARD], action, keyCode, 0);
+                auto keyEvent = std::make_shared<jnivm::android::view::KeyEvent>(getDevice(INPUT_ID_KEYBOARD), action, keyCode, 0);
                 onKey(keyEvent);
                 if (input_escape_as_back && e.key.keysym.scancode == SDL_SCANCODE_ESCAPE)
-                    onKey(std::make_shared<jnivm::android::view::KeyEvent>(devices[INPUT_ID_KEYBOARD], action, jnivm::android::view::KeyEvent::KEYCODE_BACK, 0));
+                    onKey(std::make_shared<jnivm::android::view::KeyEvent>(getDevice(INPUT_ID_KEYBOARD), action, jnivm::android::view::KeyEvent::KEYCODE_BACK, 0));
                 break;
             }
 
@@ -277,7 +280,7 @@ void InputBackend::runEventLoop()
                     break;
 
                 // Mouse motion is a generic motion event.
-                auto motionEvent = std::make_shared<jnivm::android::view::MotionEvent>(devices[INPUT_ID_MOUSE],
+                auto motionEvent = std::make_shared<jnivm::android::view::MotionEvent>(getDevice(INPUT_ID_MOUSE),
                     buttonState == 0 ? jnivm::android::view::MotionEvent::ACTION_HOVER_MOVE : jnivm::android::view::MotionEvent::ACTION_MOVE,
                     (float)e.motion.x, (float)e.motion.y);
                 motionEvent->buttonState = buttonState;
@@ -303,7 +306,7 @@ void InputBackend::runEventLoop()
 
                 // Create the main motion event
                 auto motionEvent = std::make_shared<jnivm::android::view::MotionEvent>(
-                    devices[INPUT_ID_MOUSE],
+                    getDevice(INPUT_ID_MOUSE),
                     jnivm::android::view::MotionEvent::ACTION_DOWN,
                     (float)e.button.x, (float)e.button.y);
 
@@ -317,7 +320,7 @@ void InputBackend::runEventLoop()
                 // In non-touch mode, send an additional button press event
                 if (!input_mouse_touch_mode && input_mouse_accurate_mode) {
                     auto motionEvent2 = std::make_shared<jnivm::android::view::MotionEvent>(
-                        devices[INPUT_ID_MOUSE],
+                        getDevice(INPUT_ID_MOUSE),
                         jnivm::android::view::MotionEvent::ACTION_BUTTON_PRESS,
                         (float)e.button.x, (float)e.button.y);
                     motionEvent2->buttonState = buttonState;
@@ -326,7 +329,7 @@ void InputBackend::runEventLoop()
                     if(previousButtonState == 0) // Additional HOVER_EXIT event is sent when the first button is pressed
                     {
                         auto motionEvent3 = std::make_shared<jnivm::android::view::MotionEvent>(
-                            devices[INPUT_ID_MOUSE],
+                            getDevice(INPUT_ID_MOUSE),
                             jnivm::android::view::MotionEvent::ACTION_HOVER_EXIT,
                             (float)e.button.x, (float)e.button.y);
                             motionEvent3->buttonState = buttonState;
@@ -354,7 +357,7 @@ void InputBackend::runEventLoop()
 
                 // Create the main motion event
                 auto motionEvent = std::make_shared<jnivm::android::view::MotionEvent>(
-                    devices[INPUT_ID_MOUSE],
+                    getDevice(INPUT_ID_MOUSE),
                     jnivm::android::view::MotionEvent::ACTION_UP,
                     (float)e.button.x, (float)e.button.y);
 
@@ -370,7 +373,7 @@ void InputBackend::runEventLoop()
                 // In non-touch mode, send an additional button release event
                 if (!input_mouse_touch_mode && input_mouse_accurate_mode) {
                     auto motionEvent2 = std::make_shared<jnivm::android::view::MotionEvent>(
-                        devices[INPUT_ID_MOUSE],
+                        getDevice(INPUT_ID_MOUSE),
                         jnivm::android::view::MotionEvent::ACTION_BUTTON_RELEASE,
                         (float)e.button.x, (float)e.button.y);
                     motionEvent2->buttonState = buttonState;
@@ -379,7 +382,7 @@ void InputBackend::runEventLoop()
                     if(buttonState == 0) // Additional HOVER_ENTER event is sent when the last button is released
                     {
                         auto motionEvent3 = std::make_shared<jnivm::android::view::MotionEvent>(
-                            devices[INPUT_ID_MOUSE],
+                            getDevice(INPUT_ID_MOUSE),
                             jnivm::android::view::MotionEvent::ACTION_HOVER_ENTER,
                             (float)e.button.x, (float)e.button.y);
                             motionEvent3->buttonState = buttonState;
@@ -402,7 +405,7 @@ void InputBackend::runEventLoop()
                 if (!onMotion)
                     break;
                 // Android reports wheel movement as a SCROLL motion event carrying VSCROLL/HSCROLL axis values.
-                auto motionEvent = std::make_shared<jnivm::android::view::MotionEvent>(devices[INPUT_ID_MOUSE],
+                auto motionEvent = std::make_shared<jnivm::android::view::MotionEvent>(getDevice(INPUT_ID_MOUSE),
                     jnivm::android::view::MotionEvent::ACTION_SCROLL, 0.0f, 0.0f);
                 motionEvent->axisValues[jnivm::android::view::MotionEvent::AXIS_VSCROLL] = (float)e.wheel.y;
                 motionEvent->axisValues[jnivm::android::view::MotionEvent::AXIS_HSCROLL] = (float)e.wheel.x;
@@ -488,7 +491,7 @@ void InputBackend::runEventLoop()
                 // Update the single value in our state map
                 mControllerAxisState[axis] = value;
 
-                auto dev = devices[INPUT_ID_XBOX];
+                auto dev = getDevice(INPUT_ID_XBOX);
                 auto motionEvent = std::make_shared<jnivm::android::view::MotionEvent>(
                     dev, jnivm::android::view::MotionEvent::ACTION_MOVE, 0.0f, 0.0f);
 
@@ -508,15 +511,20 @@ void InputBackend::runEventLoop()
                 int action = (e.type == SDL_CONTROLLERBUTTONDOWN) ? jnivm::android::view::KeyEvent::ACTION_DOWN : jnivm::android::view::KeyEvent::ACTION_UP;
                 int keyCode = toAndroidKeycode(e.cbutton);
 
-                auto keyEvent = std::make_shared<jnivm::android::view::KeyEvent>(devices[INPUT_ID_XBOX], action, keyCode, 0);
+                auto keyEvent = std::make_shared<jnivm::android::view::KeyEvent>(getDevice(INPUT_ID_XBOX), action, keyCode, 0);
                 onKey(keyEvent);
                 if (input_back_mode == 2 && e.cbutton.button == SDL_CONTROLLER_BUTTON_BACK)
-                    onKey(std::make_shared<jnivm::android::view::KeyEvent>(devices[INPUT_ID_XBOX], action, jnivm::android::view::KeyEvent::KEYCODE_BACK, 0));
+                    onKey(std::make_shared<jnivm::android::view::KeyEvent>(getDevice(INPUT_ID_XBOX), action, jnivm::android::view::KeyEvent::KEYCODE_BACK, 0));
                 break;
             }
 
             default:
                 break;
+            }
+            } catch (const std::exception& ex) {
+                std::cerr << "InputBackend: exception while handling an event: " << ex.what() << std::endl;
+            } catch (...) {
+                std::cerr << "InputBackend: unknown exception while handling an event" << std::endl;
             }
         }
         SDL_Delay(4); // Be a good citizen

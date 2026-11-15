@@ -113,7 +113,11 @@ bool ApkArchive::read(const std::string& name, std::string& out) const
     unsigned long long dataOff = e->localHeader + 30 + le16(lh + 26) + le16(lh + 28);
     std::string comp(e->compressedSize, '\0');
     if (e->compressedSize && !readAt(f, dataOff, &comp[0], comp.size())) return false;
-    if (e->method == 0) { out.swap(comp); return true; }
+    if (e->method == 0) {
+        if (comp.size() != e->size) return false; // truncated or inconsistent entry
+        out.swap(comp);
+        return true;
+    }
     if (e->method != 8) return false;
     out.assign(e->size, '\0');
     z_stream zs;
@@ -251,6 +255,11 @@ bool bogo_apk_extract_runtime_files()
         bool wanted = false;
         for (const char* pre : prefixes) if (e.name.compare(0, strlen(pre), pre) == 0) wanted = true;
         if (!wanted) continue;
+        // Never write outside the game folder, whatever a (corrupt or malicious) APK's entry names say.
+        if (e.name.find("..") != std::string::npos || e.name[0] == '/') {
+            fprintf(stderr, "[APK] skipping suspicious entry name %s\n", e.name.c_str());
+            continue;
+        }
         struct stat fs;
         if (sameApk && stat(e.name.c_str(), &fs) == 0 && (unsigned long long)fs.st_size == e.size) { kept++; continue; }
         if (extracted == 0) printf("[APK] extracting native libraries and managed code (first run or new APK)...\n");
@@ -267,7 +276,12 @@ bool bogo_apk_extract_runtime_files()
             out.write(data.data(), (std::streamsize)data.size());
             if (!out) { fprintf(stderr, "[APK] failed to write %s\n", e.name.c_str()); ok = false; continue; }
         }
-        rename(tmp.c_str(), e.name.c_str());
+        if (rename(tmp.c_str(), e.name.c_str()) != 0) {
+            fprintf(stderr, "[APK] failed to move %s into place\n", e.name.c_str());
+            unlink(tmp.c_str());
+            ok = false;
+            continue;
+        }
         extracted++;
     }
     if (ok) { std::ofstream out(stampFile, std::ios::trunc); out << stampWanted << "\n"; }
@@ -287,7 +301,7 @@ extern "C" int bogo_apk_read(const char* name, void** data, size_t* size)
 {
     ApkArchive* apk = bogo_apk();
     std::string s;
-    if (!apk || !name || !apk->read(name, s)) return -1;
+    if (!apk || !name || !data || !size || !apk->read(name, s)) return -1;
     *data = malloc(s.size() ? s.size() : 1);
     if (!*data) return -1;
     memcpy(*data, s.data(), s.size());
@@ -297,11 +311,17 @@ extern "C" int bogo_apk_read(const char* name, void** data, size_t* size)
 
 extern "C" char** bogo_apk_list(const char* folder, int* count)
 {
+    if (!count) return nullptr;
     *count = 0;
     ApkArchive* apk = bogo_apk();
     if (!apk || !folder) return nullptr;
     auto names = apk->list(folder, false);
     char** out = (char**)malloc(sizeof(char*) * (names.size() ? names.size() : 1));
-    for (auto& n : names) out[(*count)++] = strdup(n.c_str());
+    if (!out) return nullptr;
+    for (auto& n : names) {
+        char* copy = strdup(n.c_str());
+        if (!copy) break;
+        out[(*count)++] = copy;
+    }
     return out;
 }

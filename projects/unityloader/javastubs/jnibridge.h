@@ -29,12 +29,24 @@ namespace bitter {
 
             long nativeHandle; // The pointer back to the engine's native object
 
+            // Two kinds of proxy share this class, and the engine expects calls back through different natives:
+            //  - false: made by JNIBridge.newInterfaceProxy for Unity's own C++ callbacks (Choreographer, Handler);
+            //    nativeHandle is a C++ jni::ProxyObject, called through JNIBridge$InterfaceProxy.invoke.
+            //  - true: made by ReflectionHelper.newProxyInstance for a C# AndroidJavaProxy (game listeners such as
+            //    Play Billing's); nativeHandle is a GC handle, called through ReflectionHelper.nativeProxyInvoke.
+            //    Sending these through JNIBridge treated the GC handle as a C++ object and jumped through garbage.
+            bool viaReflectionHelper = false;
+
         private:
             // Stores the names of the interfaces this specific instance should implement.
             std::set<std::string> implementedInterfaces;
 
         public:
-            JNIBridgeProxy(long handle, const std::set<std::string>& interfaces);
+            JNIBridgeProxy(long handle, const std::set<std::string>& interfaces, bool viaReflectionHelper = false);
+
+            // Calls one of the proxied interface's methods on the engine side, through the right native.
+            template <typename... Args>
+            void callInterface(const char* className, const char* methodName, const char* methodSig, Args... args);
 
             // --- Implementation of java.lang.Runnable ---
             void run() override;
@@ -59,7 +71,20 @@ namespace bitter {
             // The static invoker remains the same powerful, generic helper.
             template <typename... Args>
             static void invoke(long nativeHandle, const char* className, const char* methodName, const char* methodSig, Args... args);
+
+            // For C# AndroidJavaProxy objects: ReflectionHelper.nativeProxyInvoke(handle, methodName, args).
+            template <typename... Args>
+            static void invokeReflection(long nativeHandle, const char* methodName, Args... args);
         };
+
+        template <typename... Args>
+        void JNIBridgeProxy::callInterface(const char* className, const char* methodName, const char* methodSig, Args... args)
+        {
+            if (viaReflectionHelper)
+                JNIBridge::invokeReflection(nativeHandle, methodName, args...);
+            else
+                JNIBridge::invoke(nativeHandle, className, methodName, methodSig, args...);
+        }
 
     }
 }

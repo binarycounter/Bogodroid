@@ -101,6 +101,11 @@ char* clean_jar_path(const char* path) {
 }
 ABI_ATTR int open_impl(const char *filename, int flags, mode_t mode)
 {
+    if (!filename)
+    {
+        errno = EFAULT;
+        return -1;
+    }
     verbose("NATIVE","Opening file %s",filename);
 
     // if (strcmp(filename,"/proc/cpuinfo") == 0)
@@ -128,7 +133,15 @@ ABI_ATTR int open_impl(const char *filename, int flags, mode_t mode)
     // }
     
     char* clean_path = clean_jar_path(filename);
+    if (!clean_path)
+    {
+        errno = ENOMEM;
+        return -1;
+    }
     int fd = open(clean_path, flags, mode);
+    int saved_errno = errno;
+    free(clean_path); // clean_jar_path() returns a malloc'd copy; this was leaked on every open()
+    errno = saved_errno;
     verbose("NATIVE","Got file descriptor %d",fd);
     return fd;
 }
@@ -137,7 +150,7 @@ ABI_ATTR int open_impl(const char *filename, int flags, mode_t mode)
 ABI_ATTR ssize_t read_impl(int fd, void *buf, size_t count)
 {
     verbose("NATIVE","reading %zu bytes from file %d",count,fd);
-    int ret=read(fd, buf, count);
+    ssize_t ret=read(fd, buf, count);
     // int i;
     // for (i = 0; i < count; i++)
     // {

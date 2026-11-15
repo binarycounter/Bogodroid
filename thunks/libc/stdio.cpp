@@ -135,6 +135,16 @@ ABI_ATTR BIONIC_FILE *open_wmemstream_impl(wchar_t **__bufloc, size_t *__sizeloc
 
 ABI_ATTR int fclose_impl(BIONIC_FILE * _arg1)
 {
+    if (!_arg1) {
+        errno = EBADF;
+        return EOF;
+    }
+    // The fake stdin/stdout/stderr live in a static array: they must neither be freed nor really closed
+    // (the loader's own output goes through the real ones).
+    if (_arg1 >= &__sF_fake[0] && _arg1 <= &__sF_fake[2]) {
+        fflush(_get_from(_arg1));
+        return 0;
+    }
     int ret;
     FILE *arg1 = _get_from(_arg1);
     ret = fclose(arg1);

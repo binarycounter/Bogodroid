@@ -11,6 +11,9 @@ using namespace jnivm;
 template<bool isStatic, bool ReturnNull, bool trace>
 jfieldID jnivm::GetFieldID(JNIEnv *env, jclass cl_, const char *name, const char *type) {
     auto cl = JNITypes<std::shared_ptr<Class>>::JNICast(ENV::FromJNIEnv(env), cl_);
+    if(!cl || !name || !type) {
+        return nullptr; // e.g. the game looked a field up on a class FindClass couldn't resolve
+    }
     std::lock_guard<std::mutex> lock(cl->mtx);
     std::string &classname = cl->name;
 
@@ -112,7 +115,7 @@ template<bool RetNull, class T, class O> T jnivm::GetField(JNIEnv *env, O obj, j
     if(!id)
         LOG("JNIVM", "GetField field is null");
 #endif
-    if (fid && fid->getnativehandle) {
+    if (obj && fid && fid->getnativehandle) { // like SetField: a null object / class just yields the default value
         if(fid->_static != std::is_same<O, jclass>::value) {
             env->FatalError("GetField / Invalid Field ID");
         }

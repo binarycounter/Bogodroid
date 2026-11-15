@@ -51,3 +51,16 @@ tools/portmaster/probe.zip
 
 # editor swap files
 *.kate-swp
+
+# Unity's build temp folder for the probe (Gradle/CMake intermediates)
+tools/UnityProbe/.utmp/
+
+# The probe port's runtime data (saves, reports, tombstones, soak.txt) when run from tools/portmaster/probe
+tools/portmaster/probe/conf/
+tools/portmaster/probe/cache/
+
+# Host stress test builds (tools/stress/run.sh: build-plain, build-asan, build-tsan)
+tools/stress/build-*/
+
+# Container soak runs (tools/soak.sh: work-release, work-asan)
+tools/soak/work-*/

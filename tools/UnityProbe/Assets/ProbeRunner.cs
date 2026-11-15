@@ -119,6 +119,7 @@ public partial class ProbeRunner : MonoBehaviour
         yield return new WaitForSeconds(0.5f);
 
         Finish();
+        yield return SoakIfRequested(); // ProbeSoak.cs: keeps running when PROBE_SOAK_SECONDS / soak.txt ask for it
         if (autoQuit)
         {
             yield return new WaitForSeconds(1f);

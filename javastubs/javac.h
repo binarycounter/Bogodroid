@@ -127,6 +127,7 @@ namespace java {
 
             Thread(std::shared_ptr<FakeJni::JString> name);
             Thread(std::shared_ptr<Runnable> runnable);
+            virtual ~Thread();
 
             // This is the method the app is calling
             virtual void start();

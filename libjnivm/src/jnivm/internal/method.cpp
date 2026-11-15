@@ -1,6 +1,8 @@
 #include "method.h"
 #include "log.h"
 #include <jnivm/internal/jValuesfromValist.h>
+#include <set>
+#include <vector>
 
 using namespace jnivm;
 
@@ -59,16 +61,31 @@ jmethodID jnivm::GetMethodID(JNIEnv *env, jclass cl, const char *str0, const cha
 #endif
             return nullptr;
         }
-        next = std::make_shared<Method>();
         if(cur) {
+            // Other threads read cur->methods (and the fields of what is in it) under this lock. So: fill the new
+            // method in completely *before* it is published, publish under the lock, and look again first because
+            // another thread may have created the same method since our lookup (it would be listed twice).
+            std::lock_guard<std::mutex> lock(cur->mtx);
+            auto again = std::find_if(cur->methods.begin(), cur->methods.end(),
+                                      [&sname, &ssig](std::shared_ptr<Method> &namesp) {
+                                          return namesp->_static == isStatic && AllowNative == (bool)namesp->native && namesp->name == sname && namesp->signature == ssig;
+                                      });
+            if(again != cur->methods.end()) {
+                return (jmethodID)again->get();
+            }
+            next = std::make_shared<Method>();
+            next->name = std::move(sname);
+            next->signature = std::move(ssig);
+            next->_static = isStatic;
             cur->methods.push_back(next);
         } else {
+            next = std::make_shared<Method>();
+            next->name = std::move(sname);
+            next->signature = std::move(ssig);
+            next->_static = isStatic;
             // For Debugging purposes without valid parent class
             JNITypes<std::shared_ptr<Method>>::ToJNIType(ENV::FromJNIEnv(env), next);
         }
-        next->name = std::move(sname);
-        next->signature = std::move(ssig);
-        next->_static = isStatic;
 #ifdef JNI_DEBUG
         Declare(env, next->signature.data());
 #endif
@@ -169,8 +186,9 @@ static Method* findNonVirtualOverload(Class*cl, Method*mid) {
     if(!cl) {
         return mid;
     }
+    std::lock_guard<std::mutex> lock(cl->mtx);
     auto res = std::find_if(cl->methods.begin(), cl->methods.end(), [mid](auto&& m) {
-        return !m->_static && mid->name == m->name && mid->signature == m->signature && m->nativehandle;
+        return m && !m->_static && mid->name == m->name && mid->signature == m->signature && m->nativehandle;
     });
     if(res != cl->methods.end()) {
         return res->get();
@@ -179,13 +197,31 @@ static Method* findNonVirtualOverload(Class*cl, Method*mid) {
     }
 }
 
+// Looks for an implementation of mid in the object's class, then in its ancestors, and falls back to mid itself.
+// (This used to recurse on the *method object's* base classes, which never terminated for an inherited method
+// and dereferenced the empty result of the base class list.)
 static Method* findVirtualOverload(jnivm::ENV *env, Class*cl, Method*mid) {
-    auto r = findNonVirtualOverload(cl, mid);
-    if(r != nullptr) {
-        return r;
-    } else {
-        return findVirtualOverload(env, mid->GetBaseClasses(env)[0].get(), mid);
+    std::vector<std::shared_ptr<Class>> keepalive;
+    std::vector<Class*> pending { cl };
+    std::set<Class*> seen;
+    for(size_t n = 0; n < pending.size() && n < 256; n++) {
+        Class* c = pending[n];
+        if(!c || !seen.insert(c).second) {
+            continue;
+        }
+        if(auto r = findNonVirtualOverload(c, mid)) {
+            return r;
+        }
+        if(c->baseclasses) {
+            for(auto&& b : c->baseclasses(env)) {
+                if(b) {
+                    keepalive.push_back(b);
+                    pending.push_back(b.get());
+                }
+            }
+        }
     }
+    return mid;
 }
 
 template<class T> T jnivm::MDispatchBase2<T>::CallMethod(JNIEnv *env, jobject obj, jmethodID id, jvalue *param) {
@@ -263,7 +299,9 @@ template<class T> T jnivm::MDispatchBase2<T>::CallMethod(JNIEnv *env, jobject ob
 #ifdef JNI_TRACE
         LOG("JNIVM", "Call NonVirtual Member Function Class=`%s` Method=`%s` Signature=`%s`", clz ? clz->nativeprefix.data() : "???", mid->name.data(), mid ? mid->signature.data() : "???");
 #endif
-        mid = findNonVirtualOverload(clz.get(), mid);
+        if(auto overload = findNonVirtualOverload(clz.get(), mid)) {
+            mid = overload;
+        }
         try {
             return static_cast<jnivm::impl::MethodHandleBase<T>*>(mid->nativehandle.get())->NonVirtualInstanceInvoke(ENV::FromJNIEnv(env), obj, param, jnivm::impl::MethodHandleBase<T>{});
         } catch (...) {

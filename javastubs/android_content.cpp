@@ -45,7 +45,9 @@ bool jnivm::android::content::pm::PackageManager::hasSystemFeature(std::shared_p
 std::shared_ptr<jnivm::java::io::InputStream>
 jnivm::android::content::res::AssetManager::open(std::shared_ptr<FakeJni::JString> filename)
 {
-    verbose("JBRIDGE", "AssetManager opening file %s", filename.get()->c_str());
+    if (!filename)
+        throw std::runtime_error("java.lang.NullPointerException: AssetManager.open(null)");
+    verbose("JBRIDGE", "AssetManager opening file %s", filename->c_str());
     // Android throws FileNotFoundException for a missing asset; apps probe for optional ones this way
     // (e.g. Unity 7's "pram-shadow-files") and carry on after catching it.
     std::string path = std::string("assets/").append(filename.get()->c_str());
@@ -111,7 +113,7 @@ jnivm::android::content::res::AssetManager::list(std::shared_ptr<FakeJni::JStrin
 
 int jnivm::android::content::res::Resources::getIdentifier(std::shared_ptr<FakeJni::JString> name, std::shared_ptr<FakeJni::JString> defType, std::shared_ptr<FakeJni::JString> defPackage)
 {
-    verbose("JBRIDGE", "Resources requesting identifier for %s - %s - %s", name.get()->c_str(), defType.get()->c_str(), defPackage.get()->c_str());
+    verbose("JBRIDGE", "Resources requesting identifier for %s - %s - %s", name ? name->c_str() : "(null)", defType ? defType->c_str() : "(null)", defPackage ? defPackage->c_str() : "(null)");
     return 1337420;
 }
 
@@ -480,52 +482,31 @@ jnivm::android::content::Context::getExternalFilesDir(std::shared_ptr<FakeJni::J
     return getExternalFilesDirInternal();
 }
 
-std::shared_ptr<jnivm::java::io::File>
-jnivm::android::content::Context::getExternalFilesDirInternal()
+// realpath() of a configured directory, with a trailing slash, as a java.io.File. (This used to leak the buffer,
+// and returned null, i.e. "no directory", for a path that already ended in a slash such as "/".)
+static std::shared_ptr<jnivm::java::io::File> directoryWithSlash(const std::string& configured)
 {
-    char* resolved_path = realpath(config["paths"]["android_external_files"].value_or<std::string>("./path_not_defined_external").c_str(), NULL);
+    char* resolved_path = realpath(configured.c_str(), NULL);
     if (resolved_path == NULL) {
         return NULL;
     }
-    size_t len = strlen(resolved_path);
+    std::string path = resolved_path;
+    free(resolved_path);
+    if (path.empty() || path.back() != '/')
+        path += '/';
+    return std::make_shared<jnivm::java::io::File>(std::make_shared<FakeJni::JString>(path));
+}
 
-    // Check if it already has a trailing slash
-    if (len > 0 && resolved_path[len - 1] != '/') {
-        // Reallocate to add space for slash and null terminator
-        char* with_slash = (char*)realloc(resolved_path, len + 2);
-        if (with_slash == NULL) {
-            free(resolved_path);
-            return NULL;
-        }
-        with_slash[len] = '/';
-        with_slash[len + 1] = '\0';
-        return std::make_shared<jnivm::java::io::File>(std::make_shared<FakeJni::JString>(with_slash));
-    }
-    return NULL;
+std::shared_ptr<jnivm::java::io::File>
+jnivm::android::content::Context::getExternalFilesDirInternal()
+{
+    return directoryWithSlash(config["paths"]["android_external_files"].value_or<std::string>("./path_not_defined_external"));
 }
 
 std::shared_ptr<jnivm::java::io::File>
 jnivm::android::content::Context::getFilesDir()
 {
-    char* resolved_path = realpath(config["paths"]["android_files"].value_or<std::string>("./path_not_defined").c_str(), NULL);
-    if (resolved_path == NULL) {
-        return NULL;
-    }
-    size_t len = strlen(resolved_path);
-
-    // Check if it already has a trailing slash
-    if (len > 0 && resolved_path[len - 1] != '/') {
-        // Reallocate to add space for slash and null terminator
-        char* with_slash = (char*)realloc(resolved_path, len + 2);
-        if (with_slash == NULL) {
-            free(resolved_path);
-            return NULL;
-        }
-        with_slash[len] = '/';
-        with_slash[len + 1] = '\0';
-        return std::make_shared<jnivm::java::io::File>(std::make_shared<FakeJni::JString>(with_slash));
-    }
-    return NULL;
+    return directoryWithSlash(config["paths"]["android_files"].value_or<std::string>("./path_not_defined"));
 }
 
 std::shared_ptr<jnivm::java::io::File>
@@ -555,7 +536,7 @@ jnivm::android::content::Context::getObbDirs()
 
 int jnivm::android::content::Context::checkCallingOrSelfPermission(std::shared_ptr<FakeJni::JString> permission)
 {
-    verbose("JBRIDGE", "Granting permission: %s", permission.get()->c_str());
+    verbose("JBRIDGE", "Granting permission: %s", permission ? permission->c_str() : "(null)");
     return jnivm::android::content::pm::PackageManager::PERMISSION_GRANTED; // Sure why not, what could go wrong....
 }
 

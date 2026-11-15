@@ -627,6 +627,10 @@ namespace android {
              * Returns a Message to the global pool.
              */
             void recycle();
+            // What Java code's Message.recycle() maps to. The message goes back to the pool when its last
+            // reference is dropped (see obtain()); returning it earlier would put a message that is still
+            // referenced into the pool twice.
+            void recycleFromJava() { }
         };
 
         struct MessageComparer {
@@ -648,7 +652,7 @@ namespace android {
 
             pthread_mutex_t mQueueMutex;
             std::thread mThread; // Manages the dedicated thread, if any
-            bool mQuitting;
+            std::atomic<bool> mQuitting;
             // Private constructor to control instantiation
             Looper();
             ~Looper();
@@ -1006,6 +1010,11 @@ private:
     pthread_mutex_t mCallbacksMutex;
 
     std::atomic<long long> mLastVSyncTimeNanos;
+    // When callbacks were last dispatched (real or fallback), and counters for the rate line in the log.
+    // Only touched on the Choreographer's own thread.
+    long long mLastDispatchNanos = 0;
+    long long mStatsSinceNanos = 0;
+    unsigned mStatsReal = 0, mStatsFallback = 0;
 
     void watchdogLoop();
 
