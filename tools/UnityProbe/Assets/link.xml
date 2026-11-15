@@ -1,0 +1,7 @@
+<!-- Belt and braces in case Managed Stripping gets switched back on: keep what the probe touches.
+     Do NOT add preserve="all" for mscorlib / System / System.Core: it drags in facade assemblies that
+     aren't in the build and IL2CPP fails with MissingAssemblyException. ProbeBuild.cs sets stripping to Disabled. -->
+<linker>
+  <assembly fullname="UnityEngine.AndroidJNIModule" preserve="all"/>
+  <assembly fullname="Assembly-CSharp" preserve="all"/>
+</linker>

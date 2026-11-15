@@ -1,19 +1,20 @@
-#include "baron/baron.h"
 #include "android.h"
+#include "baron/baron.h"
+#include "fakefmod.h"
+#include "gplay.h"
 #include "javac.h"
-#include "unity.h"
 #include "jnibridge.h"
+#include "unity.h"
+#include "playbilling.h"
 
-void InitJNIBinding(FakeJni::Jvm *vm)
+void InitJNIBinding(FakeJni::Jvm* vm)
 {
-    vm->registerClass<jnivm::java::lang::ClassLoader>();
-    vm->registerClass<jnivm::java::lang::StringBuilder>();
-    vm->registerClass<jnivm::java::io::InputStream>();
-    vm->registerClass<jnivm::java::io::File>();
-    vm->registerClass<jnivm::java::util::Map>();
-    vm->registerClass<jnivm::java::util::Set>();
-    vm->registerClass<jnivm::java::util::Iterator>();
-    vm->registerClass<jnivm::java::util::Scanner>();
+
+    InitJNIJavaClasses(vm);
+    InitJNIAndroidClasses(vm);
+    InitJNIGooglePlayClasses(vm);
+    InitJNIPlayBillingClasses(vm);
+
     // vm->registerClass<jnivm::java::util::NoSuchElementException>();
     // vm->registerClass<jnivm::com::unity3d::player::NativeLoader>();
     // vm->registerClass<jnivm::com::unity3d::player::UnityPlayer>();
@@ -25,38 +26,36 @@ void InitJNIBinding(FakeJni::Jvm *vm)
     // vm->registerClass<jnivm::com::unity3d::player::OrientationLockListener>();
     // vm->registerClass<jnivm::com::google::androidgamesdk::ChoreographerCallback>();
     // vm->registerClass<jnivm::com::google::androidgamesdk::SwappyDisplayManager>();
-    vm->registerClass<jnivm::android::view::Display>();
-    vm->registerClass<jnivm::android::hardware::display::DisplayManager>();
-    vm->registerClass<jnivm::android::os::Environment>();
-    vm->registerClass<jnivm::android::os::Looper>();
-    vm->registerClass<jnivm::android::os::Handler>();
-    vm->registerClass<jnivm::android::os::Process>();
-    vm->registerClass<jnivm::android::os::Bundle>();
-    vm->registerClass<jnivm::android::app::Activity>();
-    vm->registerClass<jnivm::android::content::Context>();
-    vm->registerClass<jnivm::android::content::SharedPreferences>();
-    vm->registerClass<jnivm::android::content::SharedPreferencesEditor>();
-    vm->registerClass<jnivm::android::content::Intent>();
-    vm->registerClass<jnivm::android::content::res::AssetManager>();
-    vm->registerClass<jnivm::android::content::pm::PackageManager>();
-    vm->registerClass<jnivm::android::content::pm::PackageInfo>();
-    vm->registerClass<jnivm::android::content::pm::ApplicationInfo>();
 
     vm->registerClass<jnivm::com::unity3d::player::PlayAssetDeliveryUnityWrapper>();
+    vm->registerClass<jnivm::com::unity3d::player::UnityPlayerActivity>();
+    vm->registerClass<jnivm::com::unity3d::player::UnityPlayer>();
+    vm->registerClass<jnivm::com::unity3d::player::UnityPlayerUtilities>();
+    vm->registerClass<jnivm::com::unity3d::player::ReflectionHelper>();
+    vm->registerClass<jnivm::com::unity3d::player::ReflectionHelper::InvocationError>();
     vm->registerClass<jnivm::bitter::jnibridge::JNIBridge>();
-    
 
+    // Fake FMOD
+
+    vm->registerClass<jnivm::org::fmod::FMODAudioDevice>();
 
     HookStringExtensions(vm);
     HookClassExtensions(vm);
+    HookIntExtensions(vm);
     HookObjectExtensions(vm);
 
     FakeJni::LocalFrame frame(*vm);
     auto classClass = vm->findClass("java/lang/Class");
 
-    // Some Unity specific thing. Should really be in JNIBridge, is cast to Class for some reason... Just return false.
-    classClass->HookInstanceFunction(&frame.getJniEnv(), "initializeGoogleAr", [](jnivm::ENV*env, jnivm::Object*self)
-    {
-        return false;
+    // libjnivm does not have an implementation of Field.getDeclaringClass, and adding one is not trivial. So we hardcode a couple of classes here. Bad hack, but eh.
+    auto fieldClass = vm->findClass("java/lang/reflect/Field");
+    fieldClass->HookInstanceFunction(&frame.getJniEnv(), "getDeclaringClass", [](jnivm::ENV* env, jnivm::Object* self) -> std::shared_ptr<jnivm::java::lang::Class> {
+        if (self == nullptr)
+            return nullptr;
+        auto selfField = dynamic_cast<jnivm::java::lang::reflect::Field*>(self);
+        auto owner = selfField ? unity_field_declaring_class(selfField) : nullptr;
+        verbose("getDeclaringClass","%s - %s -> %s", selfField ? selfField->name.c_str() : "?", selfField ? selfField->type.c_str() : "?",
+            owner ? owner->getName().c_str() : "unknown");
+        return owner; // Unity 7 uses this to read instance fields such as PackageInfo.versionName
     });
 }

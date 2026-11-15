@@ -5,6 +5,9 @@
 #include "log.h"
 
 std::shared_ptr<jnivm::Class> jnivm::InternalFindClass(ENV *env, const char *name, bool returnZero, bool trace) {
+	if(env == nullptr) {
+		return nullptr;
+	}
 	auto prefix = name;
 	auto && nenv = *env;
 	auto && vm = nenv.GetVM();
